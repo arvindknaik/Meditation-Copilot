@@ -1,0 +1,19 @@
+{
+  "name": "Meditation Copilot",
+  "short_name": "Meditation",
+  "description": "Small moments. Daily practice. Inner transformation. Plan your path to 10,000 effective meditation hours.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#120a1f",
+  "theme_color": "#3b1a5e",
+  "categories": ["health", "lifestyle", "education"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
