@@ -1,8 +1,11 @@
-/* Meditation Copilot — Timer: countdown or open sitting, bells, pause, wake lock, survives reloads */
+/* Meditation Copilot — Timer: 10-second settling moment, countdown or open sitting, start/end bells,
+   pause, wake lock, survives reloads */
 (function () {
   'use strict';
   var MC = window.MC, $ = MC.$;
-  var active = MC.store.get(MC.KEYS.active, null);   // { startedAt, pausedAt, pausedMs, target, interval, endRung, lastInt }
+  var SETTLE_SEC = 10;
+  var active = MC.store.get(MC.KEYS.active, null);   // { startedAt, pausedAt, pausedMs, target, endRung }
+  var prep = null;                                     // { until, target } during the settling moment (not persisted)
   var tickId = null, wakeLock = null;
 
   /* ---------- Setup screen ---------- */
@@ -14,32 +17,28 @@
   function syncSetup() {
     var p = MC.settings.preset, custom = $('customMin').value;
     document.querySelectorAll('#presetChips .chip').forEach(function (c) { c.classList.toggle('on', !custom && Number(c.dataset.p) === Number(p)); });
-    document.querySelectorAll('#intervalChips .chip').forEach(function (c) { c.classList.toggle('on', Number(c.dataset.i) === Number(MC.settings.interval)); });
-    $('soundToggle').checked = !!MC.settings.sound;
+    $('startBellToggle').checked = MC.settings.startBell !== false;
+    $('endBellToggle').checked = MC.settings.endBell !== false;
     var sel = selectedPreset();
     $('presetHint').textContent = sel
-      ? 'A ' + sel + '-minute sitting. A bell rings at ' + sel + ' min; keep sitting as long as you like and tap End when ready.'
-      : 'Open sitting: no end bell. Tap End when you are ready.';
+      ? 'A ' + sel + '-minute sitting. When the time is complete you can keep sitting as long as you like; tap End when ready.'
+      : 'Open sitting: no set end time. Tap End when you are ready.';
   }
   $('presetChips').addEventListener('click', function (e) {
     var c = e.target.closest('.chip'); if (!c) return;
     $('customMin').value = ''; MC.saveSettings({ preset: Number(c.dataset.p) }); syncSetup();
   });
   $('customMin').addEventListener('input', syncSetup);
-  $('intervalChips').addEventListener('click', function (e) {
-    var c = e.target.closest('.chip'); if (!c) return;
-    MC.saveSettings({ interval: Number(c.dataset.i) }); syncSetup();
-  });
-  $('soundToggle').addEventListener('change', function () { MC.saveSettings({ sound: $('soundToggle').checked }); syncSetup(); });
+  $('startBellToggle').addEventListener('change', function () { MC.saveSettings({ startBell: $('startBellToggle').checked }); });
+  $('endBellToggle').addEventListener('change', function () { MC.saveSettings({ endBell: $('endBellToggle').checked }); });
+  $('previewBellBtn').addEventListener('click', function () { MC.audioUnlock(); MC.bell('start'); });
   $('manualBtn').addEventListener('click', function () { MC.openSession({ mode: 'manual', minutes: MC.dailyTarget() }); });
 
   $('startBtn').addEventListener('click', function () {
     var target = selectedPreset();
     if ($('customMin').value) MC.saveSettings({ preset: target });
-    MC.audioUnlock();
-    active = { startedAt: Date.now(), pausedAt: null, pausedMs: 0, target: target, interval: Number(MC.settings.interval) || 0, endRung: false, lastInt: 0 };
-    save();
-    MC.bell('start');
+    MC.audioUnlock();                       // must happen on a tap so the bells can play later (iOS)
+    prep = { until: Date.now() + SETTLE_SEC * 1000, target: target };
     enterRun();
   });
 
@@ -50,18 +49,32 @@
     var now = active.pausedAt || Date.now();
     return Math.max(0, (now - active.startedAt - active.pausedMs) / 1000);
   }
+  function beginSitting() {
+    var target = prep.target;
+    prep = null;
+    active = { startedAt: Date.now(), pausedAt: null, pausedMs: 0, target: target, endRung: false };
+    save();
+    if (MC.settings.startBell !== false) MC.bell('start');
+    setModeText();
+    tick();
+  }
+  function setModeText() {
+    var t = prep ? prep.target : active.target;
+    $('runMode').textContent = t ? t + '-minute sitting' : 'Open sitting';
+  }
 
   function enterRun() {
     $('timerSetup').hidden = true;
     $('timerRun').hidden = false;
     document.body.classList.add('focus');
-    $('runMode').textContent = active.target ? active.target + '-minute sitting' + (active.interval ? ' · bell every ' + active.interval + ' min' : '') : 'Open sitting' + (active.interval ? ' · bell every ' + active.interval + ' min' : '');
+    setModeText();
     requestWake();
     if (!tickId) tickId = setInterval(tick, 250);
     tick();
   }
   function exitRun() {
     clearInterval(tickId); tickId = null;
+    prep = null;
     releaseWake();
     document.body.classList.remove('focus');
     $('timerRun').hidden = true;
@@ -70,11 +83,26 @@
   }
 
   function tick() {
-    if (!active) return;
-    var sec = elapsedSec(), paused = !!active.pausedAt;
-    var targetSec = active.target * 60;
     var ring = $('runRing'), timeEl = $('runTime');
 
+    // Settling moment before the sitting begins
+    if (prep) {
+      var left = Math.max(0, (prep.until - Date.now()) / 1000);
+      if (left <= 0) { beginSitting(); return; }
+      timeEl.textContent = String(Math.ceil(left));
+      timeEl.classList.remove('over');
+      $('runLabel').textContent = 'settle in…';
+      $('runNote').textContent = 'Sit comfortably, close your eyes, and let the body become still.';
+      MC.setRing(ring, 1 - left / SETTLE_SEC);
+      $('pauseBtn').textContent = 'Skip';
+      $('endBtn').hidden = true;
+      return;
+    }
+    if (!active) return;
+    $('endBtn').hidden = false;
+
+    var sec = elapsedSec(), paused = !!active.pausedAt;
+    var targetSec = active.target * 60;
     if (active.target) {
       if (sec < targetSec) {
         timeEl.textContent = MC.fmtClock(targetSec - sec);
@@ -88,27 +116,24 @@
         $('runLabel').textContent = paused ? 'paused' : 'beyond your ' + active.target + ' min';
         MC.setRing(ring, 1);
         $('runNote').textContent = 'Your time is complete. Sit as long as you like. 🙏';
-        if (!active.endRung && !paused) { active.endRung = true; save(); MC.bell('end'); if (navigator.vibrate) navigator.vibrate([200, 120, 200]); }
+        if (!active.endRung && !paused) {
+          active.endRung = true; save();
+          if (MC.settings.endBell !== false) MC.bell('end');
+          try { if (navigator.vibrate) navigator.vibrate([200, 120, 200]); } catch (e) {}
+        }
       }
     } else {
       timeEl.textContent = MC.fmtClock(sec);
       timeEl.classList.remove('over');
       $('runLabel').textContent = paused ? 'paused' : 'elapsed';
+      $('runNote').textContent = '';
       MC.setRing(ring, (sec % 3600) / 3600);
-    }
-
-    if (active.interval && !paused) {
-      var idx = Math.floor(sec / (active.interval * 60));
-      if (idx > active.lastInt) {
-        // skip an interval bell that coincides with the end bell
-        if (!(active.target && Math.abs(idx * active.interval * 60 - targetSec) < 1)) MC.bell('interval');
-        active.lastInt = idx; save();
-      }
     }
     $('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
   }
 
   $('pauseBtn').addEventListener('click', function () {
+    if (prep) { beginSitting(); return; }     // "Skip" during the settling moment
     if (!active) return;
     MC.audioUnlock();
     if (active.pausedAt) { active.pausedMs += Date.now() - active.pausedAt; active.pausedAt = null; requestWake(); }
@@ -135,7 +160,7 @@
   });
 
   $('cancelRunBtn').addEventListener('click', function () {
-    if (!window.confirm('Discard this sitting? It will not be saved.')) return;
+    if (active && !window.confirm('Discard this sitting? It will not be saved.')) return;
     active = null; save(); exitRun();
   });
 
@@ -146,13 +171,13 @@
   }
   function releaseWake() { if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; } }
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && active) { requestWake(); tick(); }
+    if (document.visibilityState === 'visible' && (active || prep)) { requestWake(); tick(); }
   });
 
   /* ---------- View hook ---------- */
   MC.views.timer = {
     show: function () {
-      if (active) enterRun();
+      if (active || prep) enterRun();
       else { $('timerRun').hidden = true; $('timerSetup').hidden = false; syncSetup(); }
     }
   };

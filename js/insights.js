@@ -68,6 +68,7 @@
       }
       return { bars: out, target: MC.dailyTarget(), title: 'Daily minutes' };
     }
+    if (range === 'all') return allTimeData(t);
     var ws = MC.weekStart(t);
     for (var w = 11; w >= 0; w--) {
       var s = MC.addDays(ws, -7 * w), r = MC.sumRange(s, MC.addDays(s, 7));
@@ -80,13 +81,40 @@
     return { bars: out, target: MC.dailyTarget() * 7, title: 'Weekly minutes' };
   }
 
+  // All time: one bar per month since your first logged sitting (per year once it spans more than 2 years)
+  function allTimeData(t) {
+    var list = MC.sessions.all(), out = [];
+    var first = list.length ? new Date(list[list.length - 1].start) : t;
+    var months = (t.getFullYear() - first.getFullYear()) * 12 + (t.getMonth() - first.getMonth()) + 1;
+    if (months > 24) {
+      for (var y = first.getFullYear(); y <= t.getFullYear(); y++) {
+        var r = MC.sumRange(new Date(y, 0, 1), new Date(y + 1, 0, 1));
+        out.push({ label: String(y), title: String(y), minutes: r.minutes, eff: r.eff, count: r.count, today: y === t.getFullYear() });
+      }
+      return { bars: out, target: MC.dailyTarget() * 365, title: 'Yearly minutes' };
+    }
+    months = Math.max(months, 6);                 // always show at least 6 months for context
+    var every = Math.ceil(months / 6);
+    for (var i = months - 1; i >= 0; i--) {
+      var s = new Date(t.getFullYear(), t.getMonth() - i, 1), e = new Date(s.getFullYear(), s.getMonth() + 1, 1);
+      var rr = MC.sumRange(s, e), idx = months - 1 - i;
+      var showYear = s.getMonth() === 0 || idx === 0;
+      out.push({
+        label: (i % every === 0) ? s.toLocaleDateString(undefined, showYear ? { month: 'short', year: '2-digit' } : { month: 'short' }) : '',
+        title: s.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+        minutes: rr.minutes, eff: rr.eff, count: rr.count, today: i === 0
+      });
+    }
+    return { bars: out, target: MC.dailyTarget() * 30.4, title: 'Monthly minutes' };
+  }
+
   function renderChart() {
     var data = chartData(), bars = data.bars;
     $('chartTitle').textContent = data.title;
     var W = 340, H = 190, L = 34, R = 6, T = 12, B = 22;
     var pw = W - L - R, ph = H - T - B;
     var maxV = niceMax(Math.max(data.target * 1.1, Math.max.apply(null, bars.map(function (b) { return b.minutes; })), 1));
-    var band = pw / bars.length, bw = Math.max(6, Math.min(18, band * 0.62));
+    var band = pw / bars.length, bw = Math.max(4, Math.min(18, band * 0.62));
     var y = function (v) { return T + ph - (v / maxV) * ph; };
 
     var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + MC.esc(data.title) + '">';
@@ -185,7 +213,7 @@
   $('csvBtn').addEventListener('click', function () {
     var list = MC.sessions.all();
     if (!list.length) { MC.toast('No sittings to export yet.'); return; }
-    var rows = [['date', 'start_time', 'minutes', 'quality_pct', 'effective_minutes', 'note', 'source']];
+    var rows = [['date', 'start_time', 'minutes', 'quality_pct', 'effective_minutes', 'reflection', 'source']];
     list.slice().reverse().forEach(function (s) {
       var d = new Date(s.start);
       rows.push([MC.toISO(d), MC.toHM(d), s.minutes, s.quality, Math.round(MC.effMin(s) * 10) / 10, s.note || '', s.source || '']);

@@ -48,6 +48,8 @@
       <h1 class="greet" id="greet">Welcome</h1>
       <p class="greet-sub" id="greetSub"></p>
 
+      <blockquote class="quote flat" id="thought" style="margin-bottom:16px"></blockquote>
+
       <div class="card today-card">
         <div class="ring-wrap">
           <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
@@ -75,7 +77,6 @@
         <div class="last-session" id="lastSession"></div>
       </div>
 
-      <blockquote class="quote flat" id="thought"></blockquote>
     </section>
 
     <!-- ================= TIMER ================= -->
@@ -101,25 +102,21 @@
           </div>
           <p class="small muted" id="presetHint" style="margin:10px 2px 0"></p>
 
-          <label class="field">Interval bell</label>
-          <div class="chips" id="intervalChips" style="margin-top:0">
-            <button class="chip" data-i="0">Off</button>
-            <button class="chip" data-i="5">5 min</button>
-            <button class="chip" data-i="10">10 min</button>
-            <button class="chip" data-i="15">15 min</button>
-            <button class="chip" data-i="30">30 min</button>
-          </div>
-
           <div class="toggle">
-            <div><b>Bells</b><div class="small muted">Gentle bowl sound at start and end</div></div>
-            <label class="switch"><input type="checkbox" id="soundToggle" aria-label="Bells on or off"><span></span></label>
+            <div><b>Ring bell at start</b><div class="small muted">After a 10-second settling moment</div></div>
+            <label class="switch"><input type="checkbox" id="startBellToggle" aria-label="Ring bell at start"><span></span></label>
           </div>
+          <div class="toggle" style="margin-top:0">
+            <div><b>Ring bell at end</b><div class="small muted">When your chosen time is complete</div></div>
+            <label class="switch"><input type="checkbox" id="endBellToggle" aria-label="Ring bell at end"><span></span></label>
+          </div>
+          <button class="btn btn-ghost btn-sm btn-block" id="previewBellBtn" type="button">🔔 Preview bell sound</button>
           <div class="stack">
             <button class="btn btn-primary btn-xl" id="startBtn">Begin sitting</button>
             <button class="btn btn-soft btn-sm" id="manualBtn">+ Log a sitting I already did</button>
           </div>
         </div>
-        <p class="small muted center">Tip: keep your phone plugged in. The screen stays on while the timer runs so the bells can play.</p>
+        <p class="small muted center">You’ll have 10 seconds to settle in before the timer starts. Keep your phone plugged in; the screen stays on so the end bell can play.</p>
       </div>
 
       <!-- Running -->
@@ -156,6 +153,7 @@
           <div class="seg" role="tablist" aria-label="Chart range">
             <button class="on" data-range="days" role="tab" aria-selected="true">14 days</button>
             <button data-range="weeks" role="tab" aria-selected="false">12 weeks</button>
+            <button data-range="all" role="tab" aria-selected="false">All time</button>
           </div>
         </div>
         <div class="chart-wrap" id="chartWrap"></div>
@@ -365,8 +363,8 @@
     <label class="field" for="sdQ">How deep was it?</label>
     <div class="quality-value sm" style="margin:0 0 4px"><b id="sdQVal">75%</b><span id="sdQLabel">Good</span></div>
     <input type="range" id="sdQ" min="0" max="100" step="5" value="75">
-    <label class="field" for="sdNote">Note <span style="font-weight:400">(optional)</span></label>
-    <textarea id="sdNote" maxlength="500" placeholder="Anything you'd like to remember about this sitting"></textarea>
+    <label class="field" for="sdNote">Reflection &amp; Experiences</label>
+    <textarea id="sdNote" maxlength="2000" rows="4" placeholder="What did you experience or reflect on during this sitting?"></textarea>
     <div class="error" id="sdErr" role="alert"></div>
     <div class="actions">
       <button type="button" class="btn btn-danger" id="sdDelete" hidden>Delete</button>
@@ -395,6 +393,7 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="js/quotes.js"></script>
 <script src="js/core.js"></script>
 <script src="js/roadmap.js"></script>
 <script src="js/sessions-ui.js"></script>

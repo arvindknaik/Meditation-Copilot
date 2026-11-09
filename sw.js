@@ -1,12 +1,13 @@
 /* Meditation Copilot service worker
  * Bump CACHE_VERSION whenever you change any file so users get the update. */
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE = 'meditation-copilot-' + CACHE_VERSION;
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './css/styles.css',
+  './js/quotes.js',
   './js/core.js',
   './js/roadmap.js',
   './js/sessions-ui.js',

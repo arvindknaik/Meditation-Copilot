@@ -46,7 +46,7 @@
   };
 
   /* ---------- Settings ---------- */
-  var DEFAULT_SETTINGS = { dailyTarget: null, preset: 30, interval: 0, sound: true, lastQuality: null };
+  var DEFAULT_SETTINGS = { dailyTarget: null, preset: 30, startBell: true, endBell: true, lastQuality: null };
   MC.settings = Object.assign({}, DEFAULT_SETTINGS, MC.store.get(KEYS.settings, {}));
   MC.saveSettings = function (patch) { Object.assign(MC.settings, patch || {}); MC.store.set(KEYS.settings, MC.settings); };
   MC.dailyTarget = function () {
@@ -306,7 +306,7 @@
     } catch (e) {}
   };
   MC.bell = function (kind) {
-    if (!MC.settings.sound || !actx) return;
+    if (!actx) return;
     try {
       if (actx.state === 'suspended') actx.resume();
       var strikes = kind === 'end' ? 3 : 1;

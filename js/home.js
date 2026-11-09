@@ -78,8 +78,16 @@
         '<span class="small" style="color:var(--gold-ink);font-weight:600;white-space:nowrap">' + Math.round(last.quality) + '% ' + MC.qualityLabel(last.quality) + '</span>';
     }
 
-    var doy = MC.daysBetween(new Date(t.getFullYear(), 0, 1), t);
-    $('thought').innerHTML = MC.esc(THOUGHTS[doy % THOUGHTS.length]) + '<cite>Thought for today</cite>';
+    // Thought for today: approved quotes from js/quotes.js, otherwise the app's own reflections
+    var doy = MC.daysBetween(new Date(2000, 0, 1), t);
+    var mq = window.MC_QUOTES || {}, qs = (mq.quotes || []).filter(function (q) { return q && q.text; });
+    if (qs.length) {
+      var q = qs[doy % qs.length];
+      $('thought').innerHTML = '<span class="small muted" style="font-style:normal;font-family:var(--sans);display:block;margin-bottom:6px">Thought for today</span>' +
+        '\u201C' + MC.esc(q.text) + '\u201D<cite>\u2014 ' + MC.esc(mq.author || '') + (q.source ? ', <i>' + MC.esc(q.source) + '</i>' : '') + '</cite>';
+    } else {
+      $('thought').innerHTML = MC.esc(THOUGHTS[doy % THOUGHTS.length]) + '<cite>Thought for today</cite>';
+    }
   }
 
   /* Daily target sheet */
