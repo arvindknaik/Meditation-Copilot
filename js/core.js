@@ -277,6 +277,98 @@
   }
   MC.completedHours = function () { return MC.hasProfile() ? MC.compute().completed : null; };
 
+  /* ---------- CSV: one fixed format for export and import ---------- */
+  MC.CSV_HEADER = ['date', 'start_time', 'minutes', 'quality_pct', 'effective_minutes', 'reflection', 'source'];
+  function csvCell(v) { v = String(v == null ? '' : v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  MC.sessionsToCSV = function () {
+    var rows = [MC.CSV_HEADER];
+    MC.sessions.all().slice().reverse().forEach(function (s) {
+      var d = new Date(s.start);
+      rows.push([MC.toISO(d), MC.toHM(d), round1(s.minutes), Math.round(s.quality), round1(MC.effMin(s)), s.note || '', s.source === 'manual' ? 'manual' : 'timer']);
+    });
+    return '﻿' + rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n') + '\r\n';
+  };
+  function round1(x) { return Math.round(x * 10) / 10; }
+
+  // RFC 4180 parser: quoted fields, escaped quotes, commas and line breaks inside quotes
+  function parseCSVText(text) {
+    var rows = [], row = [], field = '', i = 0, q = false, n = text.length;
+    while (i < n) {
+      var c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { field += '"'; i += 2; continue; } q = false; i++; continue; }
+        field += c; i++; continue;
+      }
+      if (c === '"' && field === '') { q = true; i++; continue; }
+      if (c === ',') { row.push(field); field = ''; i++; continue; }
+      if (c === '\r' || c === '\n') {
+        row.push(field); rows.push(row); row = []; field = '';
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        i++; continue;
+      }
+      field += c; i++;
+    }
+    if (q) return { error: 'A quoted field is never closed (unbalanced " character).' };
+    if (field !== '' || row.length) { row.push(field); rows.push(row); }
+    return { rows: rows };
+  }
+
+  /* Validates a CSV exported by this app. Returns { sessions } or { errors: [...] }.
+     Any error rejects the whole file. */
+  MC.parseSessionsCSV = function (text) {
+    text = String(text || '').replace(/^﻿/, '');
+    var parsed = parseCSVText(text);
+    if (parsed.error) return { errors: [parsed.error] };
+    var rows = parsed.rows.filter(function (r, idx) { return !(r.length === 1 && r[0] === '' && idx > 0); });
+    if (!rows.length || (rows.length === 1 && rows[0].join('') === '')) return { errors: ['The file is empty.'] };
+    if (rows[0].join(',') !== MC.CSV_HEADER.join(',')) {
+      return { errors: ['The first line must be exactly:\n' + MC.CSV_HEADER.join(',') + '\nFound:\n' + rows[0].join(',').slice(0, 200)] };
+    }
+    if (rows.length === 1) return { errors: ['The file has a header but no sittings.'] };
+    var errors = [], out = [], now = Date.now();
+    for (var r = 1; r < rows.length; r++) {
+      var f = rows[r], rn = 'Row ' + (r + 1) + ': ', bad = [];
+      if (f.length !== MC.CSV_HEADER.length) { errors.push(rn + 'expected ' + MC.CSV_HEADER.length + ' columns, found ' + f.length + '.'); continue; }
+      var date = f[0], time = f[1], min = f[2], qual = f[3], eff = f[4], note = f[5], src = f[6];
+      var dOk = /^\d{4}-\d{2}-\d{2}$/.test(date), d = dOk ? MC.parseDate(date) : null;
+      if (!d || MC.toISO(d) !== date) bad.push('date "' + date + '" must be a real date as YYYY-MM-DD');
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) bad.push('start_time "' + time + '" must be HH:MM (24-hour)');
+      var m = Number(min);
+      if (!/^\d+(\.\d)?$/.test(min) || !(m > 0) || m > 1440) bad.push('minutes "' + min + '" must be a number from 0.1 to 1440 (max one decimal)');
+      var qn = Number(qual);
+      if (!/^\d{1,3}$/.test(qual) || qn > 100) bad.push('quality_pct "' + qual + '" must be a whole number from 0 to 100');
+      if (!/^\d+(\.\d)?$/.test(eff)) bad.push('effective_minutes "' + eff + '" must be a number (max one decimal)');
+      else if (!bad.length && Math.abs(Number(eff) - round1(m * qn / 100)) > 0.11) bad.push('effective_minutes ' + eff + ' does not equal minutes × quality (' + round1(m * qn / 100) + ')');
+      if (note.length > 2000) bad.push('reflection is longer than 2,000 characters');
+      if (src !== 'timer' && src !== 'manual') bad.push('source "' + src + '" must be "timer" or "manual"');
+      var start = null;
+      if (!bad.length) {
+        var hm = time.split(':').map(Number);
+        start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hm[0], hm[1]).getTime();
+        if (start > now) bad.push('the sitting is in the future');
+      }
+      if (bad.length) { errors.push(rn + bad.join('; ') + '.'); continue; }
+      out.push({ row: r + 1, start: start, minutes: m, quality: qn, note: note.trim(), source: src });
+    }
+    // Sittings inside the file must not overlap each other
+    var sorted = out.slice().sort(function (a, b) { return a.start - b.start; });
+    for (var k = 1; k < sorted.length; k++) {
+      var p = sorted[k - 1], c2 = sorted[k];
+      if (c2.start < p.start + p.minutes * 60000) errors.push('Rows ' + p.row + ' and ' + c2.row + ' overlap in time.');
+    }
+    if (errors.length) return { errors: errors };
+    return { sessions: out };
+  };
+  // Existing sitting that overlaps [start, start + minutes)
+  MC.findOverlap = function (start, minutes) {
+    var end = start + minutes * 60000;
+    return sessions.filter(function (s) { return start < s.start + s.minutes * 60000 && s.start < end; })[0] || null;
+  };
+  MC.addSessionsBulk = function (list) {
+    list.forEach(function (s) { s.id = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9); sessions.push(s); });
+    persist();
+  };
+
   /* ---------- Toast ---------- */
   var toastTimer;
   MC.toast = function (msg, ms) {
@@ -359,7 +451,7 @@
   /* ---------- Router (hash-based: #home, #timer, #insights, #roadmap) ---------- */
   MC.views = {};
   MC.current = null;
-  var VIEWS = ['home', 'timer', 'insights', 'roadmap'];
+  var VIEWS = ['home', 'timer', 'insights', 'roadmap', 'learn'];
   MC.route = function () {
     var name = (location.hash || '#home').slice(1).split('?')[0];
     if (VIEWS.indexOf(name) < 0) name = 'home';

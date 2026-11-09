@@ -209,38 +209,51 @@
     a.href = url; a.download = name; document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 500);
   }
-  function csvCell(v) { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
   $('csvBtn').addEventListener('click', function () {
-    var list = MC.sessions.all();
-    if (!list.length) { MC.toast('No sittings to export yet.'); return; }
-    var rows = [['date', 'start_time', 'minutes', 'quality_pct', 'effective_minutes', 'reflection', 'source']];
-    list.slice().reverse().forEach(function (s) {
-      var d = new Date(s.start);
-      rows.push([MC.toISO(d), MC.toHM(d), s.minutes, s.quality, Math.round(MC.effMin(s) * 10) / 10, s.note || '', s.source || '']);
-    });
-    download('meditation-sessions-' + MC.toISO(MC.today()) + '.csv', rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n'), 'text/csv');
+    if (!MC.sessions.count()) { MC.toast('No sittings to export yet.'); return; }
+    download('meditation-sessions-' + MC.toISO(MC.today()) + '.csv', MC.sessionsToCSV(), 'text/csv;charset=utf-8');
+    MC.toast('Exported ' + MC.sessions.count() + ' sittings.');
   });
-  $('backupBtn').addEventListener('click', function () {
-    var data = { app: 'meditation-copilot', version: 2, exported: new Date().toISOString(), profile: MC.profile, settings: MC.settings, sessions: MC.sessions.all() };
-    download('meditation-copilot-backup-' + MC.toISO(MC.today()) + '.json', JSON.stringify(data, null, 2), 'application/json');
-    MC.toast('Backup downloaded.');
-  });
-  $('restoreBtn').addEventListener('click', function () { $('restoreFile').value = ''; $('restoreFile').click(); });
-  $('restoreFile').addEventListener('change', function () {
-    var f = $('restoreFile').files[0]; if (!f) return;
+
+  function showImport(title, html) {
+    $('imTitle').textContent = title; $('imBody').innerHTML = html;
+    var d = $('importDlg'); if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+  }
+  function fmtRow(s) {
+    return MC.esc(MC.fmtDate(new Date(s.start), { year: 'numeric', month: 'short', day: 'numeric' }) + ', ' + MC.fmtTime(s.start)) + ' · ' + MC.fmtDur(s.minutes);
+  }
+  $('importBtn').addEventListener('click', function () { $('importFile').value = ''; $('importFile').click(); });
+  $('importFile').addEventListener('change', function () {
+    var f = $('importFile').files[0]; if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { showImport('Import rejected', '<p>The file is larger than 5 MB.</p>'); return; }
     var reader = new FileReader();
+    reader.onerror = function () { showImport('Import rejected', '<p>The file could not be read.</p>'); };
     reader.onload = function () {
-      try {
-        var data = JSON.parse(reader.result);
-        if (!data || data.app !== 'meditation-copilot' || !Array.isArray(data.sessions)) throw new Error('bad');
-        var clean = data.sessions.filter(function (s) { return s && isFinite(s.start) && s.minutes > 0 && s.quality >= 0 && s.quality <= 100; });
-        if (!window.confirm('Restore ' + clean.length + ' sittings from this backup? This replaces the sittings and answers on this device.')) return;
-        if (data.profile) { Object.assign(MC.profile, data.profile); MC.saveProfile(); }
-        if (data.settings) MC.saveSettings(data.settings);
-        MC.sessions.replaceAll(clean);
-        MC.emit('profile');
-        MC.toast('Restored ' + clean.length + ' sittings.');
-      } catch (e) { MC.toast('That file is not a Meditation Copilot backup.'); }
+      var res = MC.parseSessionsCSV(reader.result);
+      if (res.errors) {
+        var shown = res.errors.slice(0, 12);
+        showImport('Import rejected',
+          '<p class="small">Nothing was imported. Please fix ' + (res.errors.length === 1 ? 'this problem' : 'these ' + res.errors.length + ' problems') + ' and try again:</p>' +
+          '<ul class="small" style="padding-left:18px;color:var(--danger);white-space:pre-wrap">' + shown.map(function (e) { return '<li>' + MC.esc(e) + '</li>'; }).join('') + '</ul>' +
+          (res.errors.length > shown.length ? '<p class="small muted">…and ' + (res.errors.length - shown.length) + ' more.</p>' : '') +
+          '<p class="small muted">Tip: use a file exported from this app. If you edit it in Excel, keep dates as YYYY-MM-DD and times as HH:MM, and save as CSV UTF-8.</p>');
+        return;
+      }
+      var add = [], conflicts = [];
+      res.sessions.forEach(function (s) {
+        var hit = MC.findOverlap(s.start, s.minutes);
+        if (hit) conflicts.push({ s: s, hit: hit }); else add.push({ start: s.start, minutes: s.minutes, quality: s.quality, note: s.note, source: s.source });
+      });
+      if (add.length) MC.addSessionsBulk(add);
+      var html = '<p><b>' + add.length + '</b> sitting' + (add.length === 1 ? '' : 's') + ' imported.' +
+        (conflicts.length ? ' <b>' + conflicts.length + '</b> skipped because ' + (conflicts.length === 1 ? 'it overlaps a sitting' : 'they overlap sittings') + ' already on this device:' : '') + '</p>';
+      if (conflicts.length) {
+        html += '<ul class="small" style="padding-left:18px">' + conflicts.slice(0, 30).map(function (c) {
+          return '<li>Row ' + c.s.row + ': ' + fmtRow(c.s) + ' <span class="muted">(overlaps ' + fmtRow(c.hit) + ')</span></li>';
+        }).join('') + '</ul>' + (conflicts.length > 30 ? '<p class="small muted">…and ' + (conflicts.length - 30) + ' more.</p>' : '');
+        html += '<p class="small muted">Your existing sittings were kept unchanged.</p>';
+      }
+      showImport(add.length ? 'Import complete' : 'Nothing new to import', html);
     };
     reader.readAsText(f);
   });

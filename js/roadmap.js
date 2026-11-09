@@ -144,10 +144,9 @@
     var pct = Math.min(100, r.completed / MC.GOAL_HOURS * 100);
     $('asOf').textContent = 'As of ' + MC.fmtDate(r.t) + ' · Goal fixed at 10,000 hours';
 
-    var fg = $('ringFg');
-    MC.setRing(fg, 0);
-    requestAnimationFrame(function () { requestAnimationFrame(function () { MC.setRing(fg, pct / 100); }); });
-    $('ringPct').textContent = (pct < 10 ? pct.toFixed(1) : Math.round(pct)) + '%';
+    $('trackHours').textContent = MC.fmtHours(r.completed);
+    $('trackPct').textContent = (pct < 10 ? pct.toFixed(1) : Math.round(pct)) + '% of 10,000';
+    renderTrack(r.completed);
 
     // Where the numbers come from
     var src;
@@ -210,26 +209,39 @@
     renderInstallHint();
   }
 
-  /* ---------- Milestones ---------- */
-  function renderMilestones(r) {
-    var h = r.completed, next = null;
-    for (var i = 0; i < MC.MILESTONES.length; i++) if (h < MC.MILESTONES[i]) { next = MC.MILESTONES[i]; break; }
-    var html = '';
-    if (next) {
-      var prev = MC.MILESTONES[MC.MILESTONES.indexOf(next) - 1] || 0;
-      var frac = (h - prev) / (next - prev);
-      var days = r.effDaily > 0 ? Math.ceil((next - h) * 60 / r.effDaily) : null;
-      html = '<div class="small muted" style="margin-bottom:6px">Next: <b style="color:var(--purple)">' + next.toLocaleString() + ' hours</b> · ' +
-        MC.fmtHours(next - h) + ' to go' + (days ? ' · about ' + (days > 60 ? MC.fmtYM(MC.ymDiff(r.t, MC.addDays(r.t, days))) : days + ' days') : '') + '</div>' +
-        '<div class="meter"><div style="width:' + (frac * 100).toFixed(1) + '%"></div></div>';
-    } else {
-      html = '<div class="small" style="color:var(--gold-ink);font-weight:600">All milestones reached. 🙏</div>';
+  /* ---------- Linear track: evenly spaced milestone stops to the 10,000-hour finish ---------- */
+  var STOPS = [0].concat(MC.MILESTONES);   // 0, 100, 500, 1000, 2500, 5000, 7500, 10000
+  function stopLabel(v) { return v === 0 ? 'Start' : v >= 1000 ? (v / 1000) + 'k' : String(v); }
+  MC.trackPos = function (h) {             // 0..1 along the track
+    var n = STOPS.length - 1;
+    if (h >= STOPS[n]) return 1;
+    for (var i = 0; i < n; i++) {
+      if (h < STOPS[i + 1]) return (i + (h - STOPS[i]) / (STOPS[i + 1] - STOPS[i])) / n;
     }
-    $('msNext').innerHTML = html;
-    $('msList').innerHTML = MC.MILESTONES.map(function (m) {
-      var cls = h >= m ? 'ms done' : (m === next ? 'ms next' : 'ms');
-      return '<span class="' + cls + '">' + (h >= m ? '✓ ' : '') + m.toLocaleString() + '</span>';
-    }).join('');
+    return 1;
+  };
+  function renderTrack(h) {
+    var n = STOPS.length - 1, pos = MC.trackPos(h);
+    var next = STOPS.filter(function (v) { return v > h; })[0];
+    var html = '<div class="track-line"><div class="track-fill" id="trackFill"></div></div>';
+    STOPS.forEach(function (v, i) {
+      var cls = 'stop' + (h >= v ? ' done' : '') + (v === next ? ' next' : '') + (i === n ? ' finish' : '');
+      html += '<div class="' + cls + '" style="left:' + (i / n * 100) + '%"><i></i><span>' + (i === n ? '10k 🏁' : stopLabel(v)) + '</span></div>';
+    });
+    html += '<div class="track-me" id="trackMe" style="left:0%"><span>You · ' + MC.fmtHours(h) + '</span></div>';
+    $('track').innerHTML = html;
+    $('track').setAttribute('aria-label', MC.fmtHours(h) + ' of 10,000 effective hours' + (next ? '; next milestone ' + next.toLocaleString() + ' hours' : ''));
+    requestAnimationFrame(function () { requestAnimationFrame(function () {
+      $('trackFill').style.width = (pos * 100) + '%';
+      $('trackMe').style.left = (pos * 100) + '%';
+    }); });
+  }
+  function renderMilestones(r) {
+    var h = r.completed, next = STOPS.filter(function (v) { return v > h; })[0];
+    if (!next) { $('msNext').innerHTML = '<div class="small" style="color:var(--gold-ink);font-weight:600">Finish line reached. 🙏</div>'; return; }
+    var days = r.effDaily > 0 ? Math.ceil((next - h) * 60 / r.effDaily) : null;
+    $('msNext').innerHTML = '<div class="small muted center">Next stop: <b style="color:var(--purple)">' + next.toLocaleString() + ' hours</b> · ' +
+      MC.fmtHours(next - h) + ' to go' + (days ? ' · about ' + (days > 60 ? MC.fmtYM(MC.ymDiff(r.t, MC.addDays(r.t, days))) : days + ' days') : '') + '</div>';
   }
   MC.milestoneCrossed = function (before, after) {
     for (var i = MC.MILESTONES.length - 1; i >= 0; i--) {
