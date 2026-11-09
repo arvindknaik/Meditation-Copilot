@@ -1,0 +1,377 @@
+/* Meditation Copilot — core: storage, dates, sessions, calculations, bells, routing */
+(function () {
+  'use strict';
+  var MC = window.MC = {};
+
+  MC.GOAL_HOURS = 10000;           // fixed spiritual goal — not user-editable
+  MC.MAX_AGE = 90;
+  MC.APP_LINK = 'https://arvindknaik.github.io/Meditation-Copilot/';
+  MC.MILESTONES = [100, 500, 1000, 2500, 5000, 7500, 10000];
+  var DAY_MS = 86400000;
+  var KEYS = {
+    profile: 'meditation-copilot:v1',          // kept from v1 so existing answers carry over
+    sessions: 'meditation-copilot:sessions',
+    settings: 'meditation-copilot:settings',
+    active: 'meditation-copilot:active',
+    theme: 'meditation-copilot:theme'
+  };
+  MC.KEYS = KEYS;
+
+  MC.$ = function (id) { return document.getElementById(id); };
+  MC.esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
+  /* ---------- Storage (safe) ---------- */
+  MC.store = {
+    get: function (k, def) {
+      try { var v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); } catch (e) { return def; }
+    },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+    del: function (k) { try { localStorage.removeItem(k); } catch (e) {} }
+  };
+
+  /* ---------- Profile (roadmap answers) ---------- */
+  var DEFAULT_PROFILE = { dob: '', start: '', minutes: '', quality: 75, goalAge: 90 };
+  MC.profile = Object.assign({}, DEFAULT_PROFILE, MC.store.get(KEYS.profile, {}));
+  MC.saveProfile = function () { MC.store.set(KEYS.profile, MC.profile); };
+  MC.resetProfile = function () { MC.profile = Object.assign({}, DEFAULT_PROFILE); MC.store.del(KEYS.profile); };
+  MC.hasProfile = function () {
+    var p = MC.profile;
+    if (!(p.dob && p.start && p.minutes !== '' && p.goalAge)) return false;
+    var dob = MC.parseDate(p.dob);
+    return !!dob && MC.addYears(dob, Number(p.goalAge)) > MC.today();
+  };
+
+  /* ---------- Settings ---------- */
+  var DEFAULT_SETTINGS = { dailyTarget: null, preset: 30, interval: 0, sound: true, lastQuality: null };
+  MC.settings = Object.assign({}, DEFAULT_SETTINGS, MC.store.get(KEYS.settings, {}));
+  MC.saveSettings = function (patch) { Object.assign(MC.settings, patch || {}); MC.store.set(KEYS.settings, MC.settings); };
+  MC.dailyTarget = function () {
+    var t = Number(MC.settings.dailyTarget);
+    if (t > 0) return t;
+    var m = Number(MC.profile.minutes);
+    return m > 0 ? m : 30;
+  };
+  MC.defaultQuality = function () {
+    if (MC.settings.lastQuality != null) return Number(MC.settings.lastQuality);
+    return MC.profile.quality != null ? Number(MC.profile.quality) : 75;
+  };
+
+  /* ---------- Sessions ----------
+     { id, start: epoch ms, minutes: actual minutes, quality: 0-100, note, source: 'timer'|'manual' } */
+  var sessions = MC.store.get(KEYS.sessions, []);
+  if (!Array.isArray(sessions)) sessions = [];
+  function persist() { sessions.sort(function (a, b) { return b.start - a.start; }); MC.store.set(KEYS.sessions, sessions); MC.emit('data'); }
+  MC.sessions = {
+    all: function () { return sessions.slice().sort(function (a, b) { return b.start - a.start; }); },
+    count: function () { return sessions.length; },
+    get: function (id) { return sessions.filter(function (s) { return s.id === id; })[0] || null; },
+    add: function (s) {
+      s.id = s.id || ('s' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+      sessions.push(s); persist(); return s;
+    },
+    update: function (id, patch) { var s = this.get(id); if (s) { Object.assign(s, patch); persist(); } return s; },
+    remove: function (id) { sessions = sessions.filter(function (s) { return s.id !== id; }); persist(); },
+    replaceAll: function (list) { sessions = Array.isArray(list) ? list : []; persist(); }
+  };
+  MC.effMin = function (s) { return s.minutes * s.quality / 100; };
+
+  /* ---------- Tiny event bus ---------- */
+  var listeners = {};
+  MC.on = function (ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); };
+  MC.emit = function (ev, data) { (listeners[ev] || []).forEach(function (fn) { try { fn(data); } catch (e) { console.error(e); } }); };
+
+  /* ---------- Dates ---------- */
+  MC.today = function () { var d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+  MC.parseDate = function (s) {
+    if (!s) return null;
+    var p = String(s).split('-').map(Number);
+    if (p.length !== 3 || p.some(isNaN)) return null;
+    return new Date(p[0], p[1] - 1, p[2]);
+  };
+  MC.toISO = function (d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+  MC.toHM = function (d) { return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  MC.dayKey = function (ms) { return MC.toISO(new Date(ms)); };
+  MC.startOfDay = function (ms) { var d = new Date(ms); d.setHours(0, 0, 0, 0); return d; };
+  MC.daysBetween = function (a, b) { return Math.round((b - a) / DAY_MS); };
+  MC.addDays = function (d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; };
+  MC.addYears = function (d, n) {
+    var r = new Date(d.getFullYear() + n, d.getMonth(), d.getDate());
+    if (r.getMonth() !== d.getMonth()) r.setDate(0);
+    return r;
+  };
+  MC.ymDiff = function (a, b) {
+    var months = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+    if (b.getDate() < a.getDate()) months--;
+    months = Math.max(0, months);
+    return { y: Math.floor(months / 12), m: months % 12 };
+  };
+  MC.fmtYM = function (ym) {
+    var y = ym.y + (ym.y === 1 ? ' year' : ' years');
+    var m = ym.m + (ym.m === 1 ? ' month' : ' months');
+    if (ym.y === 0 && ym.m === 0) return 'less than a month';
+    if (ym.y === 0) return m;
+    if (ym.m === 0) return y;
+    return y + ' and ' + m;
+  };
+  MC.fmtDate = function (d, opts) { return d.toLocaleDateString(undefined, opts || { year: 'numeric', month: 'long', day: 'numeric' }); };
+  MC.fmtTime = function (ms) { return new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); };
+  MC.weekStart = function (d) { var r = new Date(d); r.setHours(0, 0, 0, 0); var wd = (r.getDay() + 6) % 7; r.setDate(r.getDate() - wd); return r; }; // Monday
+  MC.relDay = function (ms) {
+    var diff = MC.daysBetween(MC.startOfDay(ms), MC.today());
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    return MC.fmtDate(new Date(ms), { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  /* ---------- Number formatting ---------- */
+  MC.fmtMin = function (x) {
+    if (!isFinite(x)) return '—';
+    if (x > 0 && x < 10) return (Math.round(x * 10) / 10).toString();
+    return Math.round(x).toLocaleString();
+  };
+  MC.fmtHours = function (x) { return Math.round(x).toLocaleString(); };
+  MC.fmtDur = function (min) {            // 135 -> "2h 15m"
+    min = Math.round(min);
+    if (min < 60) return min + 'm';
+    var h = Math.floor(min / 60), m = min % 60;
+    return h.toLocaleString() + 'h' + (m ? ' ' + m + 'm' : '');
+  };
+  MC.fmtClock = function (sec) {
+    sec = Math.max(0, Math.floor(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    var mm = String(m).padStart(2, '0'), ss = String(s).padStart(2, '0');
+    return h ? h + ':' + mm + ':' + ss : mm + ':' + ss;
+  };
+  MC.qualityLabel = function (q) {
+    if (q >= 100) return 'Absorbed';
+    if (q >= 90) return 'Deep';
+    if (q >= 75) return 'Good';
+    if (q >= 50) return 'Beginner';
+    return 'Settling in';
+  };
+
+  /* ---------- Aggregates ---------- */
+  MC.byDay = function () {
+    var map = {};
+    sessions.forEach(function (s) {
+      var k = MC.dayKey(s.start);
+      var d = map[k] || (map[k] = { minutes: 0, eff: 0, count: 0 });
+      d.minutes += s.minutes; d.eff += MC.effMin(s); d.count++;
+    });
+    return map;
+  };
+  MC.sumRange = function (fromDate, toDateExcl) {
+    var r = { minutes: 0, eff: 0, count: 0, qSum: 0 };
+    sessions.forEach(function (s) {
+      if (s.start >= fromDate.getTime() && s.start < toDateExcl.getTime()) {
+        r.minutes += s.minutes; r.eff += MC.effMin(s); r.count++; r.qSum += s.quality * s.minutes;
+      }
+    });
+    r.avgQuality = r.minutes ? r.qSum / r.minutes : null;  // minute-weighted
+    return r;
+  };
+  MC.streaks = function () {
+    var days = MC.byDay();
+    var keys = Object.keys(days).filter(function (k) { return days[k].minutes > 0; }).sort();
+    var longest = 0, run = 0, prev = null;
+    keys.forEach(function (k) {
+      var d = MC.parseDate(k);
+      run = (prev && MC.daysBetween(prev, d) === 1) ? run + 1 : 1;
+      longest = Math.max(longest, run); prev = d;
+    });
+    var cur = 0, d = MC.today();
+    if (!days[MC.toISO(d)]) d = MC.addDays(d, -1);  // streak survives until today ends
+    while (days[MC.toISO(d)] && days[MC.toISO(d)].minutes > 0) { cur++; d = MC.addDays(d, -1); }
+    return { current: cur, longest: longest, practicedToday: !!days[MC.toISO(MC.today())] };
+  };
+
+  /* ---------- Roadmap calculation (uses logged sessions when available) ----------
+     Hours completed = estimate from profile average for the period before the first logged
+     sitting + the real effective minutes from every logged sitting.
+     Current pace    = last 30 days of logged sittings (once 7+ days of logging exist),
+     otherwise the profile average. */
+  MC.compute = function (extraMinPerDay) {
+    var p = MC.profile, t = MC.today();
+    var dob = MC.parseDate(p.dob), start = MC.parseDate(p.start);
+    var profMin = Number(p.minutes), profQ = Number(p.quality), goalAge = Number(p.goalAge);
+    var profEff = profMin * profQ / 100;
+
+    var list = sessions.slice().sort(function (a, b) { return a.start - b.start; });
+    var logged = list.length > 0;
+    var firstLogDay = logged ? MC.startOfDay(list[0].start) : null;
+    if (firstLogDay && firstLogDay < start) firstLogDay = start;
+
+    var estDays = Math.max(0, MC.daysBetween(start, logged ? firstLogDay : t));
+    var estHours = profEff * estDays / 60;
+    var loggedEffMin = list.reduce(function (a, s) { return a + MC.effMin(s); }, 0);
+    var loggedHours = loggedEffMin / 60;
+    var loggedActualHours = list.reduce(function (a, s) { return a + s.minutes; }, 0) / 60;
+
+    var completedRaw = estHours + loggedHours;
+    var completed = Math.min(MC.GOAL_HOURS, completedRaw);
+    var remaining = Math.max(0, MC.GOAL_HOURS - completed);
+
+    // Current pace
+    var spanDays = logged ? MC.daysBetween(MC.startOfDay(list[0].start), t) + 1 : 0;
+    var paceSource = 'profile', paceEff = profEff, paceMin = profMin, paceQ = profQ, windowDays = 0;
+    if (logged && spanDays >= 7) {
+      // Window ends today if you've already sat today, otherwise yesterday (today isn't over yet)
+      var end = MC.sumRange(t, MC.addDays(t, 1)).count ? t : MC.addDays(t, -1);
+      var span = MC.daysBetween(MC.startOfDay(list[0].start), end) + 1;
+      windowDays = Math.max(1, Math.min(30, span));
+      var r = MC.sumRange(MC.addDays(end, -(windowDays - 1)), MC.addDays(end, 1));
+      paceSource = 'logged';
+      paceEff = r.eff / windowDays;
+      paceMin = r.minutes / windowDays;
+      paceQ = r.avgQuality != null ? r.avgQuality : profQ;
+    }
+    var extra = Number(extraMinPerDay) || 0;
+    var effDaily = paceEff + extra * paceQ / 100;
+
+    var currentAge = MC.ymDiff(dob, t);
+    var goalDate = MC.addYears(dob, goalAge);
+    var remainingDays = Math.max(1, MC.daysBetween(t, goalDate));
+    var required = remaining * 60 / remainingDays;
+    var done = remaining <= 0;
+    var ahead = done || effDaily >= required;
+
+    var projDate = null;
+    if (done) {
+      projDate = crossingDate(start, profEff, estHours, list, MC.GOAL_HOURS);
+    } else if (effDaily > 0) {
+      projDate = MC.addDays(t, Math.ceil(remaining * 60 / effDaily));
+    }
+    var projAge = projDate ? MC.ymDiff(dob, projDate) : null;
+    var projBeyond = !projAge || projAge.y >= MC.MAX_AGE + 1;
+    var aheadBy = (ahead && projDate && projDate <= goalDate) ? MC.ymDiff(projDate, goalDate) : null;
+    var extraEff = ahead ? 0 : Math.ceil(required - effDaily);
+    var extraActual = (!ahead && paceQ > 0) ? Math.ceil((required - effDaily) / (paceQ / 100)) : null;
+
+    return {
+      t: t, dob: dob, start: start, goalAge: goalAge,
+      profMin: profMin, profQ: profQ, profEff: profEff,
+      paceSource: paceSource, windowDays: windowDays, paceMin: paceMin, paceQ: paceQ,
+      effDaily: effDaily, logged: logged, firstLogDay: firstLogDay,
+      estHours: estHours, loggedHours: loggedHours, loggedActualHours: loggedActualHours, sessionCount: list.length,
+      completed: completed, completedRaw: completedRaw, remaining: remaining,
+      currentAge: currentAge, goalDate: goalDate, remainingDays: remainingDays, required: required,
+      done: done, ahead: ahead, projDate: projDate, projAge: projAge, projBeyond: projBeyond,
+      aheadBy: aheadBy, extraEff: extraEff, extraActual: extraActual
+    };
+  };
+  // Date on which cumulative effective hours crossed `goal`
+  function crossingDate(start, profEff, estHours, list, goal) {
+    if (estHours >= goal && profEff > 0) return MC.addDays(start, Math.ceil(goal * 60 / profEff));
+    var cum = estHours;
+    for (var i = 0; i < list.length; i++) {
+      cum += MC.effMin(list[i]) / 60;
+      if (cum >= goal) return MC.startOfDay(list[i].start);
+    }
+    return MC.today();
+  }
+  MC.completedHours = function () { return MC.hasProfile() ? MC.compute().completed : null; };
+
+  /* ---------- Toast ---------- */
+  var toastTimer;
+  MC.toast = function (msg, ms) {
+    var el = MC.$('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.classList.remove('show'); }, ms || 2800);
+  };
+
+  /* ---------- Ring helper ---------- */
+  MC.setRing = function (el, frac) {
+    var r = Number(el.getAttribute('r'));
+    var C = 2 * Math.PI * r;
+    frac = Math.max(0, Math.min(1, frac || 0));
+    el.style.strokeDasharray = C.toFixed(2);
+    el.style.strokeDashoffset = (C * (1 - frac)).toFixed(2);
+  };
+
+  /* ---------- Bells (synthesised singing bowl — works offline, no audio files) ---------- */
+  var actx = null;
+  MC.audioUnlock = function () {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!actx) actx = new AC();
+      if (actx.state === 'suspended') actx.resume();
+      var b = actx.createBuffer(1, 1, 22050), src = actx.createBufferSource();   // silent unlock (iOS)
+      src.buffer = b; src.connect(actx.destination); src.start(0);
+    } catch (e) {}
+  };
+  MC.bell = function (kind) {
+    if (!MC.settings.sound || !actx) return;
+    try {
+      if (actx.state === 'suspended') actx.resume();
+      var strikes = kind === 'end' ? 3 : 1;
+      var base = kind === 'interval' ? 528 : 396;
+      var dur = kind === 'interval' ? 4.5 : 7;
+      var partials = [[1, 1], [2.76, 0.45], [5.4, 0.22], [8.93, 0.1]];
+      for (var s = 0; s < strikes; s++) {
+        var t0 = actx.currentTime + 0.05 + s * 2.6;
+        var master = actx.createGain();
+        master.gain.value = kind === 'interval' ? 0.18 : 0.28;
+        master.connect(actx.destination);
+        partials.forEach(function (pp, i) {
+          var o = actx.createOscillator(), g = actx.createGain();
+          o.type = 'sine'; o.frequency.value = base * pp[0];
+          o.detune.value = (i % 2 ? 4 : -3);
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(pp[1], t0 + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur / (1 + i * 0.7));
+          o.connect(g); g.connect(master);
+          o.start(t0); o.stop(t0 + dur + 0.1);
+        });
+      }
+    } catch (e) {}
+  };
+
+  /* ---------- Theme ---------- */
+  function systemDark() { return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches; }
+  function applyTheme(t) {
+    if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
+    var dark = t ? t === 'dark' : systemDark();
+    var btn = MC.$('themeBtn');
+    btn.textContent = dark ? '☀️' : '🌙';
+    btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+  }
+  MC.initTheme = function () {
+    applyTheme(MC.store.get(KEYS.theme, null));
+    MC.$('themeBtn').addEventListener('click', function () {
+      var cur = document.documentElement.getAttribute('data-theme');
+      var dark = cur ? cur === 'dark' : systemDark();
+      var t = dark ? 'light' : 'dark';
+      MC.store.set(KEYS.theme, t); applyTheme(t);
+    });
+    if (window.matchMedia) {
+      var mq = matchMedia('(prefers-color-scheme: dark)');
+      var onChange = function () { if (!document.documentElement.getAttribute('data-theme')) applyTheme(null); };
+      if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);
+    }
+  };
+
+  /* ---------- Router (hash-based: #home, #timer, #insights, #roadmap) ---------- */
+  MC.views = {};
+  MC.current = null;
+  var VIEWS = ['home', 'timer', 'insights', 'roadmap'];
+  MC.route = function () {
+    var name = (location.hash || '#home').slice(1).split('?')[0];
+    if (VIEWS.indexOf(name) < 0) name = 'home';
+    MC.current = name;
+    VIEWS.forEach(function (v) { MC.$('v-' + v).classList.toggle('active', v === name); });
+    document.querySelectorAll('.tab').forEach(function (t) {
+      var on = t.dataset.tab === name;
+      t.classList.toggle('on', on);
+      if (on) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
+    });
+    if (MC.views[name] && MC.views[name].show) MC.views[name].show();
+    window.scrollTo(0, 0);
+  };
+  MC.go = function (name) { if (location.hash === '#' + name) MC.route(); else location.hash = name; };
+})();

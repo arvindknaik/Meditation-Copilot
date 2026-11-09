@@ -4,11 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Meditation Copilot</title>
-<meta name="description" content="Small moments. Daily practice. Inner transformation. Plan your path to 10,000 effective meditation hours.">
+<meta name="description" content="Small moments. Daily practice. Inner transformation. Time your sittings, see your progress, and plan your path to 10,000 effective meditation hours.">
 <meta name="theme-color" content="#3b1a5e" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#120a1f" media="(prefers-color-scheme: dark)">
 
-<!-- PWA (ignored harmlessly when opened as a local file) -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
@@ -18,900 +17,390 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Meditation Copilot">
 
-<!-- Link previews (WhatsApp, iMessage, etc.) -->
 <meta property="og:title" content="🙏 Meditation Copilot">
 <meta property="og:description" content="Small moments. Daily practice. Inner transformation. Find your path to 10,000 meditation hours.">
 <meta property="og:image" content="https://arvindknaik.github.io/Meditation-Copilot/icons/icon-512.png">
 <meta property="og:url" content="https://arvindknaik.github.io/Meditation-Copilot/">
 <meta property="og:type" content="website">
 
-<style>
-  :root {
-    --bg: #f7f2fc;
-    --bg-glow: #ecdff8;
-    --card: #ffffff;
-    --card-2: #faf6fe;
-    --text: #2a1840;
-    --muted: #6d5c83;
-    --line: #e7dcf2;
-    --purple: #5b2a86;
-    --purple-2: #7b3fb3;
-    --purple-soft: #efe4fa;
-    --gold: #b98d17;
-    --gold-bright: #d9ae36;
-    --gold-soft: #fbf0cc;
-    --ok: #2f7d4f;
-    --ok-soft: #e3f4ea;
-    --danger: #b3364a;
-    --shadow: 0 10px 30px rgba(59, 26, 94, 0.12), 0 2px 6px rgba(59, 26, 94, 0.06);
-    --radius: 22px;
-    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    color-scheme: light;
-  }
-  :root[data-theme="dark"] {
-    --bg: #120a1f;
-    --bg-glow: #2a1446;
-    --card: #1d1130;
-    --card-2: #241539;
-    --text: #f2ebfb;
-    --muted: #b7a8cc;
-    --line: #34224d;
-    --purple: #c9a4f2;
-    --purple-2: #a36be0;
-    --purple-soft: #2c1a45;
-    --gold: #e6c25f;
-    --gold-bright: #f0d27a;
-    --gold-soft: #3a2c12;
-    --ok: #7fd3a0;
-    --ok-soft: #173326;
-    --danger: #ff8a9b;
-    --shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
-    color-scheme: dark;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #120a1f; --bg-glow: #2a1446; --card: #1d1130; --card-2: #241539;
-      --text: #f2ebfb; --muted: #b7a8cc; --line: #34224d;
-      --purple: #c9a4f2; --purple-2: #a36be0; --purple-soft: #2c1a45;
-      --gold: #e6c25f; --gold-bright: #f0d27a; --gold-soft: #3a2c12;
-      --ok: #7fd3a0; --ok-soft: #173326; --danger: #ff8a9b;
-      --shadow: 0 10px 30px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.3);
-      color-scheme: dark;
-    }
-  }
-
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body {
-    min-height: 100vh;
-    min-height: 100dvh;
-    font-family: var(--sans);
-    color: var(--text);
-    background:
-      radial-gradient(1200px 600px at 50% -200px, var(--bg-glow), transparent 70%),
-      var(--bg);
-    background-attachment: fixed;
-    -webkit-font-smoothing: antialiased;
-    -webkit-tap-highlight-color: transparent;
-    line-height: 1.5;
-  }
-  .wrap {
-    max-width: 520px;
-    margin: 0 auto;
-    padding: calc(env(safe-area-inset-top) + 14px) 18px calc(env(safe-area-inset-bottom) + 28px);
-  }
-
-  /* Header */
-  header.top {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 10px; margin-bottom: 10px;
-  }
-  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 600; font-size: 1.1rem; }
-  .brand .logo { font-size: 1.4rem; }
-  .icon-btn {
-    border: 1px solid var(--line); background: var(--card); color: var(--text);
-    width: 44px; height: 44px; border-radius: 50%; font-size: 1.15rem;
-    display: grid; place-items: center; cursor: pointer; box-shadow: var(--shadow);
-  }
-
-  /* Screens */
-  .screen { display: none; animation: rise .45s ease both; }
-  .screen.active { display: block; }
-  @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-  @media (prefers-reduced-motion: reduce) { .screen { animation: none; } .ring-fg { transition: none !important; } }
-
-  .card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 26px 22px;
-  }
-
-  /* Welcome */
-  .hero { text-align: center; padding: 34px 22px 28px; }
-  .hero .lotus { font-size: 3.4rem; line-height: 1; filter: drop-shadow(0 6px 18px rgba(217,174,54,.45)); }
-  .hero h1 {
-    font-family: var(--serif); font-weight: 600; font-size: 2.1rem; line-height: 1.15;
-    margin: 14px 0 8px; color: var(--purple);
-  }
-  .tagline { font-family: var(--serif); font-style: italic; color: var(--gold); font-size: 1.1rem; margin: 0 0 18px; }
-  .hero p.lead { color: var(--muted); margin: 0 auto 24px; max-width: 34ch; }
-  .goal-badge {
-    display: inline-flex; flex-direction: column; align-items: center;
-    background: linear-gradient(135deg, var(--gold-soft), var(--purple-soft));
-    border: 1px solid var(--line); border-radius: 18px; padding: 14px 26px; margin-bottom: 26px;
-  }
-  .goal-badge b { font-family: var(--serif); font-size: 2rem; color: var(--purple); line-height: 1.1; }
-  .goal-badge span { font-size: .85rem; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
-
-  /* Progress */
-  .progress { display: flex; align-items: center; gap: 12px; margin: 6px 2px 16px; }
-  .progress[hidden] { display: none; }
-  .progress .bar { flex: 1; height: 8px; border-radius: 99px; background: var(--purple-soft); overflow: hidden; }
-  .progress .fill { height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--purple-2), var(--gold-bright)); transition: width .4s ease; }
-  .progress .count { font-size: .85rem; color: var(--muted); white-space: nowrap; }
-
-  /* Questions */
-  .q-num { font-size: .8rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px; }
-  .q-title { font-family: var(--serif); font-size: 1.6rem; line-height: 1.25; margin: 0 0 8px; font-weight: 600; }
-  .q-help { color: var(--muted); margin: 0 0 20px; font-size: .97rem; }
-
-  input[type="date"], input[type="number"] {
-    width: 100%; font: inherit; font-size: 1.25rem; color: var(--text);
-    background: var(--card-2); border: 2px solid var(--line); border-radius: 16px;
-    padding: 16px 16px; min-height: 60px; outline: none; transition: border-color .2s, box-shadow .2s;
-    -webkit-appearance: none; appearance: none;
-  }
-  input[type="date"]:focus, input[type="number"]:focus { border-color: var(--purple-2); box-shadow: 0 0 0 4px var(--purple-soft); }
-  .input-suffix { position: relative; }
-  .input-suffix input { padding-right: 110px; }
-  .input-suffix .suffix { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-
-  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-  .chip {
-    border: 1.5px solid var(--line); background: var(--card-2); color: var(--text);
-    border-radius: 99px; padding: 10px 16px; min-height: 44px; font: inherit; font-size: .95rem; cursor: pointer;
-    transition: background .2s, border-color .2s, color .2s;
-  }
-  .chip.on { background: var(--purple-soft); border-color: var(--purple-2); color: var(--purple); font-weight: 600; }
-
-  .error { color: var(--danger); font-size: .92rem; min-height: 1.4em; margin: 10px 2px 0; }
-
-  /* Slider */
-  .quality-value { text-align: center; margin: 4px 0 14px; }
-  .quality-value b { font-family: var(--serif); font-size: 3rem; color: var(--purple); line-height: 1; }
-  .quality-value span { display: block; color: var(--gold); font-weight: 600; letter-spacing: .04em; margin-top: 4px; }
-  input[type="range"] { width: 100%; height: 44px; background: transparent; -webkit-appearance: none; appearance: none; margin: 0; }
-  input[type="range"]::-webkit-slider-runnable-track {
-    height: 10px; border-radius: 99px;
-    background: linear-gradient(90deg, var(--gold-bright) 0, var(--gold-bright) var(--pct, 75%), var(--purple-soft) var(--pct, 75%));
-  }
-  input[type="range"]::-moz-range-track { height: 10px; border-radius: 99px; background: var(--purple-soft); }
-  input[type="range"]::-moz-range-progress { height: 10px; border-radius: 99px; background: var(--gold-bright); }
-  input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none; appearance: none; width: 34px; height: 34px; border-radius: 50%; margin-top: -12px;
-    background: var(--purple-2); border: 4px solid #fff; box-shadow: 0 3px 10px rgba(59,26,94,.35); cursor: pointer;
-  }
-  input[type="range"]::-moz-range-thumb {
-    width: 28px; height: 28px; border-radius: 50%; background: var(--purple-2); border: 4px solid #fff;
-    box-shadow: 0 3px 10px rgba(59,26,94,.35); cursor: pointer;
-  }
-  .formula {
-    margin-top: 18px; padding: 14px 16px; border-radius: 16px; background: var(--gold-soft);
-    font-size: .95rem; color: var(--text); border: 1px solid var(--line);
-  }
-  .formula b { color: var(--purple); }
-
-  /* Buttons */
-  .actions { display: flex; gap: 12px; margin-top: 22px; }
-  .btn {
-    flex: 1; border: 0; border-radius: 16px; min-height: 56px; padding: 14px 18px;
-    font: inherit; font-size: 1.05rem; font-weight: 600; cursor: pointer;
-    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    transition: transform .1s ease, filter .2s, box-shadow .2s; text-decoration: none;
-  }
-  .btn:active { transform: scale(.98); }
-  .btn-primary { color: #fff; background: linear-gradient(135deg, var(--purple-2), #4a1f74); box-shadow: 0 8px 20px rgba(91,42,134,.35); }
-  :root[data-theme="dark"] .btn-primary { background: linear-gradient(135deg, #8a4fd0, #5b2a86); }
-  .btn-gold { color: #2a1840; background: linear-gradient(135deg, #f7dc85, #d9ae36); box-shadow: 0 8px 20px rgba(217,174,54,.35); }
-  .btn-ghost { flex: 0 0 auto; min-width: 96px; background: transparent; color: var(--muted); border: 1.5px solid var(--line); }
-  .btn-whatsapp { color: #fff; background: linear-gradient(135deg, #2bd06a, #128c4a); box-shadow: 0 8px 20px rgba(18,140,74,.3); }
-  .btn[disabled] { opacity: .5; cursor: not-allowed; }
-  .stack { display: grid; gap: 12px; margin-top: 18px; }
-
-  /* Results */
-  .roadmap-head { text-align: center; margin-bottom: 16px; }
-  .roadmap-head h2 { font-family: var(--serif); font-size: 1.7rem; margin: 6px 0 2px; color: var(--purple); }
-  .roadmap-head p { color: var(--muted); margin: 0; font-size: .92rem; }
-
-  .ring-wrap { display: grid; place-items: center; margin: 8px 0 18px; position: relative; }
-  .ring { width: 190px; height: 190px; transform: rotate(-90deg); }
-  .ring-bg { stroke: var(--purple-soft); }
-  .ring-fg { stroke: url(#ringGrad); transition: stroke-dashoffset 1.4s cubic-bezier(.2,.8,.2,1); }
-  .ring-center { position: absolute; text-align: center; }
-  .ring-center b { display: block; font-family: var(--serif); font-size: 2rem; color: var(--purple); line-height: 1.1; }
-  .ring-center span { font-size: .8rem; color: var(--muted); }
-
-  .status {
-    border-radius: 18px; padding: 16px 18px; margin-bottom: 18px; text-align: center;
-    font-weight: 600; font-size: 1.05rem;
-  }
-  .status.ahead { background: var(--ok-soft); color: var(--ok); }
-  .status.behind { background: var(--gold-soft); color: var(--gold); }
-  :root:not([data-theme="dark"]) .status.behind { color: #8a6a0e; }
-  .status small { display: block; font-weight: 400; color: var(--text); margin-top: 6px; font-size: .97rem; line-height: 1.45; }
-
-  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .stat { background: var(--card-2); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; }
-  .stat .k { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-  .stat .v { font-family: var(--serif); font-size: 1.3rem; font-weight: 600; margin-top: 2px; }
-  .stat .v small { font-family: var(--sans); font-size: .78rem; font-weight: 400; color: var(--muted); }
-  .stat.wide { grid-column: 1 / -1; }
-  .stat.hl { background: linear-gradient(135deg, var(--gold-soft), var(--purple-soft)); }
-
-  .quote {
-    margin: 20px 0 4px; padding: 18px 20px; border-left: 4px solid var(--gold-bright);
-    background: var(--card-2); border-radius: 0 16px 16px 0;
-    font-family: var(--serif); font-style: italic; font-size: 1.12rem; color: var(--text);
-  }
-  .quote cite { display: block; margin-top: 6px; font-style: normal; font-family: var(--sans); font-size: .82rem; color: var(--muted); }
-
-  .links { display: flex; justify-content: center; gap: 18px; margin-top: 18px; flex-wrap: wrap; }
-  .link { background: none; border: 0; color: var(--purple); font: inherit; font-size: .95rem; cursor: pointer; padding: 10px 6px; text-decoration: underline; text-underline-offset: 3px; }
-
-  .install-banner {
-    display: none; margin-top: 16px; padding: 14px 16px; border-radius: 16px;
-    border: 1px dashed var(--gold-bright); background: var(--card); font-size: .93rem; color: var(--muted);
-  }
-  .install-banner.show { display: block; }
-  .install-banner b { color: var(--text); }
-
-  footer { text-align: center; color: var(--muted); font-size: .8rem; margin-top: 26px; }
-
-  .toast {
-    position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translateX(-50%) translateY(20px);
-    background: var(--text); color: var(--bg); padding: 12px 18px; border-radius: 99px; font-size: .92rem;
-    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 10; max-width: 90vw; text-align: center;
-  }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  :focus-visible { outline: 3px solid var(--gold-bright); outline-offset: 2px; }
-</style>
+<link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+<!-- Shared gradient for progress rings -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a36be0"/>
+      <stop offset="1" stop-color="#e6c25f"/>
+    </linearGradient>
+  </defs>
+</svg>
+
 <div class="wrap">
   <header class="top">
     <div class="brand"><span class="logo" aria-hidden="true">🙏</span> Meditation Copilot</div>
     <button class="icon-btn" id="themeBtn" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
   </header>
 
-  <!-- Welcome -->
-  <section class="screen active" id="s-welcome" aria-labelledby="welcomeTitle">
-    <div class="card hero">
-      <div class="lotus" aria-hidden="true">🪷</div>
-      <h1 id="welcomeTitle">Meditation Copilot</h1>
-      <p class="tagline">Small moments. Daily practice. Inner transformation.</p>
-      <div class="goal-badge"><b>10,000</b><span>effective meditation hours</span></div>
-      <p class="lead">Answer five gentle questions and we'll map your personal path to this sacred milestone.</p>
-      <button class="btn btn-primary" data-next style="width:100%">Begin my journey ✨</button>
-    </div>
-  </section>
+  <main>
+    <!-- ================= HOME ================= -->
+    <section class="view" id="v-home" aria-label="Today">
+      <h1 class="greet" id="greet">Welcome</h1>
+      <p class="greet-sub" id="greetSub"></p>
 
-  <!-- Progress (questions only) -->
-  <div class="progress" id="progress" hidden>
-    <div class="bar"><div class="fill" id="progressFill"></div></div>
-    <div class="count" id="progressCount">1 of 5</div>
-  </div>
-
-  <!-- Q1 -->
-  <section class="screen" id="s-q1" aria-labelledby="q1t">
-    <div class="card">
-      <div class="q-num">Question 1</div>
-      <h2 class="q-title" id="q1t">What is your Date of Birth?</h2>
-      <p class="q-help">This helps us understand the time ahead of you.</p>
-      <label class="sr-only" for="dob">Date of birth</label>
-      <input type="date" id="dob" autocomplete="bday">
-      <div class="error" id="e1" role="alert"></div>
-      <div class="actions">
-        <button class="btn btn-ghost" data-back>Back</button>
-        <button class="btn btn-primary" data-next>Continue</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Q2 -->
-  <section class="screen" id="s-q2" aria-labelledby="q2t">
-    <div class="card">
-      <div class="q-num">Question 2</div>
-      <h2 class="q-title" id="q2t">When did your meditation journey begin?</h2>
-      <p class="q-help">An approximate date is perfectly fine. Every sincere sitting counts.</p>
-      <label class="sr-only" for="start">Journey start date</label>
-      <input type="date" id="start">
-      <div class="error" id="e2" role="alert"></div>
-      <div class="actions">
-        <button class="btn btn-ghost" data-back>Back</button>
-        <button class="btn btn-primary" data-next>Continue</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Q3 -->
-  <section class="screen" id="s-q3" aria-labelledby="q3t">
-    <div class="card">
-      <div class="q-num">Question 3</div>
-      <h2 class="q-title" id="q3t">What is your current average meditation time?</h2>
-      <p class="q-help">Minutes per day, on average.</p>
-      <div class="input-suffix">
-        <label class="sr-only" for="minutes">Minutes per day</label>
-        <input type="number" id="minutes" inputmode="numeric" min="0" max="1440" step="1" placeholder="e.g. 30">
-        <span class="suffix">min / day</span>
-      </div>
-      <div class="chips" id="minChips">
-        <button class="chip" data-min="20">20 min</button>
-        <button class="chip" data-min="30">30 min</button>
-        <button class="chip" data-min="45">45 min</button>
-        <button class="chip" data-min="60">60 min</button>
-        <button class="chip" data-min="90">90 min</button>
-      </div>
-      <div class="error" id="e3" role="alert"></div>
-      <div class="actions">
-        <button class="btn btn-ghost" data-back>Back</button>
-        <button class="btn btn-primary" data-next>Continue</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Q4 -->
-  <section class="screen" id="s-q4" aria-labelledby="q4t">
-    <div class="card">
-      <div class="q-num">Question 4</div>
-      <h2 class="q-title" id="q4t">What is the quality of your meditation?</h2>
-      <p class="q-help">Be honest and kind with yourself. Quality affects effective meditation.</p>
-      <div class="quality-value"><b id="qVal">75%</b><span id="qLabel">Good</span></div>
-      <label class="sr-only" for="quality">Meditation quality percent</label>
-      <input type="range" id="quality" min="0" max="100" step="1" value="75">
-      <div class="chips" id="qChips">
-        <button class="chip" data-q="50">Beginner · 50%</button>
-        <button class="chip" data-q="75">Good · 75%</button>
-        <button class="chip" data-q="90">Deep · 90%</button>
-        <button class="chip" data-q="100">Absorbed · 100%</button>
-      </div>
-      <div class="formula" id="formula"></div>
-      <div class="actions">
-        <button class="btn btn-ghost" data-back>Back</button>
-        <button class="btn btn-primary" data-next>Continue</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Q5 -->
-  <section class="screen" id="s-q5" aria-labelledby="q5t">
-    <div class="card">
-      <div class="q-num">Question 5</div>
-      <h2 class="q-title" id="q5t">By what age would you like to complete your 10,000-hour spiritual goal?</h2>
-      <p class="q-help" id="q5help">Choose an age up to 90.</p>
-      <div class="input-suffix">
-        <label class="sr-only" for="goalAge">Goal age</label>
-        <input type="number" id="goalAge" inputmode="numeric" min="1" max="90" step="1" value="90">
-        <span class="suffix">years old</span>
-      </div>
-      <div class="chips" id="ageChips"></div>
-      <div class="error" id="e5" role="alert"></div>
-      <div class="actions">
-        <button class="btn btn-ghost" data-back>Back</button>
-        <button class="btn btn-gold" data-next>Reveal my roadmap 🪷</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Results -->
-  <section class="screen" id="s-results" aria-labelledby="rt">
-    <div class="card">
-      <div class="roadmap-head">
-        <div aria-hidden="true" style="font-size:2rem">🪷</div>
-        <h2 id="rt">Your Spiritual Roadmap</h2>
-        <p id="asOf"></p>
+      <div class="card today-card">
+        <div class="ring-wrap">
+          <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring-bg" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>
+            <circle class="ring-fg" id="todayRing" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="326.73" stroke-dashoffset="326.73"/>
+          </svg>
+          <div class="ring-center"><b id="todayMin">0</b><span id="todayOf">of 60 min today</span></div>
+        </div>
+        <button class="target-link" id="targetBtn">Daily target: <b id="targetVal">60 min</b> ✎</button>
+        <div class="stack" style="margin-top:12px">
+          <a class="btn btn-primary btn-xl btn-block" href="#timer">🪷 Start Meditation</a>
+        </div>
       </div>
 
-      <div class="ring-wrap">
-        <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
-          <defs>
-            <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#a36be0"/>
-              <stop offset="1" stop-color="#e6c25f"/>
-            </linearGradient>
-          </defs>
-          <circle class="ring-bg" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>
-          <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round"
-                  stroke-dasharray="326.73" stroke-dashoffset="326.73"/>
-        </svg>
-        <div class="ring-center"><b id="ringPct">0%</b><span>of 10,000 hours</span></div>
+      <div class="stats three" style="margin-bottom:16px">
+        <div class="stat"><div class="k">Streak</div><div class="v" id="hStreak">0</div></div>
+        <div class="stat"><div class="k">This week</div><div class="v" id="hWeek">0m</div></div>
+        <div class="stat"><div class="k">Sessions</div><div class="v" id="hWeekCount">0</div></div>
       </div>
 
-      <div class="status" id="statusBox"></div>
+      <div class="card" id="journeyCard"></div>
 
-      <div class="stats" id="stats"></div>
-
-      <blockquote class="quote" id="motivation"></blockquote>
-
-      <div class="stack">
-        <button class="btn btn-primary" id="shareBtn">🙏 Share My Spiritual Journey</button>
-        <button class="btn btn-whatsapp" id="inspireBtn">💬 Inspire a Friend</button>
+      <div class="card" id="lastCard" hidden>
+        <div class="section-title">Last sitting <a class="link" href="#insights" style="padding:0">See all</a></div>
+        <div class="last-session" id="lastSession"></div>
       </div>
 
-      <div class="install-banner" id="installBanner"></div>
+      <blockquote class="quote flat" id="thought"></blockquote>
+    </section>
 
-      <div class="links">
-        <button class="link" id="editBtn">Adjust my answers</button>
-        <button class="link" id="resetBtn">Start over</button>
+    <!-- ================= TIMER ================= -->
+    <section class="view" id="v-timer" aria-label="Timer">
+      <!-- Setup -->
+      <div id="timerSetup">
+        <div class="card">
+          <h3>How long will you sit?</h3>
+          <div class="chips" id="presetChips" style="margin-top:0">
+            <button class="chip" data-p="10">10</button>
+            <button class="chip" data-p="20">20</button>
+            <button class="chip" data-p="30">30</button>
+            <button class="chip" data-p="45">45</button>
+            <button class="chip" data-p="60">60</button>
+            <button class="chip" data-p="90">90</button>
+            <button class="chip" data-p="120">120</button>
+            <button class="chip" data-p="0">Open ∞</button>
+          </div>
+          <label class="field" for="customMin">Or set minutes</label>
+          <div class="input-suffix">
+            <input type="number" id="customMin" inputmode="numeric" min="1" max="600" placeholder="e.g. 75">
+            <span class="suffix">minutes</span>
+          </div>
+          <p class="small muted" id="presetHint" style="margin:10px 2px 0"></p>
+
+          <label class="field">Interval bell</label>
+          <div class="chips" id="intervalChips" style="margin-top:0">
+            <button class="chip" data-i="0">Off</button>
+            <button class="chip" data-i="5">5 min</button>
+            <button class="chip" data-i="10">10 min</button>
+            <button class="chip" data-i="15">15 min</button>
+            <button class="chip" data-i="30">30 min</button>
+          </div>
+
+          <div class="toggle">
+            <div><b>Bells</b><div class="small muted">Gentle bowl sound at start and end</div></div>
+            <label class="switch"><input type="checkbox" id="soundToggle" aria-label="Bells on or off"><span></span></label>
+          </div>
+          <div class="stack">
+            <button class="btn btn-primary btn-xl" id="startBtn">Begin sitting</button>
+            <button class="btn btn-soft btn-sm" id="manualBtn">+ Log a sitting I already did</button>
+          </div>
+        </div>
+        <p class="small muted center">Tip: keep your phone plugged in. The screen stays on while the timer runs so the bells can play.</p>
       </div>
-    </div>
-  </section>
 
-  <footer>Made with devotion · Your answers stay on this device.</footer>
+      <!-- Running -->
+      <div id="timerRun" hidden>
+        <div class="card run-card center">
+          <p class="muted small" id="runMode" style="margin:0 0 6px"></p>
+          <div class="ring-wrap">
+            <svg class="ring lg" viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="ring-bg" cx="60" cy="60" r="54" fill="none" stroke-width="5"/>
+              <circle class="ring-fg" id="runRing" cx="60" cy="60" r="54" fill="none" stroke-width="5" stroke-linecap="round" stroke-dasharray="339.29" stroke-dashoffset="339.29" style="transition: stroke-dashoffset .5s linear"/>
+            </svg>
+            <div class="ring-center timer-display">
+              <div class="timer-time" id="runTime" aria-live="off">00:00</div>
+              <div class="timer-label" id="runLabel">elapsed</div>
+            </div>
+          </div>
+          <p class="muted small" id="runNote" style="min-height:1.4em"></p>
+          <div class="actions">
+            <button class="btn btn-ghost" id="pauseBtn">Pause</button>
+            <button class="btn btn-gold" id="endBtn">End sitting</button>
+          </div>
+          <button class="link" id="cancelRunBtn" style="margin-top:10px">Discard this sitting</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= INSIGHTS ================= -->
+    <section class="view" id="v-insights" aria-label="Insights">
+      <div class="stats" style="margin-bottom:16px" id="sumTiles"></div>
+
+      <div class="card">
+        <div class="section-title">
+          <span id="chartTitle">Daily minutes</span>
+          <div class="seg" role="tablist" aria-label="Chart range">
+            <button class="on" data-range="days" role="tab" aria-selected="true">14 days</button>
+            <button data-range="weeks" role="tab" aria-selected="false">12 weeks</button>
+          </div>
+        </div>
+        <div class="chart-wrap" id="chartWrap"></div>
+        <p class="small muted" style="margin:8px 2px 0">Tap a bar for details. The dashed line is your target.</p>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Your patterns <span class="small muted">last 30 days</span></div>
+        <div class="stats" id="patternTiles"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Session log <button class="btn btn-soft btn-sm" id="addSessionBtn" style="flex:0 0 auto">+ Add</button></div>
+        <div id="logList"></div>
+        <button class="btn btn-ghost btn-sm btn-block" id="moreBtn" hidden style="margin-top:6px">Show more</button>
+        <div class="tool-row">
+          <button class="btn btn-ghost btn-sm" id="csvBtn">Export CSV</button>
+          <button class="btn btn-ghost btn-sm" id="backupBtn">Backup</button>
+          <button class="btn btn-ghost btn-sm" id="restoreBtn">Restore</button>
+        </div>
+        <input type="file" id="restoreFile" accept="application/json,.json" hidden>
+        <p class="small muted" style="margin:10px 2px 0">Your data lives only on this device. Use Backup now and then to keep a copy.</p>
+      </div>
+    </section>
+
+    <!-- ================= ROADMAP ================= -->
+    <section class="view" id="v-roadmap" aria-label="Roadmap">
+      <section class="screen" id="s-welcome">
+        <div class="card hero">
+          <div class="lotus" aria-hidden="true">🪷</div>
+          <h1>Your Roadmap</h1>
+          <p class="tagline">Small moments. Daily practice. Inner transformation.</p>
+          <div class="goal-badge"><b>10,000</b><span>effective meditation hours</span></div>
+          <p class="lead">Answer five gentle questions and we'll map your personal path to this sacred milestone.</p>
+          <button class="btn btn-primary btn-block" data-next>Begin my journey ✨</button>
+        </div>
+      </section>
+
+      <div class="progress" id="progress" hidden>
+        <div class="bar"><div class="fill" id="progressFill"></div></div>
+        <div class="count" id="progressCount">1 of 5</div>
+      </div>
+
+      <section class="screen" id="s-q1">
+        <div class="card">
+          <div class="q-num">Question 1</div>
+          <h2 class="q-title">What is your Date of Birth?</h2>
+          <p class="q-help">This helps us understand the time ahead of you.</p>
+          <label class="sr-only" for="dob">Date of birth</label>
+          <input type="date" id="dob" autocomplete="bday">
+          <div class="error" id="e1" role="alert"></div>
+          <div class="actions"><button class="btn btn-ghost" data-back>Back</button><button class="btn btn-primary" data-next>Continue</button></div>
+        </div>
+      </section>
+
+      <section class="screen" id="s-q2">
+        <div class="card">
+          <div class="q-num">Question 2</div>
+          <h2 class="q-title">When did your meditation journey begin?</h2>
+          <p class="q-help">An approximate date is perfectly fine. Every sincere sitting counts.</p>
+          <label class="sr-only" for="start">Journey start date</label>
+          <input type="date" id="start">
+          <div class="error" id="e2" role="alert"></div>
+          <div class="actions"><button class="btn btn-ghost" data-back>Back</button><button class="btn btn-primary" data-next>Continue</button></div>
+        </div>
+      </section>
+
+      <section class="screen" id="s-q3">
+        <div class="card">
+          <div class="q-num">Question 3</div>
+          <h2 class="q-title">What is your current average meditation time?</h2>
+          <p class="q-help">Minutes per day, on average.</p>
+          <div class="input-suffix">
+            <label class="sr-only" for="minutes">Minutes per day</label>
+            <input type="number" id="minutes" inputmode="numeric" min="0" max="1440" step="1" placeholder="e.g. 30">
+            <span class="suffix">min / day</span>
+          </div>
+          <div class="chips" id="minChips">
+            <button class="chip" data-min="20">20 min</button>
+            <button class="chip" data-min="30">30 min</button>
+            <button class="chip" data-min="45">45 min</button>
+            <button class="chip" data-min="60">60 min</button>
+            <button class="chip" data-min="90">90 min</button>
+          </div>
+          <div class="error" id="e3" role="alert"></div>
+          <div class="actions"><button class="btn btn-ghost" data-back>Back</button><button class="btn btn-primary" data-next>Continue</button></div>
+        </div>
+      </section>
+
+      <section class="screen" id="s-q4">
+        <div class="card">
+          <div class="q-num">Question 4</div>
+          <h2 class="q-title">What is the quality of your meditation?</h2>
+          <p class="q-help">Be honest and kind with yourself. Quality affects effective meditation.</p>
+          <div class="quality-value"><b id="qVal">75%</b><span id="qLabel">Good</span></div>
+          <label class="sr-only" for="quality">Meditation quality percent</label>
+          <input type="range" id="quality" min="0" max="100" step="1" value="75">
+          <div class="chips" id="qChips">
+            <button class="chip" data-q="50">Beginner · 50%</button>
+            <button class="chip" data-q="75">Good · 75%</button>
+            <button class="chip" data-q="90">Deep · 90%</button>
+            <button class="chip" data-q="100">Absorbed · 100%</button>
+          </div>
+          <div class="formula" id="formula"></div>
+          <div class="actions"><button class="btn btn-ghost" data-back>Back</button><button class="btn btn-primary" data-next>Continue</button></div>
+        </div>
+      </section>
+
+      <section class="screen" id="s-q5">
+        <div class="card">
+          <div class="q-num">Question 5</div>
+          <h2 class="q-title">By what age would you like to complete your 10,000-hour spiritual goal?</h2>
+          <p class="q-help" id="q5help">Choose an age up to 90.</p>
+          <div class="input-suffix">
+            <label class="sr-only" for="goalAge">Goal age</label>
+            <input type="number" id="goalAge" inputmode="numeric" min="1" max="90" step="1" value="90">
+            <span class="suffix">years old</span>
+          </div>
+          <div class="chips" id="ageChips"></div>
+          <div class="error" id="e5" role="alert"></div>
+          <div class="actions"><button class="btn btn-ghost" data-back>Back</button><button class="btn btn-gold" data-next>Reveal my roadmap 🪷</button></div>
+        </div>
+      </section>
+
+      <section class="screen" id="s-results">
+        <div class="card">
+          <div class="center" style="margin-bottom:12px">
+            <div aria-hidden="true" style="font-size:2rem">🪷</div>
+            <h2 style="font-family:var(--serif);font-size:1.7rem;margin:6px 0 2px;color:var(--purple)">Your Spiritual Roadmap</h2>
+            <p class="muted small" id="asOf" style="margin:0"></p>
+          </div>
+          <div class="ring-wrap">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="ring-bg" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>
+              <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="326.73" stroke-dashoffset="326.73"/>
+            </svg>
+            <div class="ring-center"><b id="ringPct">0%</b><span>of 10,000 hours</span></div>
+          </div>
+          <p class="note" id="sourceNote"></p>
+          <div class="status" id="statusBox"></div>
+          <div class="stats" id="stats"></div>
+          <blockquote class="quote" id="motivation"></blockquote>
+        </div>
+
+        <div class="card">
+          <div class="section-title">Milestones</div>
+          <div id="msNext"></div>
+          <div class="milestones" id="msList"></div>
+        </div>
+
+        <div class="card" id="whatIfCard">
+          <div class="section-title">What if…</div>
+          <p class="muted small" style="margin:-6px 0 10px">…I sat a little longer each day?</p>
+          <div class="quality-value sm"><b id="wiVal">+0 min</b><span>per day</span></div>
+          <label class="sr-only" for="whatIf">Extra minutes per day</label>
+          <input type="range" id="whatIf" min="0" max="120" step="5" value="0">
+          <div class="formula" id="wiOut"></div>
+        </div>
+
+        <div class="card">
+          <div class="stack" style="margin-top:0">
+            <button class="btn btn-primary" id="shareBtn">🙏 Share My Spiritual Journey</button>
+            <button class="btn btn-whatsapp" id="inspireBtn">💬 Inspire a Friend</button>
+          </div>
+          <div class="install-banner" id="installBanner"></div>
+          <div class="links">
+            <button class="link" id="editBtn">Adjust my answers</button>
+            <button class="link" id="resetBtn">Start over</button>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer>Made with devotion · Your data stays on this device.</footer>
 </div>
+
+<!-- Tab bar -->
+<nav class="tabbar" aria-label="Main">
+  <div class="inner">
+    <a class="tab" href="#home" data-tab="home">
+      <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/></svg>Today
+    </a>
+    <a class="tab" href="#timer" data-tab="timer">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9.5 2.5h5"/></svg>Timer
+    </a>
+    <a class="tab" href="#insights" data-tab="insights">
+      <svg viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M21 20H3"/></svg>Insights
+    </a>
+    <a class="tab" href="#roadmap" data-tab="roadmap">
+      <svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.5-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.5 12 21 12 21z"/><circle cx="12" cy="10" r="2.3"/></svg>Roadmap
+    </a>
+  </div>
+</nav>
+
+<!-- Session sheet (save / add / edit) -->
+<dialog class="sheet" id="sessionDlg" aria-labelledby="sdTitle">
+  <form method="dialog" class="sheet-body" id="sessionForm">
+    <h2 class="sheet-title" id="sdTitle" tabindex="-1" autofocus style="outline:none">Save your sitting</h2>
+    <p class="muted small" id="sdSub" style="margin:0 0 4px"></p>
+    <div class="row2">
+      <div><label class="field" for="sdDate">Date</label><input type="date" id="sdDate" required></div>
+      <div><label class="field" for="sdTime">Start time</label><input type="time" id="sdTime" required></div>
+    </div>
+    <label class="field" for="sdMin">Minutes</label>
+    <input type="number" id="sdMin" inputmode="decimal" min="1" max="1440" step="any" required>
+    <label class="field" for="sdQ">How deep was it?</label>
+    <div class="quality-value sm" style="margin:0 0 4px"><b id="sdQVal">75%</b><span id="sdQLabel">Good</span></div>
+    <input type="range" id="sdQ" min="0" max="100" step="5" value="75">
+    <label class="field" for="sdNote">Note <span style="font-weight:400">(optional)</span></label>
+    <textarea id="sdNote" maxlength="500" placeholder="Anything you'd like to remember about this sitting"></textarea>
+    <div class="error" id="sdErr" role="alert"></div>
+    <div class="actions">
+      <button type="button" class="btn btn-danger" id="sdDelete" hidden>Delete</button>
+      <button type="button" class="btn btn-ghost" id="sdCancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="sdSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Daily target sheet -->
+<dialog class="sheet" id="targetDlg" aria-labelledby="tdTitle">
+  <form method="dialog" class="sheet-body" id="targetForm">
+    <h2 class="sheet-title" id="tdTitle" tabindex="-1" autofocus style="outline:none">Daily target</h2>
+    <p class="muted small" style="margin:0 0 10px">How many minutes would you like to sit each day?</p>
+    <div class="input-suffix">
+      <input type="number" id="tdMin" inputmode="numeric" min="1" max="1440" step="1" aria-label="Daily target minutes">
+      <span class="suffix">min / day</span>
+    </div>
+    <p class="small muted" id="tdHint" style="margin:10px 2px 0"></p>
+    <div class="actions">
+      <button type="button" class="btn btn-ghost" id="tdCancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </form>
+</dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script>
-(function () {
-  'use strict';
-
-  /* ---------- Constants ---------- */
-  var GOAL_HOURS = 10000;            // fixed spiritual goal – not user-editable
-  var MAX_AGE = 90;
-  var APP_LINK = 'https://arvindknaik.github.io/Meditation-Copilot/';
-  var STORE_KEY = 'meditation-copilot:v1';
-  var DAY_MS = 86400000;
-  var SCREENS = ['s-welcome', 's-q1', 's-q2', 's-q3', 's-q4', 's-q5', 's-results'];
-
-  var state = { dob: '', start: '', minutes: '', quality: 75, goalAge: 90 };
-  var current = 0;
-
-  var $ = function (id) { return document.getElementById(id); };
-
-  /* ---------- Storage (safe) ---------- */
-  function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} }
-  function load() {
-    try { var s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); if (s) Object.assign(state, s); } catch (e) {}
-  }
-  function clearStore() { try { localStorage.removeItem(STORE_KEY); } catch (e) {} }
-
-  /* ---------- Date helpers (local midnight, DST-safe) ---------- */
-  function today() { var d = new Date(); d.setHours(0, 0, 0, 0); return d; }
-  function parseDate(s) {
-    if (!s) return null;
-    var p = s.split('-').map(Number);
-    if (p.length !== 3 || p.some(isNaN)) return null;
-    return new Date(p[0], p[1] - 1, p[2]);
-  }
-  function toISO(d) {
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  }
-  function daysBetween(a, b) { return Math.round((b - a) / DAY_MS); }
-  function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
-  function addYears(d, n) {
-    var r = new Date(d.getFullYear() + n, d.getMonth(), d.getDate());
-    if (r.getMonth() !== d.getMonth()) r.setDate(0); // Feb 29 → Feb 28
-    return r;
-  }
-  // Whole years + months between two dates (a <= b)
-  function ymDiff(a, b) {
-    var months = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
-    if (b.getDate() < a.getDate()) months--;
-    months = Math.max(0, months);
-    return { y: Math.floor(months / 12), m: months % 12 };
-  }
-  function fmtYM(ym) {
-    var y = ym.y + (ym.y === 1 ? ' year' : ' years');
-    var m = ym.m + (ym.m === 1 ? ' month' : ' months');
-    if (ym.y === 0 && ym.m === 0) return 'less than a month';
-    if (ym.y === 0) return m;
-    if (ym.m === 0) return y;
-    return y + ' and ' + m;
-  }
-  function fmtDate(d) {
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-  }
-
-  /* ---------- Number helpers ---------- */
-  function fmtMin(x) {
-    if (!isFinite(x)) return '—';
-    if (x > 0 && x < 10) return (Math.round(x * 10) / 10).toString();
-    return Math.round(x).toLocaleString();
-  }
-  function fmtHours(x) { return Math.round(x).toLocaleString(); }
-  function qualityLabel(q) {
-    if (q >= 100) return 'Absorbed';
-    if (q >= 90) return 'Deep';
-    if (q >= 75) return 'Good';
-    if (q >= 50) return 'Beginner';
-    return 'Settling in';
-  }
-
-  /* ---------- Core calculation ---------- */
-  function compute() {
-    var t = today();
-    var dob = parseDate(state.dob);
-    var start = parseDate(state.start);
-    var minutes = Number(state.minutes);
-    var quality = Number(state.quality);
-    var goalAge = Number(state.goalAge);
-
-    var effDaily = minutes * quality / 100;                       // Effective daily minutes
-    var daysSince = Math.max(0, daysBetween(start, t));            // Days since journey start
-    var completed = Math.min(GOAL_HOURS, effDaily * daysSince / 60);
-    var remaining = Math.max(0, GOAL_HOURS - completed);
-
-    var currentAge = ymDiff(dob, t);
-    var goalDate = addYears(dob, goalAge);
-    var remainingDays = Math.max(1, daysBetween(t, goalDate));
-    var required = remaining * 60 / remainingDays;                 // Required effective min/day
-
-    var done = remaining <= 0;
-    var ahead = done || effDaily >= required;
-
-    var projDate = null;
-    if (done && effDaily > 0) {
-      projDate = addDays(start, Math.ceil(GOAL_HOURS * 60 / effDaily));
-    } else if (effDaily > 0) {
-      projDate = addDays(t, Math.ceil(remaining * 60 / effDaily));
-    }
-    var projAge = projDate ? ymDiff(dob, projDate) : null;
-    var projBeyond = !projAge || projAge.y >= MAX_AGE + 1; // past age 90 at current pace (or no practice yet)
-    var aheadBy = (ahead && projDate && projDate <= goalDate) ? ymDiff(projDate, goalDate) : null;
-    var extraEff = ahead ? 0 : Math.ceil(required - effDaily);
-    var extraActual = (!ahead && quality > 0) ? Math.ceil((required - effDaily) / (quality / 100)) : null;
-
-    return {
-      t: t, dob: dob, start: start, minutes: minutes, quality: quality, goalAge: goalAge,
-      effDaily: effDaily, daysSince: daysSince, completed: completed, remaining: remaining,
-      currentAge: currentAge, goalDate: goalDate, remainingDays: remainingDays, required: required,
-      done: done, ahead: ahead, projDate: projDate, projAge: projAge, projBeyond: projBeyond, aheadBy: aheadBy,
-      extraEff: extraEff, extraActual: extraActual
-    };
-  }
-
-  /* ---------- Validation ---------- */
-  function validate(step) {
-    var t = today();
-    var err = '';
-    if (step === 1) {
-      var dob = parseDate($('dob').value);
-      if (!dob) err = 'Please choose your date of birth.';
-      else if (dob > t) err = 'Your date of birth can’t be in the future.';
-      else if (ymDiff(dob, t).y >= MAX_AGE) err = 'This planner supports goals up to age 90. Your practice is already a blessing. 🙏';
-      else state.dob = $('dob').value;
-      $('e1').textContent = err;
-    }
-    if (step === 2) {
-      var s = parseDate($('start').value), d = parseDate(state.dob);
-      if (!s) err = 'Please choose when your journey began.';
-      else if (s > t) err = 'Please choose a date on or before today.';
-      else if (d && s < d) err = 'Your journey can’t begin before your date of birth.';
-      else state.start = $('start').value;
-      $('e2').textContent = err;
-    }
-    if (step === 3) {
-      var raw = $('minutes').value.trim();
-      var m = Number(raw);
-      if (raw === '' || isNaN(m)) err = 'Please enter your average minutes per day.';
-      else if (m < 0) err = 'Minutes can’t be negative.';
-      else if (m > 1440) err = 'There are only 1,440 minutes in a day. 🙂';
-      else state.minutes = String(Math.round(m * 10) / 10);
-      $('e3').textContent = err;
-    }
-    if (step === 4) {
-      state.quality = Number($('quality').value);
-    }
-    if (step === 5) {
-      var g = Number($('goalAge').value);
-      var dob5 = parseDate(state.dob);
-      var age = ymDiff(dob5, t).y;
-      if (!$('goalAge').value || isNaN(g) || g !== Math.floor(g)) err = 'Please enter a whole number for your goal age.';
-      else if (g > MAX_AGE) err = 'The goal age cannot exceed 90.';
-      else if (g <= age || addYears(dob5, g) <= t) err = 'Your goal age must be greater than your current age (' + age + ').';
-      else state.goalAge = g;
-      $('e5').textContent = err;
-    }
-    if (!err) save();
-    return !err;
-  }
-
-  /* ---------- Navigation ---------- */
-  function show(i) {
-    current = i;
-    SCREENS.forEach(function (id, idx) { $(id).classList.toggle('active', idx === i); });
-    var isQ = i >= 1 && i <= 5;
-    $('progress').hidden = !isQ;
-    if (isQ) {
-      $('progressFill').style.width = (i / 5 * 100) + '%';
-      $('progressCount').textContent = i + ' of 5';
-    }
-    prepare(i);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    var focusEl = { 1: 'dob', 2: 'start', 3: 'minutes', 4: 'quality', 5: 'goalAge' }[i];
-    if (focusEl && !matchMedia('(pointer: coarse)').matches) setTimeout(function () { $(focusEl).focus(); }, 60);
-  }
-
-  function prepare(i) {
-    var t = toISO(today());
-    if (i === 1) { $('dob').max = t; $('dob').value = state.dob || ''; }
-    if (i === 2) { $('start').max = t; $('start').min = state.dob || ''; $('start').value = state.start || ''; }
-    if (i === 3) { $('minutes').value = state.minutes; syncMinChips(); }
-    if (i === 4) { $('quality').value = state.quality; updateQuality(); }
-    if (i === 5) {
-      var age = ymDiff(parseDate(state.dob), today()).y;
-      $('goalAge').min = age + 1;
-      $('goalAge').value = state.goalAge || MAX_AGE;
-      $('q5help').textContent = 'You are ' + age + ' today. Choose an age between ' + (age + 1) + ' and ' + MAX_AGE + '. Default is 90.';
-      buildAgeChips(age);
-    }
-    if (i === 6) renderResults();
-  }
-
-  function next() {
-    if (current >= 1 && current <= 5 && !validate(current)) return;
-    show(Math.min(current + 1, SCREENS.length - 1));
-  }
-  function back() { show(Math.max(current - 1, 0)); }
-
-  document.querySelectorAll('[data-next]').forEach(function (b) { b.addEventListener('click', next); });
-  document.querySelectorAll('[data-back]').forEach(function (b) { b.addEventListener('click', back); });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && current >= 1 && current <= 5 && e.target.tagName === 'INPUT') { e.preventDefault(); next(); }
-  });
-
-  /* ---------- Q3 chips ---------- */
-  function syncMinChips() {
-    document.querySelectorAll('#minChips .chip').forEach(function (c) {
-      c.classList.toggle('on', c.dataset.min === String($('minutes').value));
-    });
-  }
-  $('minChips').addEventListener('click', function (e) {
-    var c = e.target.closest('.chip'); if (!c) return;
-    $('minutes').value = c.dataset.min; syncMinChips(); $('e3').textContent = '';
-  });
-  $('minutes').addEventListener('input', function () { syncMinChips(); $('e3').textContent = ''; });
-
-  /* ---------- Q4 slider ---------- */
-  function updateQuality() {
-    var q = Number($('quality').value);
-    var mins = Number(state.minutes) || 60;
-    $('qVal').textContent = q + '%';
-    $('qLabel').textContent = qualityLabel(q);
-    $('quality').style.setProperty('--pct', q + '%');
-    document.querySelectorAll('#qChips .chip').forEach(function (c) { c.classList.toggle('on', Number(c.dataset.q) === q); });
-    $('formula').innerHTML = '<b>' + fmtMin(mins) + ' minutes</b> at <b>' + q + '% quality</b> = <b>' +
-      fmtMin(mins * q / 100) + ' effective minutes</b> per day.';
-  }
-  $('quality').addEventListener('input', updateQuality);
-  $('qChips').addEventListener('click', function (e) {
-    var c = e.target.closest('.chip'); if (!c) return;
-    $('quality').value = c.dataset.q; updateQuality();
-  });
-
-  /* ---------- Q5 chips ---------- */
-  function buildAgeChips(age) {
-    var opts = [50, 60, 70, 80, 90].filter(function (a) { return a > age; });
-    $('ageChips').innerHTML = opts.map(function (a) { return '<button class="chip" data-age="' + a + '">' + a + '</button>'; }).join('');
-    syncAgeChips();
-  }
-  function syncAgeChips() {
-    document.querySelectorAll('#ageChips .chip').forEach(function (c) { c.classList.toggle('on', c.dataset.age === String($('goalAge').value)); });
-  }
-  $('ageChips').addEventListener('click', function (e) {
-    var c = e.target.closest('.chip'); if (!c) return;
-    $('goalAge').value = c.dataset.age; syncAgeChips(); $('e5').textContent = '';
-  });
-  $('goalAge').addEventListener('input', function () { syncAgeChips(); $('e5').textContent = ''; });
-
-  /* ---------- Results ---------- */
-  var MOTIVATION = {
-    done: ['Ten thousand hours of turning inward. What you have cultivated cannot be measured, only lived. 🙏', 'You have walked the long road. Now let the practice simply be who you are.'],
-    ahead: ['Your steady devotion is bearing fruit. Keep sitting with the same gentle consistency.', 'Each quiet morning adds up. You are walking this path beautifully.', 'Discipline today, freedom tomorrow. Your practice is a gift to yourself and the world.'],
-    behind: ['A small daily step is all it takes. Begin again, gently, today.', 'The path is not about perfection; it is about returning. Every sitting brings you closer.', 'Even a few extra mindful minutes, offered sincerely, transform a life.']
-  };
-  function pick(arr) { return arr[new Date().getDate() % arr.length]; }
-
-  function stat(k, v, cls) { return '<div class="stat ' + (cls || '') + '"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>'; }
-
-  function renderResults() {
-    var r = compute();
-    var pct = Math.min(100, r.completed / GOAL_HOURS * 100);
-
-    $('asOf').textContent = 'As of ' + fmtDate(r.t) + ' · Goal fixed at 10,000 hours';
-
-    // Ring
-    var C = 2 * Math.PI * 52;
-    var fg = $('ringFg');
-    fg.style.strokeDasharray = C.toFixed(2);
-    fg.style.strokeDashoffset = C.toFixed(2);
-    requestAnimationFrame(function () { requestAnimationFrame(function () { fg.style.strokeDashoffset = (C * (1 - pct / 100)).toFixed(2); }); });
-    $('ringPct').textContent = (pct < 10 ? pct.toFixed(1) : Math.round(pct)) + '%';
-
-    // Status
-    var box = $('statusBox');
-    var msg;
-    if (r.done) {
-      box.className = 'status ahead';
-      msg = '🎉 Goal Achieved' +
-        '<small>Based on your practice, you completed 10,000 effective hours around age ' + fmtYM(r.projAge) + '.</small>';
-    } else if (r.ahead) {
-      box.className = 'status ahead';
-      msg = '✅ Ahead of Schedule' +
-        '<small>Based on your current practice, you are projected to complete your 10,000-hour goal at age ' + fmtYM(r.projAge) + '.' +
-        (r.aheadBy ? '<br>You are on track to complete your goal approximately ' + fmtYM(r.aheadBy) + ' earlier than planned.' : '') +
-        '</small>';
-    } else {
-      box.className = 'status behind';
-      var detail = 'To achieve your goal by age ' + r.goalAge + ', increase your effective meditation time by ' +
-        fmtMin(r.extraEff) + ' minute' + (r.extraEff === 1 ? '' : 's') + ' per day.';
-      if (r.extraActual !== null && r.quality < 100) {
-        detail += '<br>At your ' + r.quality + '% quality, that is about ' + fmtMin(r.extraActual) +
-          ' more minutes of sitting, or deepen your quality to close the gap faster.';
-      }
-      if (r.required > 1440) {
-        detail += '<br>That is more than a full day, so the target may stretch beyond age ' + r.goalAge +
-          '. Every hour you practice still transforms you.';
-      } else if (!r.projBeyond) {
-        detail += '<br>At your current pace you would reach 10,000 hours at about age ' + fmtYM(r.projAge) + '.';
-      }
-      msg = '🌟 Your goal is within reach.<small>' + detail + '</small>';
-    }
-    box.innerHTML = msg;
-
-    // Stats
-    var projText = r.projBeyond ? 'Beyond 90 <small>at current pace</small>' : r.projAge.y + ' <small>yrs ' + r.projAge.m + ' mo</small>';
-    $('stats').innerHTML =
-      stat('Current Age', r.currentAge.y + ' <small>yrs ' + r.currentAge.m + ' mo</small>') +
-      stat('Target Age', r.goalAge + ' <small>yrs</small>') +
-      stat('Meditation / Day', fmtMin(r.minutes) + ' <small>min</small>') +
-      stat('Quality Index', r.quality + '% <small>' + qualityLabel(r.quality) + '</small>') +
-      stat('Effective / Day', fmtMin(r.effDaily) + ' <small>min</small>', 'hl') +
-      stat('Required Effective Avg', (r.done ? '0' : fmtMin(r.required)) + ' <small>min/day</small>', 'hl') +
-      stat('Hours Completed', fmtHours(r.completed)) +
-      stat('Hours Remaining', fmtHours(r.remaining)) +
-      stat('Status', r.ahead ? '✅ Ahead of Schedule' : '🌟 Behind Schedule') +
-      stat('Projected Completion Age', projText);
-
-    $('motivation').innerHTML = pick(r.done ? MOTIVATION.done : r.ahead ? MOTIVATION.ahead : MOTIVATION.behind) +
-      '<cite>Meditation Copilot</cite>';
-
-    renderInstallHint();
-  }
-
-  /* ---------- Sharing ---------- */
-  function shareText() {
-    var r = compute();
-    var proj = r.projBeyond ? 'Growing my practice to get there 🌱' : fmtYM(r.projAge);
-    return [
-      '🙏 My 10,000 Hour Spiritual Journey',
-      '',
-      'Current Age: ' + r.currentAge.y,
-      'Target Age: ' + r.goalAge,
-      'Quality Index: ' + r.quality + '%',
-      'Effective Meditation: ' + fmtMin(r.effDaily) + ' min/day',
-      'Hours Completed: ' + fmtHours(r.completed),
-      'Hours Remaining: ' + fmtHours(r.remaining),
-      'Required Effective Average: ' + (r.done ? '0' : fmtMin(r.required)) + ' min/day',
-      'Status: ' + (r.ahead ? 'Ahead of Schedule' : 'Behind Schedule'),
-      'Projected Completion Age: ' + proj,
-      '',
-      '"The light you seek is already within you."',
-      '',
-      'Try Meditation Copilot:',
-      APP_LINK
-    ].join('\n');
-  }
-  var INSPIRE_TEXT = 'I calculated my path to 10,000 meditation hours using Meditation Copilot.\n\nTry it yourself:\n' + APP_LINK;
-
-  function openWhatsApp(text) {
-    var url = 'https://wa.me/?text=' + encodeURIComponent(text);
-    var w = window.open(url, '_blank', 'noopener');
-    if (!w) location.href = url;
-  }
-
-  $('shareBtn').addEventListener('click', function () {
-    var text = shareText();
-    if (navigator.share) {
-      navigator.share({ title: 'My 10,000 Hour Spiritual Journey', text: text })
-        .catch(function (err) { if (!err || err.name !== 'AbortError') openWhatsApp(text); });
-    } else {
-      openWhatsApp(text);
-    }
-  });
-  $('inspireBtn').addEventListener('click', function () { openWhatsApp(INSPIRE_TEXT); });
-
-  $('editBtn').addEventListener('click', function () { show(1); });
-  $('resetBtn').addEventListener('click', function () {
-    if (!window.confirm('Start over and clear your answers?')) return;
-    clearStore();
-    state = { dob: '', start: '', minutes: '', quality: 75, goalAge: 90 };
-    show(0);
-  });
-
-  /* ---------- Toast ---------- */
-  var toastTimer;
-  function toast(msg) {
-    var el = $('toast'); el.textContent = msg; el.classList.add('show');
-    clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2600);
-  }
-
-  /* ---------- Theme ---------- */
-  var THEME_KEY = 'meditation-copilot:theme';
-  function systemDark() { return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches; }
-  function applyTheme(t) {
-    if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
-    var dark = t ? t === 'dark' : systemDark();
-    $('themeBtn').textContent = dark ? '☀️' : '🌙';
-    $('themeBtn').setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
-  }
-  var savedTheme = null;
-  try { savedTheme = localStorage.getItem(THEME_KEY); } catch (e) {}
-  applyTheme(savedTheme);
-  $('themeBtn').addEventListener('click', function () {
-    var dark = document.documentElement.getAttribute('data-theme') ? document.documentElement.getAttribute('data-theme') === 'dark' : systemDark();
-    var t = dark ? 'light' : 'dark';
-    try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
-    applyTheme(t);
-  });
-  if (window.matchMedia) {
-    var mq = matchMedia('(prefers-color-scheme: dark)');
-    var onChange = function () { if (!document.documentElement.getAttribute('data-theme')) applyTheme(null); };
-    if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);
-  }
-
-  /* ---------- PWA: install + service worker ---------- */
-  var deferredPrompt = null;
-  var isStandalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
-  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-  window.addEventListener('beforeinstallprompt', function (e) {
-    e.preventDefault(); deferredPrompt = e; renderInstallHint();
-  });
-  window.addEventListener('appinstalled', function () { deferredPrompt = null; renderInstallHint(); toast('Installed. Find 🙏 on your home screen.'); });
-
-  function renderInstallHint() {
-    var el = $('installBanner');
-    if (isStandalone || location.protocol === 'file:') { el.classList.remove('show'); return; }
-    if (deferredPrompt) {
-      el.innerHTML = '<b>📲 Keep your practice close.</b> Install Meditation Copilot on your home screen.' +
-        '<div style="margin-top:10px"><button class="btn btn-gold" id="installBtn" style="width:100%;min-height:48px">Add to Home Screen</button></div>';
-      el.classList.add('show');
-      $('installBtn').addEventListener('click', function () {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.finally(function () { deferredPrompt = null; renderInstallHint(); });
-      });
-    } else if (isIOS) {
-      el.innerHTML = '<b>📲 Add to Home Screen:</b> tap the Share icon <span aria-hidden="true">⬆️</span> in Safari, then choose <b>Add to Home Screen</b>.';
-      el.classList.add('show');
-    } else {
-      el.classList.remove('show');
-    }
-  }
-
-  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () {});
-    });
-  }
-
-  /* ---------- Boot ---------- */
-  load();
-  var complete = state.dob && state.start && state.minutes !== '' && state.goalAge;
-  if (complete) {
-    // Re-validate stored goal (e.g. a birthday may have passed)
-    var g = addYears(parseDate(state.dob), Number(state.goalAge));
-    if (g > today()) { show(6); toast('Welcome back. Your roadmap is updated for today. 🙏'); }
-    else show(5);
-  } else {
-    show(0);
-  }
-})();
-</script>
+<script src="js/core.js"></script>
+<script src="js/roadmap.js"></script>
+<script src="js/sessions-ui.js"></script>
+<script src="js/timer.js"></script>
+<script src="js/insights.js"></script>
+<script src="js/home.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>

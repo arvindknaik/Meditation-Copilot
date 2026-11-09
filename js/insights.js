@@ -1,0 +1,223 @@
+/* Meditation Copilot — Insights: totals, chart, patterns, session log, export/backup */
+(function () {
+  'use strict';
+  var MC = window.MC, $ = MC.$;
+  var range = 'days', pageSize = 10, shown = 10;
+
+  function tile(k, v, sub, cls) {
+    return '<div class="stat ' + (cls || '') + '"><div class="k">' + k + '</div><div class="v">' + v +
+      (sub ? ' <small>' + sub + '</small>' : '') + '</div></div>';
+  }
+  function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
+
+  /* ---------- Summary tiles ---------- */
+  function renderSummary() {
+    var t = MC.today(), tomorrow = MC.addDays(t, 1);
+    var today = MC.sumRange(t, tomorrow);
+    var week = MC.sumRange(MC.weekStart(t), tomorrow);
+    var month = MC.sumRange(new Date(t.getFullYear(), t.getMonth(), 1), tomorrow);
+    var all = MC.sumRange(new Date(0), new Date(8.64e15));
+    $('sumTiles').innerHTML =
+      tile('Today', MC.fmtDur(today.minutes), plural(today.count, 'sitting')) +
+      tile('This week', MC.fmtDur(week.minutes), plural(week.count, 'sitting')) +
+      tile('This month', MC.fmtDur(month.minutes), plural(month.count, 'sitting')) +
+      tile('All logged', MC.fmtDur(all.minutes), MC.fmtDur(all.eff) + ' effective', 'hl');
+  }
+
+  /* ---------- Patterns (last 30 days) ---------- */
+  function renderPatterns() {
+    var t = MC.today(), from = MC.addDays(t, -29), tomorrow = MC.addDays(t, 1);
+    var r = MC.sumRange(from, tomorrow), st = MC.streaks(), days = MC.byDay();
+    var practiced = 0;
+    for (var i = 0; i < 30; i++) if (days[MC.toISO(MC.addDays(from, i))]) practiced++;
+    var buckets = { 'Early morning': 0, 'Morning': 0, 'Afternoon': 0, 'Evening': 0, 'Night': 0 };
+    MC.sessions.all().forEach(function (s) {
+      if (s.start < from.getTime()) return;
+      var h = new Date(s.start).getHours();
+      var b = h >= 3 && h < 6 ? 'Early morning' : h >= 6 && h < 12 ? 'Morning' : h >= 12 && h < 17 ? 'Afternoon' : h >= 17 && h < 21 ? 'Evening' : 'Night';
+      buckets[b] += s.minutes;
+    });
+    var best = Object.keys(buckets).sort(function (a, b) { return buckets[b] - buckets[a]; })[0];
+    $('patternTiles').innerHTML =
+      tile('Current streak', st.current + ' 🔥', st.current === 1 ? 'day' : 'days') +
+      tile('Longest streak', st.longest, st.longest === 1 ? 'day' : 'days') +
+      tile('Consistency', Math.round(practiced / 30 * 100) + '%', practiced + ' of 30 days') +
+      tile('Avg quality', r.avgQuality != null ? Math.round(r.avgQuality) + '%' : '—', r.avgQuality != null ? MC.qualityLabel(r.avgQuality) : '') +
+      tile('Avg sitting', r.count ? MC.fmtDur(r.minutes / r.count) : '—') +
+      tile('Best time', r.count ? best : '—');
+  }
+
+  /* ---------- Chart ---------- */
+  function niceMax(v) {
+    var steps = [15, 30, 45, 60, 90, 120, 180, 240, 300, 420, 600, 900, 1200, 1800, 2400, 3000, 4200, 6000, 9000, 12000];
+    for (var i = 0; i < steps.length; i++) if (v <= steps[i]) return steps[i];
+    return Math.ceil(v / 600) * 600;
+  }
+  function axisLabel(v) { return v >= 120 ? (Math.round(v / 6) / 10) + 'h' : Math.round(v) + 'm'; }
+
+  function chartData() {
+    var t = MC.today(), days = MC.byDay(), out = [];
+    if (range === 'days') {
+      for (var i = 13; i >= 0; i--) {
+        var d = MC.addDays(t, -i), k = MC.toISO(d), v = days[k] || { minutes: 0, eff: 0, count: 0 };
+        out.push({
+          label: d.toLocaleDateString(undefined, { weekday: 'narrow' }),
+          title: MC.fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' }),
+          minutes: v.minutes, eff: v.eff, count: v.count, today: i === 0
+        });
+      }
+      return { bars: out, target: MC.dailyTarget(), title: 'Daily minutes' };
+    }
+    var ws = MC.weekStart(t);
+    for (var w = 11; w >= 0; w--) {
+      var s = MC.addDays(ws, -7 * w), r = MC.sumRange(s, MC.addDays(s, 7));
+      out.push({
+        label: (w % 3 === 0) ? s.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '',
+        title: 'Week of ' + MC.fmtDate(s, { month: 'short', day: 'numeric' }),
+        minutes: r.minutes, eff: r.eff, count: r.count, today: w === 0
+      });
+    }
+    return { bars: out, target: MC.dailyTarget() * 7, title: 'Weekly minutes' };
+  }
+
+  function renderChart() {
+    var data = chartData(), bars = data.bars;
+    $('chartTitle').textContent = data.title;
+    var W = 340, H = 190, L = 34, R = 6, T = 12, B = 22;
+    var pw = W - L - R, ph = H - T - B;
+    var maxV = niceMax(Math.max(data.target * 1.1, Math.max.apply(null, bars.map(function (b) { return b.minutes; })), 1));
+    var band = pw / bars.length, bw = Math.max(6, Math.min(18, band * 0.62));
+    var y = function (v) { return T + ph - (v / maxV) * ph; };
+
+    var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + MC.esc(data.title) + '">';
+    svg += '<g class="grid">';
+    [0, 0.5, 1].forEach(function (f) { svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(maxV * f) + '" y2="' + y(maxV * f) + '"/>'; });
+    svg += '</g><g class="axis">';
+    [0, 0.5, 1].forEach(function (f) { svg += '<text x="' + (L - 6) + '" y="' + (y(maxV * f) + 3) + '" text-anchor="end">' + axisLabel(maxV * f) + '</text>'; });
+    bars.forEach(function (b, i) {
+      if (b.label) svg += '<text x="' + (L + band * i + band / 2) + '" y="' + (H - 6) + '" text-anchor="middle"' + (b.today ? ' class="today"' : '') + '>' + MC.esc(b.label) + '</text>';
+    });
+    svg += '</g>';
+    bars.forEach(function (b, i) {
+      var x = L + band * i + (band - bw) / 2;
+      svg += '<rect class="hit" data-i="' + i + '" x="' + (L + band * i) + '" y="' + T + '" width="' + band + '" height="' + ph + '"/>';
+      if (b.minutes > 0) {
+        var top = y(b.minutes), h = T + ph - top, r = Math.min(4, h, bw / 2);
+        svg += '<path class="bar" data-i="' + i + '" d="M' + x + ',' + (T + ph) + 'V' + (top + r) + 'Q' + x + ',' + top + ' ' + (x + r) + ',' + top +
+          'H' + (x + bw - r) + 'Q' + (x + bw) + ',' + top + ' ' + (x + bw) + ',' + (top + r) + 'V' + (T + ph) + 'Z"/>';
+      }
+    });
+    var ty = y(data.target);
+    svg += '<line class="target" x1="' + L + '" x2="' + (W - R) + '" y1="' + ty + '" y2="' + ty + '"/>';
+    svg += '<text class="target-label" x="' + (W - R) + '" y="' + (ty - 4) + '" text-anchor="end">Target ' + axisLabel(data.target) + '</text>';
+    svg += '</svg><div class="tip" id="chartTip" hidden></div>';
+    $('chartWrap').innerHTML = svg;
+
+    var wrap = $('chartWrap'), tip = $('chartTip'), svgEl = wrap.querySelector('svg');
+    function showTip(i) {
+      var b = bars[i], box = svgEl.getBoundingClientRect(), scale = box.width / W;
+      tip.innerHTML = '<b>' + MC.esc(b.title) + '</b>' + (b.count
+        ? MC.fmtDur(b.minutes) + ' · ' + MC.fmtDur(b.eff) + ' effective<br>' + plural(b.count, 'sitting')
+        : 'No sittings logged');
+      var cx = (L + band * i + band / 2) * scale;
+      tip.style.left = Math.max(64, Math.min(box.width - 64, cx)) + 'px';
+      tip.style.top = (y(Math.max(b.minutes, 0)) * scale - 8) + 'px';
+      tip.hidden = false;
+      wrap.querySelectorAll('.bar').forEach(function (el) { el.classList.toggle('hover', Number(el.dataset.i) === i); });
+    }
+    function hideTip() { tip.hidden = true; wrap.querySelectorAll('.bar.hover').forEach(function (el) { el.classList.remove('hover'); }); }
+    wrap.querySelectorAll('.hit').forEach(function (h) {
+      var i = Number(h.dataset.i);
+      h.addEventListener('pointerenter', function () { showTip(i); });
+      h.addEventListener('click', function (e) { e.stopPropagation(); showTip(i); });
+    });
+    svgEl.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') hideTip(); });
+    hideCurrentTip = hideTip;
+  }
+  var hideCurrentTip = null;
+  document.addEventListener('click', function (e) {
+    if (hideCurrentTip && !$('chartWrap').contains(e.target)) hideCurrentTip();
+  });
+  document.querySelectorAll('#v-insights .seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      range = b.dataset.range;
+      document.querySelectorAll('#v-insights .seg button').forEach(function (x) {
+        var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      renderChart();
+    });
+  });
+
+  /* ---------- Session log ---------- */
+  function renderLog() {
+    var list = MC.sessions.all();
+    if (!list.length) {
+      $('logList').innerHTML = '<div class="empty">No sittings yet.<br><a class="link" href="#timer">Start your first sitting</a></div>';
+      $('moreBtn').hidden = true; return;
+    }
+    var html = '', lastDay = null;
+    list.slice(0, shown).forEach(function (s) {
+      var day = MC.relDay(s.start);
+      if (day !== lastDay) { html += '<div class="log-day">' + MC.esc(day) + '</div>'; lastDay = day; }
+      html += '<button class="log-item" data-id="' + MC.esc(s.id) + '">' +
+        '<span class="t">' + MC.esc(MC.fmtTime(s.start)) + '</span>' +
+        '<span style="min-width:0"><span class="m">' + MC.fmtDur(s.minutes) + '</span>' +
+        (s.note ? '<span class="n">' + MC.esc(s.note) + '</span>' : '') + '</span>' +
+        '<span class="q">' + Math.round(s.quality) + '% · ' + MC.fmtDur(MC.effMin(s)) + ' eff</span></button>';
+    });
+    $('logList').innerHTML = html;
+    $('moreBtn').hidden = list.length <= shown;
+  }
+  $('logList').addEventListener('click', function (e) {
+    var b = e.target.closest('.log-item'); if (!b) return;
+    MC.openSession({ mode: 'edit', id: b.dataset.id });
+  });
+  $('moreBtn').addEventListener('click', function () { shown += pageSize; renderLog(); });
+  $('addSessionBtn').addEventListener('click', function () { MC.openSession({ mode: 'manual', minutes: MC.dailyTarget() }); });
+
+  /* ---------- Export / backup / restore ---------- */
+  function download(name, text, type) {
+    var blob = new Blob([text], { type: type }), url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 500);
+  }
+  function csvCell(v) { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  $('csvBtn').addEventListener('click', function () {
+    var list = MC.sessions.all();
+    if (!list.length) { MC.toast('No sittings to export yet.'); return; }
+    var rows = [['date', 'start_time', 'minutes', 'quality_pct', 'effective_minutes', 'note', 'source']];
+    list.slice().reverse().forEach(function (s) {
+      var d = new Date(s.start);
+      rows.push([MC.toISO(d), MC.toHM(d), s.minutes, s.quality, Math.round(MC.effMin(s) * 10) / 10, s.note || '', s.source || '']);
+    });
+    download('meditation-sessions-' + MC.toISO(MC.today()) + '.csv', rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n'), 'text/csv');
+  });
+  $('backupBtn').addEventListener('click', function () {
+    var data = { app: 'meditation-copilot', version: 2, exported: new Date().toISOString(), profile: MC.profile, settings: MC.settings, sessions: MC.sessions.all() };
+    download('meditation-copilot-backup-' + MC.toISO(MC.today()) + '.json', JSON.stringify(data, null, 2), 'application/json');
+    MC.toast('Backup downloaded.');
+  });
+  $('restoreBtn').addEventListener('click', function () { $('restoreFile').value = ''; $('restoreFile').click(); });
+  $('restoreFile').addEventListener('change', function () {
+    var f = $('restoreFile').files[0]; if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        if (!data || data.app !== 'meditation-copilot' || !Array.isArray(data.sessions)) throw new Error('bad');
+        var clean = data.sessions.filter(function (s) { return s && isFinite(s.start) && s.minutes > 0 && s.quality >= 0 && s.quality <= 100; });
+        if (!window.confirm('Restore ' + clean.length + ' sittings from this backup? This replaces the sittings and answers on this device.')) return;
+        if (data.profile) { Object.assign(MC.profile, data.profile); MC.saveProfile(); }
+        if (data.settings) MC.saveSettings(data.settings);
+        MC.sessions.replaceAll(clean);
+        MC.emit('profile');
+        MC.toast('Restored ' + clean.length + ' sittings.');
+      } catch (e) { MC.toast('That file is not a Meditation Copilot backup.'); }
+    };
+    reader.readAsText(f);
+  });
+
+  function renderAll() { renderSummary(); renderChart(); renderPatterns(); renderLog(); }
+  MC.views.insights = { show: function () { shown = pageSize; renderAll(); } };
+  MC.on('data', function () { if (MC.current === 'insights') renderAll(); });
+})();

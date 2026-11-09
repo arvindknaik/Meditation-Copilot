@@ -13,7 +13,8 @@ Live: https://arvindknaik.github.io/Meditation-Copilot/
 index.html            The whole app (Phase 1: works by double-clicking it)
 manifest.json         PWA manifest (name, colors, icons, standalone display)
 sw.js                 Service worker: offline support + caching
-icons/                SVG + PNG icons (192, 512, maskable 512, Apple touch 180)
+icons/                SVG sources + PNG icons (192, 512, maskable 512, Apple touch 180)
+.github/workflows/icons.yml  Renders the PNG icons from the SVGs whenever an SVG changes
 .nojekyll             Tells GitHub Pages to serve files as-is
 ```
 
@@ -30,7 +31,7 @@ python3 -m http.server 8000
 ## Phase 2: PWA
 - `manifest.json` uses relative paths (`./`), so it works under the `/Meditation-Copilot/` sub-path.
 - `sw.js` pre-caches the app shell. Pages load network-first (so updates arrive), with a cached fallback when offline. Icons and other assets load cache-first.
-- **When you change any file, bump `CACHE_VERSION` in `sw.js`** (e.g. `v1` → `v2`) so installed copies refresh.
+- **When you change any file, bump `CACHE_VERSION` in `sw.js`** (e.g. `v2` → `v3`) and add any new files to its `ASSETS` list so installed copies refresh.
 - Android/Chrome shows an **Add to Home Screen** button on the results card. iPhone shows a "Share → Add to Home Screen" hint.
 
 ## Phase 3: Deploy to GitHub Pages
