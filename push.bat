@@ -21,6 +21,11 @@ if errorlevel 1 (
   goto :fail
 )
 
+REM This project lives in OneDrive, which locks files while syncing. Git's automatic
+REM cleanup ("gc") then fails with "Deletion of directory ... failed" prompts, so turn it off.
+git config gc.auto 0 >nul 2>nul
+git config gc.autoDetach false >nul 2>nul
+
 for /f "delims=" %%B in ('git rev-parse --abbrev-ref HEAD') do set "BRANCH=%%B"
 echo.
 echo Repository : %CD%
