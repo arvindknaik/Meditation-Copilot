@@ -11,7 +11,7 @@ window.MC_CONFIG = {
 
   // Anonymous usage statistics (cookie-free). Leave empty to turn off.
   // GoatCounter: 'https://YOURCODE.goatcounter.com/count'
-  analyticsEndpoint: '',
+  analyticsEndpoint: 'https://meditation-copilot.goatcounter.com/count',
 
   support: {
     email: 'MinneapolisCenter@sos.org',

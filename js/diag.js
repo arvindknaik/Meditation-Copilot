@@ -55,22 +55,23 @@
     }
   };
 
-  /* Anonymous usage counts */
-  var gcLoaded = false;
+  /* Anonymous usage counts (GoatCounter, cookie-free). Events that happen while the
+     counter script is still loading are queued and sent once it is ready. */
+  var gcState = 'idle', gcQueue = [];
   MC.track = function (ev, d) {
     MC.diag.add(ev, d);
     if (!CFG.analyticsEndpoint || MC.settings.analyticsOptOut) return;
     try {
-      if (!gcLoaded) {
-        gcLoaded = true;
-        window.goatcounter = { no_onload: true, endpoint: CFG.analyticsEndpoint };
-        var sc = document.createElement('script');
-        sc.async = true; sc.src = 'https://gc.zgo.at/count.js';
-        sc.onload = function () { send(ev); };
-        document.head.appendChild(sc);
-        return;
-      }
-      send(ev);
+      if (gcState === 'ready') return send(ev);
+      gcQueue.push(ev);
+      if (gcState === 'loading') return;
+      gcState = 'loading';
+      window.goatcounter = { no_onload: true, endpoint: CFG.analyticsEndpoint };
+      var sc = document.createElement('script');
+      sc.async = true; sc.src = 'https://gc.zgo.at/count.js';
+      sc.onload = function () { gcState = 'ready'; gcQueue.splice(0).forEach(send); };
+      sc.onerror = function () { gcState = 'blocked'; gcQueue = []; };   // e.g. an ad blocker
+      document.head.appendChild(sc);
     } catch (e) {}
   };
   function send(ev) {
