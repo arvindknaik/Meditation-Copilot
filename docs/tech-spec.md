@@ -1,13 +1,13 @@
 # Meditation Copilot — Technical Specification
 
-> **Status:** Prototype (v0.6.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
+> **Status:** Prototype (v0.7.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
 > Sections are brief by design and will grow as the app expands.
 
 ## 1. Architecture overview
 The app is a **static, client-only Progressive Web App (PWA)**. There is no server or database of our own. All logic runs in the browser.
 
 - **Today (built):** a guest user's data lives in the device's `localStorage`.
-- **Next (designed, §13):** users sign in with Google or Microsoft, and an encrypted-at-rest copy of their data is synced to **their own** Google Drive or OneDrive app folder. This is a "bring your own storage" model: we hold no user data.
+- **Signed in (built in v0.7.0, §13):** users sign in with Google or Microsoft, and their data is synced to **their own** Google Drive or OneDrive app folder. This is a "bring your own storage" model: we hold no user data. The optional passphrase encryption is still to come.
 
 ```mermaid
 flowchart TB
@@ -34,8 +34,8 @@ flowchart TB
 | Audio | Web Audio API (synthesized singing bowl) | No audio files; works offline |
 | Hosting | GitHub Pages | Free, HTTPS by default, CDN, deploys on `git push` |
 | Charts | Hand-built SVG | A single small chart doesn't justify a charting library |
-| Identity (next) | Google Identity Services; MSAL.js (Microsoft) | Official browser libraries; work with no server |
-| User storage (next) | Google Drive `appDataFolder`; OneDrive app folder (Microsoft Graph) | The user owns their data; $0 cost; narrowest permissions |
+| Identity | Google Identity Services; MSAL.js (Microsoft) | Official browser libraries; work with no server |
+| User storage | Google Drive `appDataFolder`; OneDrive app folder (Microsoft Graph) | The user owns their data; $0 cost; narrowest permissions |
 | Usage analytics | Cookie-free counter (e.g. GoatCounter), off until configured | Anonymous trends without personal data |
 
 **Later:** a serverless function (e.g. Cloudflare Workers) for push reminders and to call an AI model for Buddy (Phase D), which keeps API keys off the client. User data stays in the user's drive.
@@ -61,6 +61,7 @@ flowchart TB
 | `js/quotes.js` | Master quote file for "Thought for today" (approved quotes only) |
 | `js/config.js` | Public configuration: Google and Microsoft Client IDs, analytics endpoint, support contact |
 | `js/diag.js` | Private diagnostic log, error capture, `MC.track()` anonymous usage events |
+| `js/sync.js` | Google (GIS token client + Drive `appDataFolder`) and Microsoft (PKCE redirect + Graph app folder) providers; sync engine (pull → merge → push, debounced auto-sync) |
 | `js/account.js` | Welcome / sign-in choice, guest mode and warning, Account & settings sheet, backup reminder, send diagnostics |
 | `privacy.html` | Privacy notice (draft for review); needed for the Google/Microsoft consent screens |
 | `sw.js` · `manifest.json` · `icons/` | Offline caching, install metadata, app icons |
@@ -140,17 +141,17 @@ The header must match exactly. Rows are strictly validated, and any invalid row 
 | Guest mode | Allowed. Explicit warning that data may be lost; backup reminders; upgrade to an account later moves the data |
 | Domain | Pilot on `arvindknaik.github.io` for a few weeks, then a subdomain of `sosmn.org` (e.g. `copilot.sosmn.org`) |
 
-### 13.2 Sign-in
-- **Google:** Google Identity Services token client with scopes `openid email drive.appdata`. In-browser access tokens last about 1 hour and are renewed silently while the Google session is active. No secret is used.
-- **Microsoft:** MSAL.js (`@azure/msal-browser`), Authorization Code + PKCE, audience *personal Microsoft accounts*. Scopes `User.Read Files.ReadWrite.AppFolder offline_access`.
-- **Token storage:** in memory or session storage only, never in our data file. Sign-out clears tokens; users can revoke access in their Google/Microsoft account.
+### 13.2 Sign-in (built, v0.7.0)
+- **Google:** Google Identity Services token client (pop-up; the library is preloaded so Safari allows the pop-up on tap). Scopes `openid email drive.appdata`. Access tokens last about 1 hour and there's no refresh token in the browser, so after that the app shows **Reconnect** (one tap). In Testing mode, consent also expires every 7 days.
+- **Microsoft:** Authorization Code + PKCE implemented directly (no library) against `login.microsoftonline.com/consumers`, using a full-page redirect. Scopes `openid profile offline_access User.Read Files.ReadWrite.AppFolder`. The refresh token (about 24 h for single-page apps) renews access silently; after that the user reconnects.
+- **Token storage:** `localStorage` key `meditation-copilot:tokens` on the device only, never in the data file. Sign-out clears tokens (Google tokens are also revoked); users can revoke access in their Google/Microsoft account.
 
 ### 13.3 Data file and sync
 - **One file:** `meditation-copilot.json` (or `.enc` when a passphrase is set), holding the `MC.snapshot()` document.
 - **Sync cycle:**
   - On app open and on resume: pull the file → `mergeSnapshot` → push the merged copy if anything changed.
   - After local changes: push, with a few seconds' delay so several edits go up together.
-  - Use the file's ETag/version to avoid overwriting a newer copy; on mismatch, pull, merge, retry.
+  - OneDrive uploads use `If-Match: <eTag>`; on `412` the engine pulls, merges and retries (up to 2 times). Google Drive has no equivalent check, so a simultaneous edit on two devices relies on the merge at the next sync. Uploads happen only when the merged data differs from the cloud copy.
 - **Offline first:** `localStorage` remains the working copy; sync resumes when online.
 - **Guest → account:** on first sign-in, local guest data is merged into the cloud copy.
 - **Optional encryption envelope:** `{ v, kdf: 'PBKDF2-SHA256', iter: 600000, salt, iv, ct }`. The recovery code wraps the same data key. A lost passphrase and lost recovery code mean the data can't be recovered.

@@ -40,6 +40,7 @@
         'Generated: ' + new Date().toISOString(),
         'App version: ' + MC.VERSION + ' · data schema ' + MC.SCHEMA,
         'Account: ' + acct + ' · installed: ' + (standalone ? 'yes' : 'no'),
+        'Sync: ' + (MC.sync ? MC.sync.state().status + (MC.sync.state().error ? ' (' + MC.sync.state().error + ')' : '') + ' · last ' + (MC.sync.lastSyncAt() ? new Date(MC.sync.lastSyncAt()).toISOString() : 'never') : 'n/a'),
         'Browser: ' + navigator.userAgent,
         'Screen: ' + screen.width + 'x' + screen.height + ' · online: ' + navigator.onLine,
         'Sittings stored: ' + MC.sessions.count() + ' · roadmap set: ' + (MC.hasProfile() ? 'yes' : 'no'),

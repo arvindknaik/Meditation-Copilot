@@ -3,7 +3,7 @@
   'use strict';
   var MC = window.MC = {};
 
-  MC.VERSION = '0.6.0';          // shown in Account and diagnostics
+  MC.VERSION = '0.7.0';          // shown in Account and diagnostics
   MC.SCHEMA = 2;                 // data snapshot format used for cloud sync
   MC.GOAL_HOURS = 10000;           // fixed spiritual goal — not user-editable
   MC.MAX_AGE = 90;
@@ -392,6 +392,14 @@
     var now = Date.now();
     list.forEach(function (s) { s.id = newId(); s.updatedAt = now; sessions.push(s); });
     persist();
+  };
+
+  // Remove all personal data from this device (used on sign-out when the user asks)
+  MC.clearLocalData = function () {
+    [KEYS.profile, KEYS.sessions, KEYS.deleted, KEYS.meta, KEYS.active].forEach(function (k) { MC.store.del(k); });
+    sessions = []; deleted = []; meta.profileUpdatedAt = 0; meta.settingsUpdatedAt = 0;
+    MC.profile = Object.assign({}, DEFAULT_PROFILE);
+    MC.emit('data'); MC.emit('profile');
   };
 
   /* ---------- Sync groundwork: snapshot + merge ----------

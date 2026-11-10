@@ -438,3 +438,13 @@ body.welcome-open { overflow: hidden; }
 .ack input { width: 22px; height: 22px; accent-color: var(--purple-2); flex: 0 0 auto; }
 .guest-warn { background: var(--gold-soft); border: 1px solid var(--gold-bright); border-radius: 16px; padding: 12px 14px; }
 .backup-banner { border-color: var(--gold-bright); }
+
+/* Signed-in state & sync */
+.signed-card { background: var(--ok-soft); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+.sync-ic { font-size: .8rem; font-weight: 700; }
+.sync-ok { color: var(--ok); }
+.sync-needs-auth, .sync-error { color: var(--danger); }
+.sync-offline { color: var(--muted); }
+.sync-syncing, .sync-connecting { display: inline-block; animation: spin 1s linear infinite; color: var(--purple); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .sync-syncing, .sync-connecting { animation: none; } }

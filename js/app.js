@@ -19,8 +19,11 @@
   }
   MC.route();
 
-  // First launch: choose how to use the app (sign in or guest)
-  if (MC.account.mode() === 'none') MC.account.showWelcome();
+  // First launch: choose how to use the app (sign in or guest).
+  // Skip the welcome screen when returning from Microsoft sign-in (?code=…).
+  var returningFromSignIn = /[?&](code|error)=/.test(location.search);
+  if (MC.account.mode() === 'none' && !returningFromSignIn) MC.account.showWelcome();
+  MC.sync.init();
   MC.track('app_open', {
     installed: (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true,
     mode: MC.account.mode()
