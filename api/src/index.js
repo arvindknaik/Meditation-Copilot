@@ -153,7 +153,8 @@ function publicEvent(ev, opts = {}) {
   const out = {
     id: ev.id, centerId: ev.center_id, title: ev.title, description: ev.description, format: ev.format,
     venue: ev.venue, address: ev.address, startsAt: ev.starts_at, endsAt: ev.ends_at, timezone: ev.timezone,
-    visibility: ev.visibility, status: ev.status, going: ev.going || 0, checkedIn: ev.checked_in || 0
+    visibility: ev.visibility, status: ev.status, going: ev.going || 0, checkedIn: ev.checked_in || 0,
+    seriesId: ev.series_id || null, repeats: ev.series_freq || null
   };
   if (opts.signedIn) out.onlineUrl = ev.online_url || null;
   if (opts.admin) out.checkinCode = ev.checkin_code;
@@ -162,7 +163,40 @@ function publicEvent(ev, opts = {}) {
   return out;
 }
 const EVENT_COLS = `e.*, (SELECT COUNT(*) FROM rsvps r WHERE r.event_id = e.id AND r.status = 'going') AS going,
-  (SELECT COUNT(*) FROM checkins c WHERE c.event_id = e.id) AS checked_in`;
+  (SELECT COUNT(*) FROM checkins c WHERE c.event_id = e.id) AS checked_in,
+  (SELECT freq FROM series sr WHERE sr.id = e.series_id) AS series_freq`;
+const MAX_OCCURRENCES = 120;   // about two years of weekly events
+
+/* ---- contact details ---- */
+// Phone: optional. US numbers may be typed any way (612-555-1234); others need a leading +.
+function normPhone(v) {
+  const raw = String(v == null ? '' : v).trim();
+  if (!raw) return null;
+  const d = raw.replace(/\D/g, '');
+  if (raw.startsWith('+')) { if (d.length >= 8 && d.length <= 15) return '+' + d; }
+  else if (d.length === 10) return '+1' + d;
+  else if (d.length === 11 && d[0] === '1') return '+' + d;
+  throw bad('Please enter a valid phone number (e.g. 612-555-1234).');
+}
+function contactOf(u) {
+  return { email: u.email, phone: u.phone || null, smsOk: !!u.sms_ok, confirmedAt: u.contact_ack_at || null };
+}
+// RSVP and check-in need the contact details confirmed once (shows the notice; email is required, phone optional)
+async function requireContact(db, uid) {
+  const u = await db.prepare('SELECT contact_ack_at FROM users WHERE id = ?1').bind(uid).first();
+  if (!u || !u.contact_ack_at) throw new HttpError(428, 'Please confirm your contact details first.');
+}
+async function checkInUser(db, e, uid, method, t) {
+  const existing = await db.prepare('SELECT checked_in_at FROM checkins WHERE event_id = ?1 AND user_id = ?2').bind(e.id, uid).first();
+  if (!existing) {
+    await db.batch([
+      db.prepare('INSERT INTO checkins (event_id, user_id, method, checked_in_at) VALUES (?1, ?2, ?3, ?4)').bind(e.id, uid, method, t),
+      db.prepare(`INSERT INTO rsvps (event_id, user_id, status, updated_at) VALUES (?1, ?2, 'going', ?3)
+        ON CONFLICT(event_id, user_id) DO UPDATE SET status = 'going', updated_at = ?3`).bind(e.id, uid, t)
+    ]);
+  }
+  return existing;
+}
 
 function validateEvent(b, partial) {
   const o = {};
@@ -212,14 +246,33 @@ async function handle(request, env) {
     await db.prepare(`INSERT INTO users (id, provider, email, name, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)
       ON CONFLICT(id) DO UPDATE SET email = ?3, name = ?4, last_seen_at = ?5`).bind(u.id, u.provider, u.email, u.name, t).run();
     const token = await signSession(env, { uid: u.id, email: u.email, name: u.name, exp: t + SESSION_DAYS * 86400000 });
-    return J({ token, user: { id: u.id, email: u.email, name: u.name, isAdmin: isAdmin(env, u.email) } });
+    const row = await db.prepare('SELECT * FROM users WHERE id = ?1').bind(u.id).first();
+    return J({ token, user: { id: u.id, email: u.email, name: u.name, isAdmin: isAdmin(env, u.email) }, contact: contactOf(row) });
   }
 
   if (path === '/api/me' && request.method === 'GET') {
     const s = await requireUser(request, env);
     const rows = await db.prepare(`SELECT c.event_id AS eventId, c.method, c.checked_in_at AS checkedInAt, e.format, e.title, e.starts_at AS startsAt
       FROM checkins c JOIN events e ON e.id = c.event_id WHERE c.user_id = ?1 ORDER BY c.checked_in_at`).bind(s.uid).all();
-    return J({ user: { id: s.uid, email: s.email, name: s.name, isAdmin: isAdmin(env, s.email) }, checkins: rows.results });
+    const row = await db.prepare('SELECT * FROM users WHERE id = ?1').bind(s.uid).first();
+    return J({ user: { id: s.uid, email: s.email, name: s.name, isAdmin: isAdmin(env, s.email) }, contact: row ? contactOf(row) : null, checkins: rows.results });
+  }
+
+  // Contact details: email comes from sign-in (required); phone and text reminders are optional
+  if (path === '/api/me/contact' && request.method === 'PUT') {
+    const s = await requireUser(request, env);
+    const b = await body(request);
+    const phone = normPhone(b.phone);
+    const smsOk = !!b.smsOk;
+    if (smsOk && !phone) throw bad('Add a phone number to get text reminders.');
+    const u = await db.prepare('SELECT * FROM users WHERE id = ?1').bind(s.uid).first();
+    if (!u) throw new HttpError(404, 'Please sign in again');
+    const t = now();
+    const consentAt = smsOk ? (u.sms_ok && u.phone === phone ? u.sms_consent_at : t) : null;
+    await db.prepare('UPDATE users SET phone = ?2, sms_ok = ?3, sms_consent_at = ?4, contact_ack_at = ?5 WHERE id = ?1')
+      .bind(s.uid, phone, smsOk ? 1 : 0, consentAt, u.contact_ack_at || t).run();
+    const row = await db.prepare('SELECT * FROM users WHERE id = ?1').bind(s.uid).first();
+    return J({ contact: contactOf(row) });
   }
 
   if (path === '/api/me/name' && request.method === 'PUT') {
@@ -264,6 +317,7 @@ async function handle(request, env) {
     const s = await requireUser(request, env);
     const st = (await body(request)).status;
     if (!['going', 'maybe', 'no'].includes(st)) throw bad('Status must be going, maybe or no');
+    await requireContact(db, s.uid);
     const e = await db.prepare('SELECT id, status, ends_at FROM events WHERE id = ?1').bind(m[1]).first();
     if (!e) throw new HttpError(404, 'Event not found');
     if (e.status === 'cancelled') throw bad('This event was cancelled');
@@ -287,47 +341,88 @@ async function handle(request, env) {
     if (t < a) throw bad(method === 'online' ? 'Check-in opens 15 minutes before the start.' : 'Check-in opens 30 minutes before the start.');
     if (t > z) throw bad('Check-in for this event has closed.');
     if (method !== 'online' && String(b.code || '').trim() !== e.checkin_code) throw bad('That check-in code is not correct.');
-    const existing = await db.prepare('SELECT checked_in_at FROM checkins WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).first();
-    if (!existing) {
-      await db.batch([
-        db.prepare('INSERT INTO checkins (event_id, user_id, method, checked_in_at) VALUES (?1, ?2, ?3, ?4)').bind(e.id, s.uid, method, t),
-        db.prepare(`INSERT INTO rsvps (event_id, user_id, status, updated_at) VALUES (?1, ?2, 'going', ?3)
-          ON CONFLICT(event_id, user_id) DO UPDATE SET status = 'going', updated_at = ?3`).bind(e.id, s.uid, t)
-      ]);
-    }
+    await requireContact(db, s.uid);
+    const existing = await checkInUser(db, e, s.uid, method, t);
     return J({ ok: true, checkedInAt: existing ? existing.checked_in_at : t, already: !!existing, format: e.format, onlineUrl: method === 'online' ? e.online_url : undefined });
+  }
+
+  /* ---- center QR (printed poster): check in to whichever in-person event is open now ---- */
+  if ((m = /^\/api\/centers\/([\w-]+)\/checkin$/.exec(path)) && request.method === 'POST') {
+    const s = await requireUser(request, env);
+    const b = await body(request);
+    const t = now();
+    const open = (await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.center_id = ?1 AND e.status = 'scheduled'
+      AND e.format IN ('in_person', 'hybrid') AND e.starts_at - ?3 <= ?2 AND e.ends_at + ?3 >= ?2 ORDER BY e.starts_at`).bind(m[1], t, 30 * MIN).all()).results;
+    if (!open.length) {
+      const next = await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.center_id = ?1 AND e.status = 'scheduled' AND e.format IN ('in_person', 'hybrid')
+        AND e.starts_at > ?2 AND e.visibility = 'public' ORDER BY e.starts_at LIMIT 1`).bind(m[1], t).first();
+      return J({ open: false, next: next ? publicEvent(next, {}) : null });
+    }
+    let e = open.length === 1 ? open[0] : open.find((x) => x.id === b.eventId);
+    if (!e) return J({ open: true, choose: open.map((x) => publicEvent(x, {})) });
+    await requireContact(db, s.uid);
+    const existing = await checkInUser(db, e, s.uid, 'qr', t);
+    return J({ open: true, ok: true, already: !!existing, checkedInAt: existing ? existing.checked_in_at : t, event: publicEvent(e, { signedIn: true }) });
   }
 
   /* ---- admins ---- */
   if (path === '/api/admin/events' && request.method === 'POST') {
     const s = await requireAdmin(request, env);
-    const o = validateEvent(await body(request), false);
-    const id = crypto.randomUUID(), t = now();
-    await db.prepare(`INSERT INTO events (id, center_id, title, description, format, venue, address, online_url, starts_at, ends_at, timezone, visibility, status, checkin_code, created_by, created_at, updated_at)
-      VALUES (?1, 'mpls', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'scheduled', ?12, ?13, ?14, ?14)`)
-      .bind(id, o.title, o.description || null, o.format, o.venue || null, o.address || null, o.online_url || null, o.starts_at, o.ends_at,
-        o.timezone || 'America/Chicago', o.visibility || 'public', code4(), s.uid, t).run();
-    const e = await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.id = ?1`).bind(id).first();
-    return J({ event: publicEvent(e, { signedIn: true, admin: true }) }, 201);
+    const b = await body(request);
+    const o = validateEvent(b, false);
+    const t = now();
+    // Repeating: the app works out the dates in the center's local time (so daylight saving is right)
+    // and sends them as `occurrences`; skipped dates are simply left out.
+    let occ = [{ startsAt: o.starts_at, endsAt: o.ends_at }], seriesId = null;
+    if (b.repeat) {
+      if (!['weekly', 'biweekly', 'monthly'].includes(b.repeat.freq)) throw bad('Repeat must be weekly, biweekly or monthly');
+      if (!Array.isArray(b.occurrences) || !b.occurrences.length) throw bad('Pick at least one date');
+      if (b.occurrences.length > MAX_OCCURRENCES) throw bad(`At most ${MAX_OCCURRENCES} dates at a time. Choose an earlier end date.`);
+      occ = b.occurrences.map((x) => ({ startsAt: Number(x.startsAt), endsAt: Number(x.endsAt) }));
+      if (occ.some((x) => !Number.isFinite(x.startsAt) || !Number.isFinite(x.endsAt) || x.endsAt <= x.startsAt)) throw bad('One of the dates has an invalid time');
+      occ.sort((a, z) => a.startsAt - z.startsAt);
+      seriesId = crypto.randomUUID();
+    }
+    const ins = db.prepare(`INSERT INTO events (id, center_id, title, description, format, venue, address, online_url, starts_at, ends_at, timezone, visibility, status, checkin_code, created_by, created_at, updated_at, series_id)
+      VALUES (?1, 'mpls', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'scheduled', ?12, ?13, ?14, ?14, ?15)`);
+    const ids = occ.map(() => crypto.randomUUID());
+    const stmts = occ.map((x, i) => ins.bind(ids[i], o.title, o.description || null, o.format, o.venue || null, o.address || null, o.online_url || null,
+      x.startsAt, x.endsAt, o.timezone || 'America/Chicago', o.visibility || 'public', code4(), s.uid, t, seriesId));
+    if (seriesId) stmts.unshift(db.prepare('INSERT INTO series (id, center_id, freq, until_at, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
+      .bind(seriesId, 'mpls', b.repeat.freq, occ[occ.length - 1].startsAt, s.uid, t));
+    await db.batch(stmts);
+    const e = await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.id = ?1`).bind(ids[0]).first();
+    return J({ event: publicEvent(e, { signedIn: true, admin: true }), count: ids.length }, 201);
   }
 
   if ((m = /^\/api\/admin\/events\/([\w-]+)$/.exec(path)) && request.method === 'PATCH') {
     await requireAdmin(request, env);
     const o = validateEvent(await body(request), true);
-    const keys = Object.keys(o);
-    if (keys.length) {
-      const sets = keys.map((k, i) => `${k} = ?${i + 2}`).join(', ');
-      await db.prepare(`UPDATE events SET ${sets}, updated_at = ?${keys.length + 2} WHERE id = ?1`).bind(m[1], ...keys.map((k) => o[k]), now()).run();
-    }
+    const cur = await db.prepare('SELECT * FROM events WHERE id = ?1').bind(m[1]).first();
+    if (!cur) throw new HttpError(404, 'Event not found');
+    const future = url.searchParams.get('scope') === 'future' && cur.series_id;
+    const st = o.starts_at !== undefined ? o.starts_at : cur.starts_at, en = o.ends_at !== undefined ? o.ends_at : cur.ends_at;
+    if (en <= st) throw bad('End time must be after the start time');
+    // This event and all later ones in the series: same field changes; a time change moves each by the same amount
+    const dS = st - cur.starts_at, dE = en - cur.ends_at;
+    delete o.starts_at; delete o.ends_at;
+    const keys = Object.keys(o), t = now();
+    const where = future ? 'series_id = ?1 AND starts_at >= ?2' : 'id = ?1';
+    const whereArgs = future ? [cur.series_id, cur.starts_at] : [m[1]];
+    const n = whereArgs.length;
+    const sets = keys.map((k, i) => `${k} = ?${n + i + 1}`).concat([`starts_at = starts_at + ?${n + keys.length + 1}`, `ends_at = ends_at + ?${n + keys.length + 2}`, `updated_at = ?${n + keys.length + 3}`]).join(', ');
+    const res = await db.prepare(`UPDATE events SET ${sets} WHERE ${where}`).bind(...whereArgs, ...keys.map((k) => o[k]), dS, dE, t).run();
     const e = await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.id = ?1`).bind(m[1]).first();
-    if (!e) throw new HttpError(404, 'Event not found');
-    if (e.ends_at <= e.starts_at) throw bad('End time must be after the start time');
-    return J({ event: publicEvent(e, { signedIn: true, admin: true }) });
+    return J({ event: publicEvent(e, { signedIn: true, admin: true }), count: res.meta ? res.meta.changes : 1 });
   }
 
   if ((m = /^\/api\/admin\/events\/([\w-]+)\/(cancel|restore|new-code)$/.exec(path)) && request.method === 'POST') {
     await requireAdmin(request, env);
+    const cur = await db.prepare('SELECT id, series_id, starts_at FROM events WHERE id = ?1').bind(m[1]).first();
+    if (!cur) throw new HttpError(404, 'Event not found');
     if (m[2] === 'new-code') await db.prepare('UPDATE events SET checkin_code = ?2, updated_at = ?3 WHERE id = ?1').bind(m[1], code4(), now()).run();
+    else if (url.searchParams.get('scope') === 'future' && cur.series_id)   // cancelled events stay on the calendar, marked Cancelled
+      await db.prepare('UPDATE events SET status = ?3, updated_at = ?4 WHERE series_id = ?1 AND starts_at >= ?2').bind(cur.series_id, cur.starts_at, m[2] === 'cancel' ? 'cancelled' : 'scheduled', now()).run();
     else await db.prepare('UPDATE events SET status = ?2, updated_at = ?3 WHERE id = ?1').bind(m[1], m[2] === 'cancel' ? 'cancelled' : 'scheduled', now()).run();
     const e = await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.id = ?1`).bind(m[1]).first();
     if (!e) throw new HttpError(404, 'Event not found');
@@ -336,15 +431,15 @@ async function handle(request, env) {
 
   if ((m = /^\/api\/admin\/events\/([\w-]+)\/attendees$/.exec(path)) && request.method === 'GET') {
     await requireAdmin(request, env);
-    const rows = await db.prepare(`SELECT u.id AS userId, u.name, u.email, r.status AS rsvp, r.updated_at AS rsvpAt, c.checked_in_at AS checkedInAt, c.method
+    const rows = await db.prepare(`SELECT u.id AS userId, u.name, u.email, u.phone, u.sms_ok AS smsOk, r.status AS rsvp, r.updated_at AS rsvpAt, c.checked_in_at AS checkedInAt, c.method
       FROM users u
       LEFT JOIN rsvps r ON r.user_id = u.id AND r.event_id = ?1
       LEFT JOIN checkins c ON c.user_id = u.id AND c.event_id = ?1
       WHERE r.event_id IS NOT NULL OR c.event_id IS NOT NULL
       ORDER BY (c.checked_in_at IS NULL), u.name COLLATE NOCASE`).bind(m[1]).all();
     if (url.searchParams.get('format') === 'csv') {
-      const lines = [['name', 'email', 'rsvp', 'rsvp_at', 'checked_in_at', 'method']].concat(rows.results.map((r) =>
-        [r.name, r.email, r.rsvp || '', r.rsvpAt ? new Date(r.rsvpAt).toISOString() : '', r.checkedInAt ? new Date(r.checkedInAt).toISOString() : '', r.method || '']));
+      const lines = [['name', 'email', 'phone', 'texts_ok', 'rsvp', 'rsvp_at', 'checked_in_at', 'method']].concat(rows.results.map((r) =>
+        [r.name, r.email, r.phone || '', r.smsOk ? 'yes' : 'no', r.rsvp || '', r.rsvpAt ? new Date(r.rsvpAt).toISOString() : '', r.checkedInAt ? new Date(r.checkedInAt).toISOString() : '', r.method || '']));
       return new Response('﻿' + lines.map((l) => l.map(csvCell).join(',')).join('\r\n') + '\r\n',
         { headers: { 'Content-Type': 'text/csv; charset=utf-8', ...cors(request, env) } });
     }

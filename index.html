@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://arvindknaik.github.io/Meditation-Copilot/">
 <meta property="og:type" content="website">
 
-<link rel="stylesheet" href="css/styles.css?v=14">
+<link rel="stylesheet" href="css/styles.css?v=15">
 </head>
 <body>
 <!-- Shared gradient for progress rings -->
@@ -158,6 +158,9 @@
 
     <!-- ================= EVENT PAGE (#event?e=<id>) ================= -->
     <section class="view" id="v-event" aria-label="Event"></section>
+
+    <!-- ================= CENTER CHECK-IN (#checkin — the printed QR at the welcome table) ================= -->
+    <section class="view" id="v-checkin" aria-label="Check in"></section>
 
     <!-- ================= INSIGHTS ================= -->
     <section class="view" id="v-insights" aria-label="Insights">
@@ -483,10 +486,25 @@
     <input type="text" id="efTitle" class="text-input" maxlength="120" required placeholder="e.g. Sunday Group Meditation">
     <label class="field" for="efFormat">Format</label>
     <select id="efFormat"><option value="in_person">In person</option><option value="online">Online</option><option value="hybrid">In person &amp; online</option></select>
-    <div class="row2" style="grid-template-columns:1.3fr 1fr 1fr">
-      <div><label class="field" for="efDate">Date</label><input type="date" id="efDate" required></div>
+    <label class="field" for="efDate">Date <span class="muted" id="efDateHint"></span></label>
+    <input type="date" id="efDate" required>
+    <div class="row2">
       <div><label class="field" for="efStart">Starts</label><input type="time" id="efStart" required></div>
       <div><label class="field" for="efEnd">Ends</label><input type="time" id="efEnd" required></div>
+    </div>
+    <div id="efRepeatBox">
+      <label class="field" for="efRepeat">Repeats</label>
+      <select id="efRepeat"><option value="">Does not repeat</option><option value="weekly">Weekly</option><option value="biweekly">Every other week</option><option value="monthly">Monthly</option></select>
+      <div id="efRepeatMore" hidden>
+        <label class="field" for="efUntil">Ends on</label>
+        <input type="date" id="efUntil">
+        <p class="small muted" style="margin:8px 2px 4px" id="efRepeatSum"></p>
+        <div class="chips ef-dates" id="efDates" aria-label="Dates (tap a date to skip it)"></div>
+      </div>
+    </div>
+    <div id="efScopeBox" hidden>
+      <label class="field" for="efScope">Apply changes to</label>
+      <select id="efScope"><option value="this">This event only</option><option value="future">This and all following events</option></select>
     </div>
     <div id="efPlace">
       <label class="field" for="efVenue">Venue</label>
@@ -505,6 +523,24 @@
     <select id="efVis"><option value="public">Everyone (shareable)</option><option value="members">Signed-in members only</option></select>
     <div class="error" id="efErr" role="alert"></div>
     <div class="actions"><button type="button" class="btn btn-ghost" id="efCancel">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+  </form>
+</dialog>
+
+<!-- Contact details for SOS events (asked once, at the first RSVP or check-in) -->
+<dialog class="sheet" id="ctDlg" aria-labelledby="ctHead">
+  <form class="sheet-body" id="ctForm">
+    <h2 class="sheet-title" id="ctHead" tabindex="-1" autofocus style="outline:none">Your contact details</h2>
+    <p class="small" style="margin:-4px 0 12px">So the Minneapolis Center can reach you about events you sign up for.</p>
+    <label class="field" for="ctEmail">Email</label>
+    <input type="email" id="ctEmail" class="text-input" readonly aria-describedby="ctEmailNote">
+    <p class="small muted" style="margin:6px 2px 0" id="ctEmailNote">From your Google or Microsoft sign-in. Required for events.</p>
+    <label class="field" for="ctPhone">Mobile phone <span class="muted">(optional)</span></label>
+    <input type="tel" id="ctPhone" class="text-input" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="612-555-1234">
+    <label class="ack soft" style="margin-top:12px"><input type="checkbox" id="ctSms"> Text me reminders about events I sign up for. Message and data rates may apply. Reply STOP to stop at any time.</label>
+    <div class="notice small" style="margin-top:14px"><b>Your privacy.</b> We use your email, and your phone number if you add it, only for communication about Science of Spirituality Minneapolis Center events and programs. We never share or sell your details. You can change them at any time in Account &amp; settings.
+      <a href="privacy.html#events" target="_blank" rel="noopener">Privacy notice</a></div>
+    <div class="error" id="ctErr" role="alert"></div>
+    <div class="actions"><button type="button" class="btn btn-ghost" id="ctCancel">Cancel</button><button type="submit" class="btn btn-primary">Save &amp; continue</button></div>
   </form>
 </dialog>
 
@@ -600,25 +636,25 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js?v=14"></script>
-<script src="js/quotes.js?v=14"></script>
-<script src="js/core.js?v=14"></script>
-<script src="js/diag.js?v=14"></script>
-<script src="js/challenge.js?v=14"></script>
-<script src="js/rewards.js?v=14"></script>
-<script src="js/roadmap.js?v=14"></script>
-<script src="js/sessions-ui.js?v=14"></script>
-<script src="js/timer.js?v=14"></script>
-<script src="js/insights.js?v=14"></script>
-<script src="js/home.js?v=14"></script>
-<script src="js/knowledge.js?v=14"></script>
-<script src="js/learn.js?v=14"></script>
-<script src="js/calendar.js?v=14"></script>
-<script src="js/vendor/qrcode.js?v=14"></script>
-<script src="js/events.js?v=14"></script>
-<script src="js/sync.js?v=14"></script>
-<script src="js/account.js?v=14"></script>
-<script src="js/profile.js?v=14"></script>
-<script src="js/app.js?v=14"></script>
+<script src="js/config.js?v=15"></script>
+<script src="js/quotes.js?v=15"></script>
+<script src="js/core.js?v=15"></script>
+<script src="js/diag.js?v=15"></script>
+<script src="js/challenge.js?v=15"></script>
+<script src="js/rewards.js?v=15"></script>
+<script src="js/roadmap.js?v=15"></script>
+<script src="js/sessions-ui.js?v=15"></script>
+<script src="js/timer.js?v=15"></script>
+<script src="js/insights.js?v=15"></script>
+<script src="js/home.js?v=15"></script>
+<script src="js/knowledge.js?v=15"></script>
+<script src="js/learn.js?v=15"></script>
+<script src="js/calendar.js?v=15"></script>
+<script src="js/vendor/qrcode.js?v=15"></script>
+<script src="js/events.js?v=15"></script>
+<script src="js/sync.js?v=15"></script>
+<script src="js/account.js?v=15"></script>
+<script src="js/profile.js?v=15"></script>
+<script src="js/app.js?v=15"></script>
 </body>
 </html>

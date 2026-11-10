@@ -5,6 +5,11 @@
  *  - Check in: in person with the 4-digit code (or the QR code at the door, which carries the code);
  *    online by tapping "Join & check in" during the event
  *  - Admins: create / edit / cancel, check-in code + QR for the door, attendee list, host check-in, CSV
+ *  - Repeating events (weekly / every other week / monthly, with an end date; skip dates); edit or cancel
+ *    "this event" or "this and following". Cancelled events stay on the calendar, marked Cancelled.
+ *  - Center check-in (#checkin): one permanent QR poster at the welcome table checks people in to
+ *    whichever in-person event is open at the center right now.
+ *  - Contact details: asked once at the first RSVP / check-in (email required, phone optional, text consent)
  *  - Rewards: hosted online check-in 25 points, in-person 50 points
  */
 (function () {
@@ -13,6 +18,9 @@
   var SESSION_KEY = 'meditation-copilot:events-session';
   var CACHE_KEY = 'meditation-copilot:events-cache';
   var CK_KEY = 'meditation-copilot:hosted-checkins';
+  var PENDING_KEY = 'meditation-copilot:pending-checkin';
+  var CENTER = 'mpls';
+  var REPEAT = { weekly: 'Repeats weekly', biweekly: 'Repeats every other week', monthly: 'Repeats monthly' };
   var FORMAT = { in_person: '📍 In person', online: '💻 Online', hybrid: '📍💻 In person & online' };
 
   function base() { return String(MC.store.get('meditation-copilot:api-override', null) || CFG.apiBase || '').replace(/\/+$/, ''); }
@@ -48,7 +56,7 @@
     }).then(function (r) {
       return r.json().then(function (j) { if (!r.ok) throw err(j.error || 'Could not sign in to events'); return j; });
     }).then(function (j) {
-      session = { token: j.token, user: j.user, exp: Date.now() + 29 * 86400000 };
+      session = { token: j.token, user: j.user, contact: j.contact || null, exp: Date.now() + 29 * 86400000 };
       MC.store.set(SESSION_KEY, session);
       refreshMe();
       return session;
@@ -64,7 +72,47 @@
       var pre = (p && p.id === 'google' && !p.canSync()) ? MC.sync.reconnect() : Promise.resolve();
       run = pre.then(ensureSession).then(fn);
     }
-    return run.catch(function (e) { MC.toast(e.message || 'Something went wrong.', 4500); throw e; });
+    return run.catch(function (e) {
+      if (e && e.status === 428) return askContact().then(fn);      // first RSVP / check-in: confirm contact details
+      throw e;
+    }).catch(function (e) { if (!e || !e.silent) MC.toast((e && e.message) || 'Something went wrong.', 4500); throw e; });
+  }
+
+  /* ---------- Contact details (email required, phone optional) ---------- */
+  var ctDlg = $('ctDlg'), ctDone = null;
+  function askContact() {
+    return new Promise(function (resolve, reject) {
+      var c = (session && session.contact) || {};
+      $('ctEmail').value = c.email || (session && session.user && session.user.email) || MC.account.email() || '';
+      $('ctPhone').value = c.phone ? fmtPhone(c.phone) : '';
+      $('ctSms').checked = !!c.smsOk;
+      $('ctErr').textContent = '';
+      ctDone = { resolve: resolve, reject: reject };
+      if (ctDlg.showModal) ctDlg.showModal(); else ctDlg.setAttribute('open', '');
+    });
+  }
+  function fmtPhone(p) { var m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(p || ''); return m ? m[1] + '-' + m[2] + '-' + m[3] : (p || ''); }
+  function closeCt(ok) {
+    if (ctDlg.close) ctDlg.close(); else ctDlg.removeAttribute('open');
+    var d = ctDone; ctDone = null;
+    if (d) { if (ok) d.resolve(); else d.reject(err('Contact details are needed to RSVP or check in.', { silent: true })); }
+  }
+  $('ctCancel').addEventListener('click', function () { closeCt(false); });
+  ctDlg.addEventListener('cancel', function () { closeCt(false); });
+  $('ctForm').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var phone = $('ctPhone').value.trim(), sms = $('ctSms').checked;
+    if (sms && !phone) { $('ctErr').textContent = 'Add a phone number to get text reminders, or untick the box.'; return; }
+    api('PUT', '/api/me/contact', { phone: phone, smsOk: sms }).then(function (j) {
+      session.contact = j.contact; MC.store.set(SESSION_KEY, session);
+      MC.track('event_contact', { phone: !!phone, sms: sms });
+      closeCt(true);
+    }).catch(function (x) { $('ctErr').textContent = x.message; });
+  });
+  function contactSummary() {
+    var c = session && session.contact;
+    if (!c || !c.confirmedAt) return 'Not set up yet. You\u2019ll be asked at your first RSVP or check-in.';
+    return MC.esc(c.email || '') + (c.phone ? ' · ' + MC.esc(fmtPhone(c.phone)) + (c.smsOk ? ' · texts on' : ' · texts off') : ' · no phone');
   }
   function promptSignIn() {
     MC.toast('Sign in with Google or Microsoft to RSVP and check in.', 4500);
@@ -73,7 +121,7 @@
   function refreshMe() {
     if (!valid()) return Promise.resolve();
     return api('GET', '/api/me').then(function (j) {
-      session.user = j.user; MC.store.set(SESSION_KEY, session);
+      session.user = j.user; if (j.contact) session.contact = j.contact; MC.store.set(SESSION_KEY, session);
       MC.store.set(CK_KEY, j.checkins || []);
       MC.emit('data');                          // re-evaluate rewards
     }).catch(function () {});
@@ -82,7 +130,18 @@
   MC.events = {
     enabled: function () { return !!base(); },
     isAdmin: function () { return valid() && session.user && session.user.isAdmin; },
-    hostedCheckins: function () { return MC.store.get(CK_KEY, []) || []; }
+    hostedCheckins: function () { return MC.store.get(CK_KEY, []) || []; },
+    // Account & settings: event contact details
+    accountHTML: function () {
+      if (!MC.events.enabled() || !valid()) return '';
+      return '<div class="section-title" style="margin-top:20px">SOS events</div>' +
+        '<p class="small" style="margin:-6px 0 10px">Contact details: ' + contactSummary() + '</p>' +
+        '<button class="btn btn-ghost btn-sm btn-block" id="acContact">✎ Edit contact details</button>';
+    },
+    bindAccount: function (close) {
+      if (!$('acContact')) return;
+      $('acContact').addEventListener('click', function () { close(); askContact().then(function () { MC.toast('Contact details saved.'); }, function () {}); });
+    }
   };
 
   /* ---------- Rewards for hosted check-ins ---------- */
@@ -122,7 +181,8 @@
     });
   }
   MC.eventsOn = function (isoDay) {      // for the Calendar month dots and day agenda
-    return (cache.events || []).filter(function (e) { return MC.toISO(new Date(e.startsAt)) === isoDay && e.status !== 'cancelled'; });
+    // Cancelled events stay visible (marked Cancelled) so people aren't left wondering
+    return (cache.events || []).filter(function (e) { return MC.toISO(new Date(e.startsAt)) === isoDay; });
   };
 
   function eventRow(e) {
@@ -130,7 +190,7 @@
       : e.myCheckin ? '<span class="ag-st ok">✓ Checked in</span>'
       : e.myRsvp === 'going' ? '<span class="ag-st now">Going</span>'
       : e.myRsvp === 'maybe' ? '<span class="ag-st up">Maybe</span>' : '';
-    return '<a class="ev-row" href="#event?e=' + encodeURIComponent(e.id) + '"><span class="ev-date"><b>' + new Date(e.startsAt).getDate() + '</b>' +
+    return '<a class="ev-row' + (e.status === 'cancelled' ? ' cx' : '') + '" href="#event?e=' + encodeURIComponent(e.id) + '"><span class="ev-date"><b>' + new Date(e.startsAt).getDate() + '</b>' +
       new Date(e.startsAt).toLocaleDateString(undefined, { month: 'short' }) + '</span><span class="ag-main"><b>' + MC.esc(e.title) + '</b><small>' +
       MC.esc(fmtWhen(e).split(' · ')[1]) + ' · ' + MC.esc(FORMAT[e.format] || '') + (e.going ? ' · ' + e.going + ' going' : '') + '</small></span>' + tag + '</a>';
   }
@@ -143,12 +203,14 @@
       return;
     }
     var html = '<div class="section-title">SOS events' + (MC.events.isAdmin() ? ' <button class="btn btn-soft btn-sm" id="evNew" style="flex:0 0 auto">+ New event</button>' : '') + '</div>';
+    if (MC.events.isAdmin()) html += '<button class="link small" id="evPoster" style="padding:0;margin:-4px 0 8px">🖨 Print the center check-in QR poster</button>';
     var list = (cache.events || []).filter(function (e) { return e.endsAt > Date.now() - 3600000; });
     html += list.length ? list.slice(0, 12).map(eventRow).join('') : '<p class="small muted" style="margin:0">No upcoming events yet.</p>';
     if (!signedInMode()) html += '<p class="small muted" style="margin:12px 0 0">Sign in with Google or Microsoft to RSVP and check in.</p>';
     else if (!valid()) html += '<button class="btn btn-soft btn-sm btn-block" id="evConnect" style="margin-top:12px">Connect to SOS events</button>';
     el.innerHTML = html;
     if ($('evNew')) $('evNew').addEventListener('click', function () { openForm(null); });
+    if ($('evPoster')) $('evPoster').addEventListener('click', printPoster);
     if ($('evConnect')) $('evConnect').addEventListener('click', function () {
       withSession(function () { MC.renderEventsCard(); }).catch(function () {});
     });
@@ -186,7 +248,7 @@
     html += '<a class="link" href="#calendar" style="padding:4px 0;display:inline-block">‹ Calendar</a>';
     html += '<div class="card"><span class="ev-format">' + MC.esc(FORMAT[e.format] || '') + (e.visibility === 'members' ? ' · Members' : '') + '</span>' +
       '<h1 class="ev-title">' + MC.esc(e.title) + '</h1>' +
-      '<p class="ev-when">🗓 ' + MC.esc(fmtWhen(e)) + '</p>' +
+      '<p class="ev-when">🗓 ' + MC.esc(fmtWhen(e)) + (e.repeats ? '<br><span class="small muted">↻ ' + MC.esc(REPEAT[e.repeats] || '') + '</span>' : '') + '</p>' +
       (cancelled ? '<div class="status behind" style="margin:10px 0">This event has been cancelled.</div>' : '') +
       (e.venue || e.address ? '<p class="small" style="margin:6px 0">📍 <b>' + MC.esc(e.venue || '') + '</b>' + (e.address ? '<br><a href="https://maps.google.com/?q=' + encodeURIComponent(e.address) + '" target="_blank" rel="noopener">' + MC.esc(e.address) + ' ↗</a>' : '') + '</p>' : '') +
       (e.format !== 'in_person' ? '<p class="small muted" style="margin:6px 0">💻 ' + (e.onlineUrl === undefined ? 'Sign in to get the online link.' : e.onlineUrl ? 'Online link opens when you check in.' : 'The online link will be added soon.') + '</p>' : '') +
@@ -314,15 +376,23 @@
       '<input type="search" id="adFind" class="text-input" placeholder="Search name or email" autocomplete="off"><div id="adFound"></div>' +
       '<div class="tool-row" style="grid-template-columns:1fr 1fr 1fr;margin-top:14px">' +
       '<button class="btn btn-ghost btn-sm" id="adCsv">⬇ CSV</button><button class="btn btn-ghost btn-sm" id="adEdit">✎ Edit</button>' +
-      '<button class="btn btn-danger btn-sm" id="adCancel">' + (e.status === 'cancelled' ? 'Restore' : 'Cancel event') + '</button></div>';
+      '<button class="btn btn-danger btn-sm" id="adCancel">' + (e.status === 'cancelled' ? 'Restore' : 'Cancel event') + '</button></div>' +
+      (e.seriesId ? '<button class="link small" id="adCancelAll" style="display:block;margin:10px auto 0">' +
+        (e.status === 'cancelled' ? 'Restore this and all following events' : 'Cancel this and all following events') + '</button>' : '');
     $('adRefresh').addEventListener('click', loadAttendees);
     $('adEdit').addEventListener('click', function () { openForm(current); });
     $('adCsv').addEventListener('click', downloadCsv);
-    $('adCancel').addEventListener('click', function () {
+    function cancelOrRestore(all) {
       var cancel = current.status !== 'cancelled';
-      if (cancel && !window.confirm('Cancel this event? People who RSVP\u2019d will see it as cancelled.')) return;
-      api('POST', '/api/admin/events/' + encodeURIComponent(current.id) + (cancel ? '/cancel' : '/restore')).then(function () { MC.toast(cancel ? 'Event cancelled.' : 'Event restored.'); showEvent(); }).catch(function (x) { MC.toast(x.message); });
-    });
+      if (cancel && !window.confirm(all ? 'Cancel this and all following events in the series? They stay on the calendar, marked Cancelled.'
+        : 'Cancel this event? It stays on the calendar, marked Cancelled, so people who RSVP\u2019d know.')) return;
+      api('POST', '/api/admin/events/' + encodeURIComponent(current.id) + (cancel ? '/cancel' : '/restore') + (all ? '?scope=future' : '')).then(function () {
+        MC.toast(cancel ? (all ? 'Events cancelled.' : 'Event cancelled.') : (all ? 'Events restored.' : 'Event restored.'));
+        showEvent(); loadUpcoming().catch(function () {});
+      }).catch(function (x) { MC.toast(x.message); });
+    }
+    $('adCancel').addEventListener('click', function () { cancelOrRestore(false); });
+    if ($('adCancelAll')) $('adCancelAll').addEventListener('click', function () { cancelOrRestore(true); });
     if ($('adNewCode')) $('adNewCode').addEventListener('click', function () {
       if (!window.confirm('Create a new check-in code? The old code and QR stop working.')) return;
       api('POST', '/api/admin/events/' + encodeURIComponent(current.id) + '/new-code').then(function (j) { current = j.event; renderAdmin(); }).catch(function (x) { MC.toast(x.message); });
@@ -357,7 +427,7 @@
       var going = a.filter(function (x) { return x.rsvp === 'going'; }).length;
       $('adList').innerHTML = '<p class="small" style="margin:0 0 8px"><b>' + inN + '</b> checked in · <b>' + going + '</b> going · ' + a.length + ' responded</p>' +
         (a.length ? a.map(function (x) {
-          return '<div class="ad-row"><span class="ag-main"><b>' + MC.esc(x.name || '') + '</b><small>' + MC.esc(x.email || '') + ' · ' +
+          return '<div class="ad-row"><span class="ag-main"><b>' + MC.esc(x.name || '') + '</b><small>' + MC.esc(x.email || '') + (x.phone ? ' · ' + MC.esc(fmtPhone(x.phone)) : '') + ' · ' +
             (x.rsvp ? { going: 'Going', maybe: 'Maybe', no: 'Can\u2019t go' }[x.rsvp] : 'No RSVP') +
             (x.checkedInAt ? ' · ✓ ' + MC.esc(MC.fmtTime(x.checkedInAt)) + ' (' + x.method + ')' : '') + '</small></span>' +
             (x.checkedInAt ? '<button class="btn btn-ghost btn-sm" data-unck="' + MC.esc(x.userId) + '">Undo</button>'
@@ -394,7 +464,13 @@
     $('efVis').value = e ? e.visibility : 'public';
     $('efHead').textContent = e ? 'Edit event' : 'New SOS event';
     $('efErr').textContent = '';
-    syncFormat();
+    $('efRepeatBox').hidden = !!e;
+    $('efRepeat').value = '';
+    $('efUntil').value = MC.toISO(MC.addDays(new Date(start), 7 * 12));
+    skipped = {};
+    $('efScopeBox').hidden = !(e && e.seriesId);
+    $('efScope').value = 'this';
+    syncFormat(); syncRepeat();
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function syncFormat() {
@@ -403,6 +479,54 @@
     $('efOnline').hidden = f === 'in_person';
   }
   $('efFormat').addEventListener('change', syncFormat);
+
+  /* Repeating events: dates are worked out here in local time (daylight saving stays right) */
+  var skipped = {};
+  var ORD = ['1st', '2nd', '3rd', '4th', 'last'];
+  function nthWeekday(d) { var n = Math.floor((d.getDate() - 1) / 7); var next = MC.addDays(d, 7); return next.getMonth() !== d.getMonth() ? 4 : n; }
+  function monthlyOn(y, mo, wd, n) {
+    if (n === 4) { var last = new Date(y, mo + 1, 0); while (last.getDay() !== wd) last.setDate(last.getDate() - 1); return last; }
+    var d = new Date(y, mo, 1); while (d.getDay() !== wd) d.setDate(d.getDate() + 1); d.setDate(d.getDate() + 7 * n); return d.getMonth() === mo ? d : null;
+  }
+  function repeatDates() {
+    var freq = $('efRepeat').value, first = MC.parseDate($('efDate').value), until = MC.parseDate($('efUntil').value), out = [];
+    if (!freq || !first || !until) return out;
+    if (freq === 'monthly') {
+      var wd = first.getDay(), n = nthWeekday(first);
+      for (var i = 0; out.length < 121; i++) {
+        var d = monthlyOn(first.getFullYear(), first.getMonth() + i, wd, n);
+        if (d && d > until) break;
+        if (d) out.push(d);
+        if (i > 400) break;
+      }
+    } else {
+      for (var dd = new Date(first); dd <= until && out.length < 121; dd = MC.addDays(dd, freq === 'weekly' ? 7 : 14)) out.push(new Date(dd));
+    }
+    return out;
+  }
+  function syncRepeat() {
+    var freq = $('efRepeat').value;
+    $('efRepeatMore').hidden = !freq;
+    $('efDateHint').textContent = freq ? '(first event)' : '';
+    if (!freq) return;
+    var first = MC.parseDate($('efDate').value), dates = repeatDates();
+    var wd = first ? first.toLocaleDateString(undefined, { weekday: 'long' }) : '';
+    var how = freq === 'weekly' ? 'Every ' + wd : freq === 'biweekly' ? 'Every other ' + wd : first ? 'Monthly on the ' + ORD[nthWeekday(first)] + ' ' + wd : '';
+    var on = dates.filter(function (d) { return !skipped[MC.toISO(d)]; }).length;
+    $('efRepeatSum').textContent = how + ' · ' + on + ' event' + (on === 1 ? '' : 's') + (dates.length > 120 ? ' (120 at most; choose an earlier end date)' : '') + '. Tap a date to skip it.';
+    $('efDates').innerHTML = dates.slice(0, 120).map(function (d) {
+      var k = MC.toISO(d);
+      return '<button type="button" class="chip' + (skipped[k] ? '' : ' on') + '" data-k="' + k + '" aria-pressed="' + !skipped[k] + '">' +
+        MC.esc(d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) + '</button>';
+    }).join('');
+  }
+  $('efRepeat').addEventListener('change', syncRepeat);
+  $('efUntil').addEventListener('change', syncRepeat);
+  $('efDate').addEventListener('change', syncRepeat);
+  $('efDates').addEventListener('click', function (ev) {
+    var c = ev.target.closest('.chip'); if (!c) return;
+    skipped[c.dataset.k] = !skipped[c.dataset.k]; syncRepeat();
+  });
   $('efCancel').addEventListener('click', function () { dlg.close(); });
   $('efForm').addEventListener('submit', function (ev) {
     ev.preventDefault();
@@ -418,17 +542,109 @@
       venue: f === 'online' ? '' : $('efVenue').value, address: f === 'online' ? '' : $('efAddress').value,
       onlineUrl: f === 'in_person' ? '' : $('efUrl').value, description: $('efDesc').value, visibility: $('efVis').value
     };
-    var req = editing ? api('PATCH', '/api/admin/events/' + encodeURIComponent(editing.id), payload) : api('POST', '/api/admin/events', payload);
+    var freq = !editing && $('efRepeat').value;
+    if (freq) {
+      var dur = endsAt - startsAt;
+      payload.repeat = { freq: freq };
+      payload.occurrences = repeatDates().slice(0, 120).filter(function (dd) { return !skipped[MC.toISO(dd)]; }).map(function (dd) {
+        var st = new Date(dd.getFullYear(), dd.getMonth(), dd.getDate(), s[0], s[1]).getTime();
+        return { startsAt: st, endsAt: st + dur };
+      });
+      if (!payload.occurrences.length) { $('efErr').textContent = 'Every date is skipped. Tap a date to include it.'; return; }
+      payload.startsAt = payload.occurrences[0].startsAt; payload.endsAt = payload.occurrences[0].endsAt;
+    }
+    var scope = editing && editing.seriesId && $('efScope').value === 'future' ? '?scope=future' : '';
+    var req = editing ? api('PATCH', '/api/admin/events/' + encodeURIComponent(editing.id) + scope, payload) : api('POST', '/api/admin/events', payload);
     req.then(function (j) {
       dlg.close();
-      MC.toast(editing ? 'Event updated.' : 'Event created. 🙏');
+      MC.toast(editing ? (j.count > 1 ? j.count + ' events updated.' : 'Event updated.') : (j.count > 1 ? j.count + ' events created. 🙏' : 'Event created. 🙏'));
       MC.track(editing ? 'event_edit' : 'event_create');
       loadUpcoming().catch(function () {});
       if (location.hash.indexOf('#event?e=' + j.event.id) === 0) showEvent(); else location.hash = 'event?e=' + encodeURIComponent(j.event.id);
     }).catch(function (x) { $('efErr').textContent = x.message; });
   });
 
+  /* ---------- Center check-in (#checkin): the printed QR poster at the welcome table ---------- */
+  var ckBusy = false;
+  function showCheckin() {
+    var view = $('v-checkin');
+    if (!MC.events.enabled()) { view.innerHTML = '<div class="card">Check-in is not set up yet.</div>'; return; }
+    if (!signedInMode()) {
+      MC.store.set(PENDING_KEY, Date.now());           // finish the check-in after sign-in (even after a redirect)
+      view.innerHTML = '<div class="card ck-big"><div class="ck-icon">🙏</div><h1>Welcome to the Minneapolis Center</h1>' +
+        '<p>Sign in once with Google or Microsoft to check in. Next time it\u2019s one tap.</p>' +
+        '<button class="btn btn-primary btn-block" id="ckSignIn" style="margin-top:14px">Sign in to check in</button>' +
+        '<p class="small muted" style="margin:12px 0 0">Bringing family or friends? Each adult signs in on their own phone. Ask the host if you need help.</p></div>';
+      $('ckSignIn').addEventListener('click', function () { $('accountBtn').click(); });
+      return;
+    }
+    if (valid()) { centerCheckin(); return; }
+    view.innerHTML = '<div class="card ck-big muted">Connecting…</div>';
+    ensureSession().then(function () { centerCheckin(); }, function () {
+      // Google needs a quick reconnect, which must come from a tap
+      view.innerHTML = '<div class="card ck-big"><div class="ck-icon">🙏</div><h1>Welcome</h1><button class="btn btn-gold btn-block" id="ckTap">Check in</button></div>';
+      $('ckTap').addEventListener('click', function () { centerCheckin(); });
+    });
+  }
+  function centerCheckin(eventId) {
+    var view = $('v-checkin');
+    if (ckBusy) return; ckBusy = true;
+    withSession(function () {
+      return api('POST', '/api/centers/' + CENTER + '/checkin', eventId ? { eventId: eventId } : {}).then(function (r) {
+        MC.store.del(PENDING_KEY);
+        if (!r.open) {
+          view.innerHTML = '<div class="card ck-big"><div class="ck-icon">🕊</div><h1>No event right now</h1>' +
+            '<p>Check-in opens 30 minutes before an event starts.</p>' +
+            (r.next ? '<p class="small">Next: <a href="#event?e=' + encodeURIComponent(r.next.id) + '"><b>' + MC.esc(r.next.title) + '</b></a><br>' + MC.esc(fmtWhen(r.next)) + '</p>' : '') +
+            '<a class="btn btn-ghost btn-block" href="#calendar" style="margin-top:10px">See all events</a></div>';
+          return;
+        }
+        if (r.choose) {
+          view.innerHTML = '<div class="card ck-big"><div class="ck-icon">🙏</div><h1>Which event?</h1><div class="ck-choose">' + r.choose.map(function (e) {
+            return '<button class="btn btn-soft btn-block" data-ev="' + MC.esc(e.id) + '">' + MC.esc(e.title) + '<br><small>' + MC.esc(fmtWhen(e).split(' · ')[1]) + '</small></button>';
+          }).join('') + '</div></div>';
+          view.querySelectorAll('[data-ev]').forEach(function (b) { b.addEventListener('click', function () { centerCheckin(b.dataset.ev); }); });
+          return;
+        }
+        MC.track('event_checkin', { format: r.event.format, method: 'center_qr' });
+        view.innerHTML = '<div class="card ck-big ck-done"><div class="ck-icon">✓</div><h1>' + (r.already ? 'You\u2019re already checked in' : 'You\u2019re checked in') + '</h1>' +
+          '<p><b>' + MC.esc(r.event.title) + '</b><br><span class="small">' + MC.esc(fmtWhen(r.event)) + '</span></p>' +
+          '<p class="small">Welcome! 🙏</p><a class="btn btn-ghost btn-block" href="#event?e=' + encodeURIComponent(r.event.id) + '">Event details</a></div>';
+        refreshMe();
+      });
+    }).catch(function () {
+      if (MC.current === 'checkin' && !$('ckTap')) {
+        view.innerHTML = '<div class="card ck-big"><div class="ck-icon">🙏</div><h1>Check in</h1><button class="btn btn-gold btn-block" id="ckTap">Try again</button></div>';
+        $('ckTap').addEventListener('click', function () { centerCheckin(eventId); });
+      }
+    }).then(function () { ckBusy = false; }, function () { ckBusy = false; });
+  }
+  // Came from the poster and signed in (Google pop-up, or back from the Microsoft redirect): finish the check-in
+  function resumePending() {
+    var at = MC.store.get(PENDING_KEY, 0);
+    if (!at || Date.now() - at > 20 * 60000) { if (at) MC.store.del(PENDING_KEY); return; }
+    if (!signedInMode()) return;
+    if (MC.current === 'checkin') showCheckin(); else location.hash = 'checkin';
+  }
+  function printPoster() {
+    var url = MC.APP_LINK + '#checkin', w = window.open('', '_blank');
+    if (!w) { MC.toast('Please allow pop-ups to print the poster.'); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Check in · Minneapolis Center</title><style>' +
+      'body{font-family:Georgia,serif;text-align:center;color:#3b2466;margin:0;padding:40px 24px}h1{font-size:44px;margin:10px 0 6px}' +
+      'p{font-family:system-ui,sans-serif;font-size:20px;margin:8px 0;color:#333}.qr{width:380px;height:380px;margin:24px auto}.qr svg{width:100%;height:100%}' +
+      '.small{font-size:14px;color:#777}@media print{button{display:none}}</style></head><body>' +
+      '<div style="font-size:48px">🙏</div><h1>Welcome! Please check in</h1><p>Scan with your phone camera</p>' +
+      '<div class="qr">' + qrSvg(url) + '</div>' +
+      '<p><b>1.</b> Scan the code &nbsp; <b>2.</b> Sign in with Google or Microsoft (first time only) &nbsp; <b>3.</b> You\u2019re checked in</p>' +
+      '<p class="small">Science of Spirituality · Minneapolis Center · Meditation Copilot (prototype)<br>' + MC.esc(url) + '</p>' +
+      '<button onclick="window.print()" style="margin-top:20px;font-size:18px;padding:10px 24px">Print</button></body></html>');
+    w.document.close();
+    MC.track('event_poster');
+  }
+
   /* ---------- Wiring ---------- */
+  MC.views.checkin = { show: showCheckin };
+  MC.on('sync', function () { if (signedInMode()) resumePending(); });
   MC.views.event = { show: showEvent };
   MC.on('signout', function () { clearSession(); });   // earned check-in points stay
   // On start-up, refresh check-ins (for rewards) when we already have an events session

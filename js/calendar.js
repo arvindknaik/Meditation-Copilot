@@ -116,12 +116,13 @@
     for (var dnum = 1; dnum <= dim; dnum++) {
       var d = new Date(first.getFullYear(), first.getMonth(), dnum), k = MC.toISO(d), v = days[k];
       var tgt = (MC.challenge && MC.challenge.targetOn(k)) || target;
-      var hasEv = MC.eventsOn && MC.eventsOn(k).length;
-      var cls = 'cal-day' + (v ? (v.minutes >= tgt ? ' met' : ' some') : '') + (k === MC.toISO(t) ? ' today' : '') + (k === MC.toISO(selected) ? ' sel' : '') + (d > t ? ' future' : '') + (hasEv ? ' ev' : '');
+      var dayEvs = MC.eventsOn ? MC.eventsOn(k) : [];
+      var hasEv = dayEvs.some(function (e) { return e.status !== 'cancelled'; }), hasCx = !hasEv && dayEvs.length > 0;
+      var cls = 'cal-day' + (v ? (v.minutes >= tgt ? ' met' : ' some') : '') + (k === MC.toISO(t) ? ' today' : '') + (k === MC.toISO(selected) ? ' sel' : '') + (d > t ? ' future' : '') + (hasEv ? ' ev' : hasCx ? ' evx' : '');
       html += '<button class="' + cls + '" data-day="' + k + '" aria-label="' + MC.esc(MC.fmtDate(d)) + (v ? ', ' + Math.round(v.minutes) + ' minutes' : '') + '">' + dnum + '</button>';
     }
     html += '</div><div class="cal-legend small muted"><span><i class="lg met"></i>Target met</span><span><i class="lg some"></i>Some practice</span>' +
-      (MC.events && MC.events.enabled() ? '<span><i class="lg ev"></i>SOS event</span>' : '') + '</div>';
+      (MC.events && MC.events.enabled() ? '<span><i class="lg ev"></i>SOS event</span><span><i class="lg evx"></i>Cancelled</span>' : '') + '</div>';
     $('calMonth').innerHTML = html;
   }
   $('calMonth').addEventListener('click', function (e) {
@@ -152,9 +153,9 @@
     var evs = MC.eventsOn ? MC.eventsOn(key) : [];
     if (evs.length) {
       html += '<div class="log-day" style="margin-top:12px">SOS events</div>' + evs.map(function (e) {
-        return '<a class="ag-row ev-link" href="#event?e=' + encodeURIComponent(e.id) + '"><span class="ag-time">' + MC.esc(MC.fmtTime(e.startsAt)) + '</span>' +
+        return '<a class="ag-row ev-link' + (e.status === 'cancelled' ? ' cx' : '') + '" href="#event?e=' + encodeURIComponent(e.id) + '"><span class="ag-time">' + MC.esc(MC.fmtTime(e.startsAt)) + '</span>' +
           '<span class="ag-main"><b>' + MC.esc(e.title) + '</b><small>' + (e.format === 'online' ? 'Online' : e.format === 'hybrid' ? 'In person & online' : 'In person') + '</small></span>' +
-          (e.myCheckin ? '<span class="ag-st ok">✓ Checked in</span>' : e.myRsvp === 'going' ? '<span class="ag-st now">Going</span>' : '<span class="muted">›</span>') + '</a>';
+          (e.status === 'cancelled' ? '<span class="ag-st miss">Cancelled</span>' : e.myCheckin ? '<span class="ag-st ok">✓ Checked in</span>' : e.myRsvp === 'going' ? '<span class="ag-st now">Going</span>' : '<span class="muted">›</span>') + '</a>';
       }).join('');
     }
     var other = sess.filter(function (s) { return !used[s.id]; });

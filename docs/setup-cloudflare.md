@@ -27,6 +27,7 @@ npx wrangler d1 create meditation-copilot
 ```
 npm run db:remote
 ```
+If it asks "Ok to proceed?", answer `y`.
 
 ## 4. Set the secrets (never put these in files)
 ```
@@ -58,6 +59,14 @@ The output ends with a URL such as `https://meditation-copilot-api.<your-subdoma
 2. On a second phone, or in a private window, sign in with another account. Then RSVP **Going**.
 3. On the event page, scan the door QR shown under **Host tools**, or type the 4-digit code. The phone should show "You're checked in" and +50 points.
 4. Under **Attendees**, the person should show up. **CSV** downloads the list.
+
+## Updating after a new version
+When a release adds a file under `api/migrations/` (for example `0002_series_contact.sql` in v0.11.0), run these in the `api` folder before pushing the app:
+```
+npm run db:remote
+npm run deploy
+```
+`db:remote` applies only the migrations that haven't run yet. The first time, it also records `0001_init.sql`, which is harmless because those tables already exist.
 
 ## Later
 - **Custom domain (sosmn.org):** add the new site address (for example `https://app.sosmn.org`) to `ALLOWED_ORIGINS` in `wrangler.toml`, then run `npm run deploy` again.

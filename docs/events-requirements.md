@@ -103,21 +103,27 @@ Hosted check-ins are recorded by the server, so they can't be self-awarded.
 
 ## 8. Privacy and consent
 - Part 2 stores **names and contact details centrally**. That requires an updated privacy notice, consent at RSVP, and data deletion on request. **SOS approval is recommended before collecting real attendee data.**
-- SMS requires explicit opt-in, STOP handling, and SOS as the registered sender.
+- SMS requires explicit opt-in, STOP handling, and SOS as the registered sender. The opt-in and its date are stored now (`users.sms_ok`, `sms_consent_at`).
+- The contact form and `privacy.html#events` say details are used only for center event communication and never shared or sold. **Have SOS review this wording before real use.**
 - Admins see only what they need: name, RSVP and check-in status; contact details only for sending reminders through the system.
 
-## 9. Decisions needed (Part 2)
-| # | Decision | Recommendation |
+## 9. Decisions (Part 2) — agreed
+| # | Decision | Agreed |
 |---|---|---|
-| D1 | Backend | Supabase (you create a free project; I configure everything) |
-| D2 | Who are admins? | A list of admin emails (start with yours); later per center |
-| D3 | Centers | Start with **Minneapolis Center** only |
-| D4 | Text messages now or later? | Email first; SMS after SOS approval and 10DLC registration |
-| D5 | Check-in methods | In person: QR + 4-digit code + host manual; online: Join link in window |
-| D6 | RSVP without sign-in? | Require sign-in (simpler, enables points); allow name + email later if needed |
-| D7 | Guests (+1) and waitlist? | Guests count yes; waitlist only when capacity is set |
-| D8 | Store seeker/initiate on the server? | No (not needed for events) |
-| D9 | Events source | Created in our admin UI (no automatic import from sos.org) |
+| D1 | Backend | **Cloudflare Worker + D1** for the pilot (low cost, portable); Azure under the SOS account long term |
+| D2 | Who are admins? | A list of admin emails (`ADMIN_EMAILS`), starting with Arvind's |
+| D3 | Centers | **Minneapolis Center** only |
+| D4 | Text messages now or later? | Email first; SMS later. Text consent is collected now so SMS can start without asking again |
+| D5 | Check-in methods | In person: center QR poster, event code/QR, host check-in; online: Join & check in |
+| D6 | RSVP without sign-in? | **Sign-in required** to RSVP and check in. Email sign-in for people without Google/Microsoft: later, if needed |
+| D7 | Guests and waitlist | Each adult registers (signs in) before or at the event. **Waitlist on hold** |
+| D8 | Store seeker/initiate on the server? | No (separate lookup of initiates exists) |
+| D9 | Events source | Created in our own admin screen (SOS's existing event system is not used) |
+| D10 | Repeating events | Weekly (most), every other week, monthly (same weekday, e.g. "2nd Sunday"); end date; skip dates when creating; edit or cancel "this event" or "this and following" |
+| D11 | Cancelled events | **Stay on the calendar**, marked Cancelled (better communication than deleting) |
+| D12 | RSVP scope | **Per event.** No "every week" RSVP, so each week's count stays meaningful |
+| D13 | Printed QR | One permanent **center QR poster** (option a): checks in to whichever in-person event is open (30 min before start to 30 min after end). Add a code requirement only if misuse shows up |
+| D14 | Contact details | Email **required** (from sign-in); phone **optional**; separate opt-in for text reminders; notice that details are used only for center event communication and never shared. Asked once, at the first RSVP or check-in; editable in Account |
 
 ## 10. Phasing
 | Phase | Scope |
@@ -126,4 +132,5 @@ Hosted check-ins are recorded by the server, so they can't be self-awarded.
 | B2 | Supabase setup; event browsing; RSVP; add to calendar; sharing links |
 | B3 | Check-in (QR / code / online window); hosted-event points |
 | B4 | Admin: create/edit events, RSVP and check-in lists, manual check-in, CSV export |
+| B4.1 (v0.11.0) | Repeating events, cancelled events visible, center QR poster, contact details with consent |
 | B5 | Email reminders and announcements; then SMS and push |

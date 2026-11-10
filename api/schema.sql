@@ -1,6 +1,10 @@
 -- Meditation Copilot — events database (Cloudflare D1 / SQLite).
 -- Kept to standard SQL so it can move to Azure SQL / Postgres later with minor changes.
 -- Times are stored as epoch milliseconds (INTEGER, UTC).
+--
+-- This file is the complete current schema, for reference (e.g. when moving to Azure).
+-- To create or upgrade the live database, apply the files in migrations/ in order:
+--   npm run db:remote     (= wrangler d1 migrations apply meditation-copilot --remote)
 
 CREATE TABLE IF NOT EXISTS centers (
   id          TEXT PRIMARY KEY,
@@ -15,9 +19,22 @@ CREATE TABLE IF NOT EXISTS users (
   email         TEXT,
   name          TEXT,
   created_at    INTEGER NOT NULL,
-  last_seen_at  INTEGER NOT NULL
+  last_seen_at  INTEGER NOT NULL,
+  phone         TEXT,                        -- optional, E.164 (+16125551234)
+  sms_ok        INTEGER NOT NULL DEFAULT 0,  -- agreed to text reminders
+  sms_consent_at INTEGER,                    -- when they agreed (cleared if withdrawn)
+  contact_ack_at INTEGER                     -- when they confirmed contact details and saw the notice
 );
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+CREATE TABLE IF NOT EXISTS series (
+  id          TEXT PRIMARY KEY,
+  center_id   TEXT NOT NULL REFERENCES centers(id),
+  freq        TEXT NOT NULL CHECK (freq IN ('weekly', 'biweekly', 'monthly')),
+  until_at    INTEGER,
+  created_by  TEXT,
+  created_at  INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS events (
   id            TEXT PRIMARY KEY,
@@ -36,9 +53,11 @@ CREATE TABLE IF NOT EXISTS events (
   checkin_code  TEXT NOT NULL,              -- 4-digit code shown/announced at the venue (also inside the QR)
   created_by    TEXT,
   created_at    INTEGER NOT NULL,
-  updated_at    INTEGER NOT NULL
+  updated_at    INTEGER NOT NULL,
+  series_id     TEXT REFERENCES series(id)  -- set when the event repeats
 );
 CREATE INDEX IF NOT EXISTS idx_events_start ON events(starts_at);
+CREATE INDEX IF NOT EXISTS idx_events_series ON events(series_id, starts_at);
 
 CREATE TABLE IF NOT EXISTS rsvps (
   event_id    TEXT NOT NULL REFERENCES events(id),
