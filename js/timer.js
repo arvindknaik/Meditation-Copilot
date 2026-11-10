@@ -55,6 +55,7 @@
     active = { startedAt: Date.now(), pausedAt: null, pausedMs: 0, target: target, endRung: false };
     save();
     if (MC.settings.startBell !== false) MC.bell('start');
+    MC.track('timer_start', { open: !target });
     setModeText();
     tick();
   }

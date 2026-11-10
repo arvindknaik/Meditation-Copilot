@@ -10,13 +10,36 @@ Live: https://arvindknaik.github.io/Meditation-Copilot/
 ## Files
 
 ```
-index.html            The whole app (Phase 1: works by double-clicking it)
-manifest.json         PWA manifest (name, colors, icons, standalone display)
+index.html            App shell: all screens and dialogs (also works by double-clicking it)
+privacy.html          Privacy notice (draft for review)
+css/styles.css        All styles, light + dark themes
+js/config.js          Public settings: Google/Microsoft Client IDs, analytics endpoint, support contact
+js/quotes.js          Master quote file for "Thought for today" (add approved quotes here)
+js/core.js            Storage, dates, sessions, roadmap math, CSV format, sync snapshot/merge, router
+js/diag.js            Private diagnostic log + anonymous usage events
+js/roadmap.js         Roadmap: 5 questions, results, milestone track, what-if, sharing
+js/sessions-ui.js     Save / add / edit / delete a sitting
+js/timer.js           Timer: 10 s settle, start/end bells, countdown or open, pause, wake lock
+js/insights.js        Totals, chart, patterns, session log, CSV export/import
+js/home.js            Today screen
+js/knowledge.js       Learn articles and sos.org links (draft for SOS review)
+js/learn.js           Learn: search, paginated results, articles
+js/account.js         Welcome / sign-in choice, guest mode, Account & settings, backup reminder
+js/app.js             Startup and service-worker registration
+manifest.json         PWA manifest (name, colors, icons, shortcuts)
 sw.js                 Service worker: offline support + caching
-icons/                SVG sources + PNG icons (192, 512, maskable 512, Apple touch 180)
-.github/workflows/icons.yml  Renders the PNG icons from the SVGs whenever an SVG changes
+icons/                SVG + PNG icons (192, 512, maskable 512, Apple touch 180)
+docs/                 intent.md, tech-spec.md, product-status.md, setup-accounts.md
+push.bat              Windows: add, commit (asks for a message) and push
 .nojekyll             Tells GitHub Pages to serve files as-is
 ```
+
+## Features
+- **Today, Timer, Insights, Roadmap, Learn:** see `docs/intent.md` and `docs/product-status.md`.
+- **Guest mode:** data stays on this device only, with a warning and backup reminders. Google and Microsoft sign-in are coming next (`docs/setup-accounts.md`).
+- **CSV export/import:** header must be exactly `date,start_time,minutes,quality_pct,effective_minutes,reflection,source`. Invalid files are rejected; rows overlapping existing sittings are skipped and listed.
+
+**Prototype only. Not an official or approved Science of Spirituality app.**
 
 ## Phase 1: Run locally
 Double-click `index.html`. Everything works except install/offline, which browsers only allow over http(s).
@@ -31,7 +54,7 @@ python3 -m http.server 8000
 ## Phase 2: PWA
 - `manifest.json` uses relative paths (`./`), so it works under the `/Meditation-Copilot/` sub-path.
 - `sw.js` pre-caches the app shell. Pages load network-first (so updates arrive), with a cached fallback when offline. Icons and other assets load cache-first.
-- **When you change any file, bump `CACHE_VERSION` in `sw.js`** (e.g. `v2` → `v3`) and add any new files to its `ASSETS` list so installed copies refresh.
+- **When you change any file:** bump `CACHE_VERSION` in `sw.js` (e.g. `v6` → `v7`) **and** the `?v=` number on the css/js links in `index.html` (e.g. `?v=6` → `?v=7`), and `MC.VERSION` in `js/core.js`. Add any new files to the `ASSETS` list in `sw.js`. This makes phones load the new code right away instead of a cached older copy.
 - Android/Chrome shows an **Add to Home Screen** button on the results card. iPhone shows a "Share → Add to Home Screen" hint.
 
 ## Phase 3: Deploy to GitHub Pages

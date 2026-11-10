@@ -58,6 +58,7 @@
     if (mode === 'edit') MC.sessions.update(editId, rec);
     else { rec.source = mode === 'timer' ? 'timer' : 'manual'; MC.sessions.add(rec); }
     MC.saveSettings({ lastQuality: q });
+    MC.track(mode === 'edit' ? 'sitting_edited' : 'sitting_saved', { source: rec.source || 'edit', minBucket: rec.minutes < 15 ? '<15' : rec.minutes < 30 ? '15-29' : rec.minutes < 60 ? '30-59' : rec.minutes < 120 ? '60-119' : '120+' });
     closeDlg();
 
     var after = MC.completedHours();
@@ -76,6 +77,7 @@
   $('sdDelete').addEventListener('click', function () {
     if (!window.confirm('Delete this sitting?')) return;
     MC.sessions.remove(editId);
+    MC.track('sitting_deleted');
     closeDlg(); MC.toast('Sitting deleted.');
     if (onDone) onDone('deleted');
   });

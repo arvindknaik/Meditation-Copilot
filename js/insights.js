@@ -209,11 +209,14 @@
     a.href = url; a.download = name; document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 500);
   }
-  $('csvBtn').addEventListener('click', function () {
+  MC.exportCSV = function () {
     if (!MC.sessions.count()) { MC.toast('No sittings to export yet.'); return; }
     download('meditation-sessions-' + MC.toISO(MC.today()) + '.csv', MC.sessionsToCSV(), 'text/csv;charset=utf-8');
+    if (MC.account) MC.account.noteExport();
+    MC.track('csv_export', { count: MC.sessions.count() });
     MC.toast('Exported ' + MC.sessions.count() + ' sittings.');
-  });
+  };
+  $('csvBtn').addEventListener('click', MC.exportCSV);
 
   function showImport(title, html) {
     $('imTitle').textContent = title; $('imBody').innerHTML = html;
@@ -231,6 +234,7 @@
     reader.onload = function () {
       var res = MC.parseSessionsCSV(reader.result);
       if (res.errors) {
+        MC.track('csv_import_rejected', { problems: res.errors.length });
         var shown = res.errors.slice(0, 12);
         showImport('Import rejected',
           '<p class="small">Nothing was imported. Please fix ' + (res.errors.length === 1 ? 'this problem' : 'these ' + res.errors.length + ' problems') + ' and try again:</p>' +
@@ -245,6 +249,7 @@
         if (hit) conflicts.push({ s: s, hit: hit }); else add.push({ start: s.start, minutes: s.minutes, quality: s.quality, note: s.note, source: s.source });
       });
       if (add.length) MC.addSessionsBulk(add);
+      MC.track('csv_import', { added: add.length, skipped: conflicts.length });
       var html = '<p><b>' + add.length + '</b> sitting' + (add.length === 1 ? '' : 's') + ' imported.' +
         (conflicts.length ? ' <b>' + conflicts.length + '</b> skipped because ' + (conflicts.length === 1 ? 'it overlaps a sitting' : 'they overlap sittings') + ' already on this device:' : '') + '</p>';
       if (conflicts.length) {

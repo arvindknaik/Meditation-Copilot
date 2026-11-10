@@ -3,6 +3,8 @@
   'use strict';
   var MC = window.MC = {};
 
+  MC.VERSION = '0.6.0';          // shown in Account and diagnostics
+  MC.SCHEMA = 2;                 // data snapshot format used for cloud sync
   MC.GOAL_HOURS = 10000;           // fixed spiritual goal — not user-editable
   MC.MAX_AGE = 90;
   MC.APP_LINK = 'https://arvindknaik.github.io/Meditation-Copilot/';
@@ -13,7 +15,11 @@
     sessions: 'meditation-copilot:sessions',
     settings: 'meditation-copilot:settings',
     active: 'meditation-copilot:active',
-    theme: 'meditation-copilot:theme'
+    theme: 'meditation-copilot:theme',
+    deleted: 'meditation-copilot:deleted',     // tombstones so deletions sync across devices
+    meta: 'meditation-copilot:meta',           // { profileUpdatedAt, settingsUpdatedAt }
+    account: 'meditation-copilot:account',
+    diag: 'meditation-copilot:diag'
   };
   MC.KEYS = KEYS;
 
@@ -36,8 +42,13 @@
   /* ---------- Profile (roadmap answers) ---------- */
   var DEFAULT_PROFILE = { dob: '', start: '', minutes: '', quality: 75, goalAge: 90 };
   MC.profile = Object.assign({}, DEFAULT_PROFILE, MC.store.get(KEYS.profile, {}));
-  MC.saveProfile = function () { MC.store.set(KEYS.profile, MC.profile); };
-  MC.resetProfile = function () { MC.profile = Object.assign({}, DEFAULT_PROFILE); MC.store.del(KEYS.profile); };
+  var meta = Object.assign({ profileUpdatedAt: 0, settingsUpdatedAt: 0 }, MC.store.get(KEYS.meta, {}));
+  function saveMeta() { MC.store.set(KEYS.meta, meta); }
+  MC.saveProfile = function () { MC.store.set(KEYS.profile, MC.profile); meta.profileUpdatedAt = Date.now(); saveMeta(); MC.emit('changed'); };
+  MC.resetProfile = function () {
+    MC.profile = Object.assign({}, DEFAULT_PROFILE); MC.store.del(KEYS.profile);
+    meta.profileUpdatedAt = Date.now(); saveMeta(); MC.emit('changed');
+  };
   MC.hasProfile = function () {
     var p = MC.profile;
     if (!(p.dob && p.start && p.minutes !== '' && p.goalAge)) return false;
@@ -48,7 +59,10 @@
   /* ---------- Settings ---------- */
   var DEFAULT_SETTINGS = { dailyTarget: null, preset: 30, startBell: true, endBell: true, lastQuality: null };
   MC.settings = Object.assign({}, DEFAULT_SETTINGS, MC.store.get(KEYS.settings, {}));
-  MC.saveSettings = function (patch) { Object.assign(MC.settings, patch || {}); MC.store.set(KEYS.settings, MC.settings); };
+  MC.saveSettings = function (patch) {
+    Object.assign(MC.settings, patch || {}); MC.store.set(KEYS.settings, MC.settings);
+    meta.settingsUpdatedAt = Date.now(); saveMeta(); MC.emit('changed');
+  };
   MC.dailyTarget = function () {
     var t = Number(MC.settings.dailyTarget);
     if (t > 0) return t;
@@ -64,18 +78,28 @@
      { id, start: epoch ms, minutes: actual minutes, quality: 0-100, note, source: 'timer'|'manual' } */
   var sessions = MC.store.get(KEYS.sessions, []);
   if (!Array.isArray(sessions)) sessions = [];
-  function persist() { sessions.sort(function (a, b) { return b.start - a.start; }); MC.store.set(KEYS.sessions, sessions); MC.emit('data'); }
+  sessions.forEach(function (s) { if (!s.updatedAt) s.updatedAt = s.start; });   // migrate older data
+  var deleted = MC.store.get(KEYS.deleted, []);                                    // [{ id, at }]
+  if (!Array.isArray(deleted)) deleted = [];
+  function persist() {
+    sessions.sort(function (a, b) { return b.start - a.start; });
+    MC.store.set(KEYS.sessions, sessions); MC.store.set(KEYS.deleted, deleted);
+    MC.emit('data'); MC.emit('changed');
+  }
+  function newId() { return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9); }
   MC.sessions = {
     all: function () { return sessions.slice().sort(function (a, b) { return b.start - a.start; }); },
     count: function () { return sessions.length; },
     get: function (id) { return sessions.filter(function (s) { return s.id === id; })[0] || null; },
     add: function (s) {
-      s.id = s.id || ('s' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+      s.id = s.id || newId(); s.updatedAt = Date.now();
       sessions.push(s); persist(); return s;
     },
-    update: function (id, patch) { var s = this.get(id); if (s) { Object.assign(s, patch); persist(); } return s; },
-    remove: function (id) { sessions = sessions.filter(function (s) { return s.id !== id; }); persist(); },
-    replaceAll: function (list) { sessions = Array.isArray(list) ? list : []; persist(); }
+    update: function (id, patch) { var s = this.get(id); if (s) { Object.assign(s, patch, { updatedAt: Date.now() }); persist(); } return s; },
+    remove: function (id) {
+      sessions = sessions.filter(function (s) { return s.id !== id; });
+      deleted.push({ id: id, at: Date.now() }); persist();
+    }
   };
   MC.effMin = function (s) { return s.minutes * s.quality / 100; };
 
@@ -365,8 +389,63 @@
     return sessions.filter(function (s) { return start < s.start + s.minutes * 60000 && s.start < end; })[0] || null;
   };
   MC.addSessionsBulk = function (list) {
-    list.forEach(function (s) { s.id = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9); sessions.push(s); });
+    var now = Date.now();
+    list.forEach(function (s) { s.id = newId(); s.updatedAt = now; sessions.push(s); });
     persist();
+  };
+
+  /* ---------- Sync groundwork: snapshot + merge ----------
+     A snapshot is everything that should follow the user across devices. Cloud providers
+     (Google Drive / OneDrive, coming next) will store one snapshot file and merge on each sync:
+       - sittings: union by id; the newer updatedAt wins
+       - deletions: a tombstone removes a sitting unless the sitting was edited after it
+       - roadmap answers and settings: the newer copy wins */
+  var SYNC_SETTINGS = ['dailyTarget', 'preset', 'startBell', 'endBell', 'lastQuality'];
+  MC.snapshot = function () {
+    var st = {}; SYNC_SETTINGS.forEach(function (k) { st[k] = MC.settings[k]; });
+    return {
+      app: 'meditation-copilot', schema: MC.SCHEMA, savedAt: Date.now(),
+      profile: MC.profile, profileUpdatedAt: meta.profileUpdatedAt,
+      settings: st, settingsUpdatedAt: meta.settingsUpdatedAt,
+      sessions: sessions.slice(), deleted: deleted.slice()
+    };
+  };
+  MC.mergeSnapshot = function (remote) {
+    if (!remote || remote.app !== 'meditation-copilot') throw new Error('Not a Meditation Copilot data file');
+    var changed = false;
+    // tombstones: union, keep the latest time per id, drop after 1 year
+    var tomb = {}, cutoff = Date.now() - 365 * 86400000;
+    deleted.concat(remote.deleted || []).forEach(function (t) {
+      if (t && t.id && t.at > cutoff && (!tomb[t.id] || t.at > tomb[t.id])) tomb[t.id] = t.at;
+    });
+    // sittings: newer updatedAt wins
+    var byId = {};
+    sessions.forEach(function (s) { byId[s.id] = s; });
+    (remote.sessions || []).forEach(function (r) {
+      if (!r || !r.id) return;
+      var l = byId[r.id];
+      if (!l || (r.updatedAt || 0) > (l.updatedAt || 0)) { byId[r.id] = r; changed = true; }
+    });
+    var merged = Object.keys(byId).map(function (k) { return byId[k]; }).filter(function (s) {
+      var gone = tomb[s.id] && tomb[s.id] >= (s.updatedAt || 0);
+      return !gone;
+    });
+    if (merged.length !== sessions.length) changed = true;
+    sessions = merged;
+    deleted = Object.keys(tomb).map(function (id) { return { id: id, at: tomb[id] }; });
+    if ((remote.profileUpdatedAt || 0) > meta.profileUpdatedAt && remote.profile) {
+      MC.profile = Object.assign({}, DEFAULT_PROFILE, remote.profile);
+      MC.store.set(KEYS.profile, MC.profile); meta.profileUpdatedAt = remote.profileUpdatedAt; changed = true;
+    }
+    if ((remote.settingsUpdatedAt || 0) > meta.settingsUpdatedAt && remote.settings) {
+      Object.assign(MC.settings, remote.settings); MC.store.set(KEYS.settings, MC.settings);
+      meta.settingsUpdatedAt = remote.settingsUpdatedAt; changed = true;
+    }
+    saveMeta();
+    sessions.sort(function (a, b) { return b.start - a.start; });
+    MC.store.set(KEYS.sessions, sessions); MC.store.set(KEYS.deleted, deleted);
+    if (changed) { MC.emit('data'); MC.emit('profile'); }
+    return changed;
   };
 
   /* ---------- Toast ---------- */
@@ -424,29 +503,14 @@
     } catch (e) {}
   };
 
-  /* ---------- Theme ---------- */
-  function systemDark() { return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches; }
+  /* ---------- Theme (Automatic / Light / Dark — set in the Account sheet) ---------- */
   function applyTheme(t) {
-    if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
-    var dark = t ? t === 'dark' : systemDark();
-    var btn = MC.$('themeBtn');
-    btn.textContent = dark ? '☀️' : '🌙';
-    btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    else document.documentElement.removeAttribute('data-theme');
   }
-  MC.initTheme = function () {
-    applyTheme(MC.store.get(KEYS.theme, null));
-    MC.$('themeBtn').addEventListener('click', function () {
-      var cur = document.documentElement.getAttribute('data-theme');
-      var dark = cur ? cur === 'dark' : systemDark();
-      var t = dark ? 'light' : 'dark';
-      MC.store.set(KEYS.theme, t); applyTheme(t);
-    });
-    if (window.matchMedia) {
-      var mq = matchMedia('(prefers-color-scheme: dark)');
-      var onChange = function () { if (!document.documentElement.getAttribute('data-theme')) applyTheme(null); };
-      if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);
-    }
-  };
+  MC.themePref = function () { var t = MC.store.get(KEYS.theme, null); return t === 'light' || t === 'dark' ? t : 'auto'; };
+  MC.setTheme = function (t) { if (t === 'auto') MC.store.del(KEYS.theme); else MC.store.set(KEYS.theme, t); applyTheme(t); };
+  MC.initTheme = function () { applyTheme(MC.themePref()); };
 
   /* ---------- Router (hash-based: #home, #timer, #insights, #roadmap) ---------- */
   MC.views = {};

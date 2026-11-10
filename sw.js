@@ -1,14 +1,17 @@
 /* Meditation Copilot service worker
- * Bump CACHE_VERSION whenever you change any file so users get the update. */
-const CACHE_VERSION = 'v4';
+ * Release checklist: bump CACHE_VERSION here AND the ?v= number on the css/js links in index.html. */
+const CACHE_VERSION = 'v6';
 const CACHE = 'meditation-copilot-' + CACHE_VERSION;
 const ASSETS = [
   './',
   './index.html',
+  './privacy.html',
   './manifest.json',
   './css/styles.css',
+  './js/config.js',
   './js/quotes.js',
   './js/core.js',
+  './js/diag.js',
   './js/roadmap.js',
   './js/sessions-ui.js',
   './js/timer.js',
@@ -16,6 +19,7 @@ const ASSETS = [
   './js/home.js',
   './js/knowledge.js',
   './js/learn.js',
+  './js/account.js',
   './js/app.js',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -45,7 +49,7 @@ self.addEventListener('fetch', (event) => {
   // Pages: network first (so updates arrive), fall back to the cached app shell offline.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-cache' })
         .then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put('./index.html', copy));
@@ -56,12 +60,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Scripts & styles: network first so code updates arrive together with the page; cache for offline.
+  // Scripts & styles: always revalidate with the server (bypassing a stale browser cache) so code
+  // updates arrive together with the page; fall back to the cached copy offline.
   if (/\.(js|css)$/.test(url.pathname)) {
     event.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-cache' })
         .then((res) => { if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); } return res; })
-        .catch(() => caches.match(req))
+        .catch(() => caches.match(req, { ignoreSearch: true }))
     );
     return;
   }

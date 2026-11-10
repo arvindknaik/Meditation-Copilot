@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://arvindknaik.github.io/Meditation-Copilot/">
 <meta property="og:type" content="website">
 
-<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/styles.css?v=6">
 </head>
 <body>
 <!-- Shared gradient for progress rings -->
@@ -38,8 +38,8 @@
 
 <div class="wrap">
   <header class="top">
-    <div class="brand"><span class="logo" aria-hidden="true">🙏</span> Meditation Copilot <span class="proto-pill" title="Prototype only. Not an approved Science of Spirituality app.">Prototype</span></div>
-    <button class="icon-btn" id="themeBtn" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
+    <div class="brand"><span class="logo" aria-hidden="true">🙏</span><span class="brand-text"><span class="brand-name">Meditation Copilot</span><span class="proto-pill" title="Prototype only. Not an approved Science of Spirituality app.">Prototype</span></span></div>
+    <button class="account-btn" id="accountBtn" aria-label="Account, data and settings">👤 Account</button>
   </header>
 
   <main>
@@ -47,6 +47,8 @@
     <section class="view" id="v-home" aria-label="Today">
       <h1 class="greet" id="greet">Welcome</h1>
       <p class="greet-sub" id="greetSub"></p>
+
+      <div class="card backup-banner" id="backupBanner" hidden></div>
 
       <blockquote class="quote flat" id="thought" style="margin-bottom:16px"></blockquote>
 
@@ -419,6 +421,49 @@
   </form>
 </dialog>
 
+<!-- Welcome: choose how to use the app -->
+<div class="welcome" id="welcome" hidden role="dialog" aria-modal="true" aria-labelledby="wTitle">
+  <div class="welcome-inner">
+    <div class="lotus" aria-hidden="true">🪷</div>
+    <h1 id="wTitle">Meditation Copilot</h1>
+    <p class="tagline">Small moments. Daily practice. Inner transformation.</p>
+    <p class="muted" style="margin:0 0 22px">Sign in to keep your sittings and reflections safe in your own drive, or try it as a guest.</p>
+    <div class="stack" id="welcomeProviders" style="margin-top:0"></div>
+    <div class="or"><span>or</span></div>
+    <button class="btn btn-ghost btn-block" id="guestBtn" style="min-height:52px">Continue as guest</button>
+    <p class="small muted" style="margin:18px 0 0">Prototype only. Not an official or approved Science of Spirituality app.<br>
+      <a href="privacy.html" target="_blank" rel="noopener">Privacy notice</a></p>
+  </div>
+</div>
+
+<!-- Guest warning -->
+<dialog class="sheet" id="guestDlg" aria-labelledby="gTitle">
+  <form method="dialog" class="sheet-body" id="guestForm">
+    <h2 class="sheet-title" id="gTitle" tabindex="-1" autofocus style="outline:none">⚠️ Before you continue as a guest</h2>
+    <p>As a guest, your sittings, reflections and roadmap are stored <b>only on this device</b>. They <b>may be lost at any time</b>, for example if:</p>
+    <ul class="small">
+      <li>browser data or history is cleared,</li>
+      <li>the app is removed or you change phones,</li>
+      <li>on iPhone, Safari removes website data after about 7 days without use (adding the app to your Home Screen helps).</li>
+    </ul>
+    <p class="small">Export a CSV backup regularly from Insights, or sign in later to keep your data in your own drive. Your guest data can be moved into your account when you sign in.</p>
+    <label class="ack"><input type="checkbox" id="guestAck"> I understand my data may be lost</label>
+    <div class="actions">
+      <button type="button" class="btn btn-ghost" id="guestCancel">Back</button>
+      <button type="submit" class="btn btn-primary" id="guestGo" disabled>Continue as guest</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Account sheet -->
+<dialog class="sheet" id="accountDlg" aria-labelledby="acTitle">
+  <div class="sheet-body">
+    <div class="section-title" style="margin-bottom:12px"><h2 class="sheet-title" id="acTitle" tabindex="-1" autofocus style="outline:none;margin:0">Account &amp; settings</h2>
+      <button class="icon-btn" id="accountClose" aria-label="Close" style="width:40px;height:40px;box-shadow:none">✕</button></div>
+    <div id="accountBody"></div>
+  </div>
+</dialog>
+
 <!-- Import result sheet -->
 <dialog class="sheet" id="importDlg" aria-labelledby="imTitle">
   <form method="dialog" class="sheet-body">
@@ -430,15 +475,18 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/quotes.js"></script>
-<script src="js/core.js"></script>
-<script src="js/roadmap.js"></script>
-<script src="js/sessions-ui.js"></script>
-<script src="js/timer.js"></script>
-<script src="js/insights.js"></script>
-<script src="js/home.js"></script>
-<script src="js/knowledge.js"></script>
-<script src="js/learn.js"></script>
-<script src="js/app.js"></script>
+<script src="js/config.js?v=6"></script>
+<script src="js/quotes.js?v=6"></script>
+<script src="js/core.js?v=6"></script>
+<script src="js/diag.js?v=6"></script>
+<script src="js/roadmap.js?v=6"></script>
+<script src="js/sessions-ui.js?v=6"></script>
+<script src="js/timer.js?v=6"></script>
+<script src="js/insights.js?v=6"></script>
+<script src="js/home.js?v=6"></script>
+<script src="js/knowledge.js?v=6"></script>
+<script src="js/learn.js?v=6"></script>
+<script src="js/account.js?v=6"></script>
+<script src="js/app.js?v=6"></script>
 </body>
 </html>

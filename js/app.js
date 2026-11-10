@@ -19,6 +19,13 @@
   }
   MC.route();
 
+  // First launch: choose how to use the app (sign in or guest)
+  if (MC.account.mode() === 'none') MC.account.showWelcome();
+  MC.track('app_open', {
+    installed: (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true,
+    mode: MC.account.mode()
+  });
+
   // Re-render when the day changes or the app comes back to the foreground
   var lastDay = MC.toISO(MC.today());
   document.addEventListener('visibilitychange', function () {

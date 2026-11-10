@@ -29,6 +29,7 @@
   }
 
   function render() {
+    if (MC.account) MC.account.renderBanner();
     var t = MC.today(), tomorrow = MC.addDays(t, 1);
     var today = MC.sumRange(t, tomorrow), week = MC.sumRange(MC.weekStart(t), tomorrow);
     var st = MC.streaks(), target = MC.dailyTarget();
