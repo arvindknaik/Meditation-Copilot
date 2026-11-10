@@ -3,7 +3,7 @@
   'use strict';
   var MC = window.MC = {};
 
-  MC.VERSION = '0.7.1';          // shown in Account and diagnostics
+  MC.VERSION = '0.8.0';          // shown in Account and diagnostics
   MC.SCHEMA = 2;                 // data snapshot format used for cloud sync
   MC.GOAL_HOURS = 10000;           // fixed spiritual goal — not user-editable
   MC.MAX_AGE = 90;
@@ -314,6 +314,36 @@
   };
   function round1(x) { return Math.round(x * 10) / 10; }
 
+  /* Dates in common formats (export always writes YYYY-MM-DD):
+       2026-11-09 · 2026/11/9 · 11/9/2026 · 11-9-2026 · 11/9/26 (US month/day/year)
+       25/11/2026 (day/month when the first number is over 12) · 9-Nov-2026 · Nov 9, 2026 · 9 November 2026
+     Returns a Date only when it is a real calendar date between 1900 and today. */
+  var MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  function monthNum(name) { var i = MONTHS.indexOf(String(name).slice(0, 3).toLowerCase()); return i < 0 ? 0 : i + 1; }
+  function fullYear(y) {
+    y = Number(y);
+    if (y >= 100) return y;
+    var cur = new Date().getFullYear() % 100;
+    return y <= cur + 1 ? 2000 + y : 1900 + y;
+  }
+  function parseFlexibleDate(str) {
+    str = String(str || '').trim().replace(/\s+\d{1,2}:\d{2}(:\d{2})?\s*(am|pm)?$/i, '');   // drop a trailing time (e.g. "11/9/2026 0:00")
+    var y, mo, da, x;
+    if ((x = /^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/.exec(str))) { y = +x[1]; mo = +x[2]; da = +x[3]; }
+    else if ((x = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2}|\d{4})$/.exec(str))) {
+      var a = +x[1], b = +x[2]; y = fullYear(x[3]);
+      if (a > 12 && b <= 12) { da = a; mo = b; } else { mo = a; da = b; }
+    }
+    else if ((x = /^(\d{1,2})[-\s]([A-Za-z]{3,9})\.?[-\s,]+(\d{2}|\d{4})$/.exec(str))) { da = +x[1]; mo = monthNum(x[2]); y = fullYear(x[3]); }
+    else if ((x = /^([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{2}|\d{4})$/.exec(str))) { mo = monthNum(x[1]); da = +x[2]; y = fullYear(x[3]); }
+    else return null;
+    if (!mo || mo > 12 || !da || da > 31 || y < 1900) return null;
+    var d = new Date(y, mo - 1, da);
+    if (d.getFullYear() !== y || d.getMonth() !== mo - 1 || d.getDate() !== da) return null;   // e.g. Feb 30
+    return d;
+  }
+  MC.parseFlexibleDate = parseFlexibleDate;
+
   // RFC 4180 parser: quoted fields, escaped quotes, commas and line breaks inside quotes
   function parseCSVText(text) {
     var rows = [], row = [], field = '', i = 0, q = false, n = text.length;
@@ -354,14 +384,18 @@
       var f = rows[r], rn = 'Row ' + (r + 1) + ': ', bad = [];
       if (f.length !== MC.CSV_HEADER.length) { errors.push(rn + 'expected ' + MC.CSV_HEADER.length + ' columns, found ' + f.length + '.'); continue; }
       var date = f[0], time = f[1], min = f[2], qual = f[3], eff = f[4], note = f[5], src = f[6];
-      var dOk = /^\d{4}-\d{2}-\d{2}$/.test(date), d = dOk ? MC.parseDate(date) : null;
-      if (!d || MC.toISO(d) !== date) bad.push('date "' + date + '" must be a real date as YYYY-MM-DD');
-      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) bad.push('start_time "' + time + '" must be HH:MM (24-hour)');
-      var m = Number(min);
-      if (!/^\d+(\.\d)?$/.test(min) || !(m > 0) || m > 1440) bad.push('minutes "' + min + '" must be a number from 0.1 to 1440 (max one decimal)');
+      var d = parseFlexibleDate(date);
+      if (!d) bad.push('date "' + date + '" is not a valid date (use e.g. 2026-11-09, 11/9/2026 or 9-Nov-2026)');
+      // 24-hour time. Accept H:MM and HH:MM:SS too (Excel often drops the leading zero or adds seconds).
+      var tm = /^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(time.trim());
+      if (!tm) bad.push('start_time "' + time + '" must be a 24-hour time such as 06:00 or 18:30');
+      else time = String(tm[1]).padStart(2, '0') + ':' + tm[2];
+      min = min.trim(); qual = qual.trim().replace(/%$/, ''); eff = eff.trim();
+      var m = round1(Number(min));
+      if (!/^\d+(\.\d{1,2})?$/.test(min) || !(m > 0) || m > 1440) bad.push('minutes "' + min + '" must be a number from 0.1 to 1440');
       var qn = Number(qual);
-      if (!/^\d{1,3}$/.test(qual) || qn > 100) bad.push('quality_pct "' + qual + '" must be a whole number from 0 to 100');
-      if (!/^\d+(\.\d)?$/.test(eff)) bad.push('effective_minutes "' + eff + '" must be a number (max one decimal)');
+      if (!/^\d{1,3}$/.test(qual) || qn > 100) bad.push('quality_pct "' + f[3] + '" must be a whole number from 0 to 100');
+      if (!/^\d+(\.\d{1,2})?$/.test(eff)) bad.push('effective_minutes "' + eff + '" must be a number');
       else if (!bad.length && Math.abs(Number(eff) - round1(m * qn / 100)) > 0.11) bad.push('effective_minutes ' + eff + ' does not equal minutes × quality (' + round1(m * qn / 100) + ')');
       if (note.length > 2000) bad.push('reflection is longer than 2,000 characters');
       if (src !== 'timer' && src !== 'manual') bad.push('source "' + src + '" must be "timer" or "manual"');

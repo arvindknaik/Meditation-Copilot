@@ -9,6 +9,7 @@
   /* ---------- Screen navigation inside the Roadmap view ---------- */
   function show(i) {
     current = i;
+    $('s-challenge').classList.remove('active');
     SCREENS.forEach(function (id, idx) { $(id).classList.toggle('active', idx === i); });
     var isQ = i >= 1 && i <= 5;
     $('progress').hidden = !isQ;
@@ -25,7 +26,12 @@
   function prepare(i) {
     var t = MC.toISO(MC.today());
     if (i === 1) { $('dob').max = t; $('dob').value = state.dob || ''; }
-    if (i === 2) { $('start').max = t; $('start').min = state.dob || ''; $('start').value = state.start || ''; }
+    if (i === 2) {
+      $('start').max = t; $('start').min = state.dob || ''; $('start').value = state.start || '';
+      // For initiates the journey begins at initiation (same saved value)
+      $('s-q2').querySelector('.q-title').textContent = MC.isInitiated() ? 'When were you initiated?' : 'When did your meditation journey begin?';
+      $('s-q2').querySelector('.q-help').textContent = MC.isInitiated() ? 'Your journey to 10,000 hours began at initiation. You can adjust this date.' : 'An approximate date is perfectly fine. Every sincere sitting counts.';
+    }
     if (i === 3) { $('minutes').value = state.minutes; syncMinChips(); }
     if (i === 4) { $('quality').value = state.quality; updateQuality(); }
     if (i === 5) {
@@ -335,10 +341,19 @@
   /* ---------- View hook ---------- */
   MC.views.roadmap = {
     show: function () {
+      if (MC.isSeeker()) {                       // New Seekers: 42-day challenge instead of the 10,000-hour roadmap
+        SCREENS.forEach(function (id) { $(id).classList.remove('active'); });
+        $('progress').hidden = true;
+        $('s-challenge').classList.add('active');
+        MC.challengeUI.render();
+        return;
+      }
+      $('s-challenge').classList.remove('active');
       if (current >= 1 && current <= 5) { show(current); return; }   // mid-questionnaire: stay put
       show(MC.hasProfile() ? 6 : 0);
     },
     start: function () { show(0); }
   };
-  MC.on('data', function () { if (MC.current === 'roadmap' && current === 6) renderResults(); });
+  MC.on('data', function () { if (MC.current === 'roadmap' && current === 6 && !MC.isSeeker()) renderResults(); });
+  MC.on('profile', function () { if (MC.current === 'roadmap') MC.views.roadmap.show(); });
 })();

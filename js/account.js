@@ -42,6 +42,7 @@
       close($('accountDlg'));
       MC.toast('Signed in. ' + (wasGuest ? 'Your guest data was added to ' : 'Your data is saved in ') + prov(id).storeName + '.', 4000);
       MC.route();
+      MC.maybeAskUserType();
     }).catch(function (er) {
       MC.toast(er.message || 'Sign-in failed.', 4500);
       MC.diag.add('signin_error', { provider: id, msg: String(er.message || er) });
@@ -72,6 +73,7 @@
     MC.track('account_guest');
     requestPersist();
     MC.route();
+    MC.maybeAskUserType();
   });
   function requestPersist() {
     if (!navigator.storage || !navigator.storage.persist) return;
@@ -167,6 +169,8 @@
         '<div class="stack" style="margin-top:0" id="sheetProviders">' + providerButtons() + '</div>';
     }
 
+    html += MC.profileSheetHTML();
+
     html += '<div class="section-title" style="margin-top:20px">Your data</div>' +
       '<p class="small" style="margin:-6px 0 10px">' + MC.sessions.count() + ' sittings · last CSV export: ' +
       (days === null ? 'never' : days === 0 ? 'today' : days + ' day' + (days === 1 ? '' : 's') + ' ago') + '</p>' +
@@ -190,6 +194,7 @@
     $('accountBody').innerHTML = html;
 
     if ($('sheetProviders')) $('sheetProviders').addEventListener('click', onProvider);
+    $('acProfile').addEventListener('click', function () { close($('accountDlg')); MC.askUserType(true); });
     if ($('acSync')) $('acSync').addEventListener('click', function () { MC.sync.run(); });
     if ($('acReconnect')) $('acReconnect').addEventListener('click', reconnect);
     if ($('acSignOut')) $('acSignOut').addEventListener('click', signOut);

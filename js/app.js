@@ -23,7 +23,9 @@
   // Skip the welcome screen when returning from Microsoft sign-in (?code=…).
   var returningFromSignIn = /[?&](code|error)=/.test(location.search);
   if (MC.account.mode() === 'none' && !returningFromSignIn) MC.account.showWelcome();
-  MC.sync.init();
+  // After any Microsoft redirect and the first sync (which may bring the profile from the cloud),
+  // ask "Are you an initiate?" if it hasn't been answered yet.
+  MC.sync.init().then(function () { MC.maybeAskUserType(); });
   MC.track('app_open', {
     installed: (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true,
     mode: MC.account.mode()

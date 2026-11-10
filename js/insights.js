@@ -263,7 +263,10 @@
     reader.readAsText(f);
   });
 
-  function renderAll() { renderSummary(); renderChart(); renderPatterns(); renderLog(); }
-  MC.views.insights = { show: function () { shown = pageSize; renderAll(); } };
+  function renderAll() { renderSummary(); renderChart(); MC.renderRewardsCard(); renderPatterns(); renderLog(); }
+  MC.views.insights = { show: function () {
+    shown = pageSize; renderAll();
+    if (/rewards/.test(location.hash)) setTimeout(function () { $('rewardsCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+  } };
   MC.on('data', function () { if (MC.current === 'insights') renderAll(); });
 })();

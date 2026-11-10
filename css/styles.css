@@ -120,6 +120,7 @@ header.top { display: flex; align-items: center; justify-content: space-between;
 .hero h1 { font-family: var(--serif); font-weight: 600; font-size: 2.1rem; line-height: 1.15; margin: 14px 0 8px; color: var(--purple); }
 .tagline { font-family: var(--serif); font-style: italic; color: var(--gold); font-size: 1.1rem; margin: 0 0 18px; }
 .hero p.lead { color: var(--muted); margin: 0 auto 24px; max-width: 34ch; }
+main a:not(.btn):not(.tab):not(.points-line) { color: var(--purple); }
 .goal-badge {
   display: inline-flex; flex-direction: column; align-items: center;
   background: linear-gradient(135deg, var(--gold-soft), var(--purple-soft));
@@ -448,3 +449,52 @@ body.welcome-open { overflow: hidden; }
 .sync-syncing, .sync-connecting { display: inline-block; animation: spin 1s linear infinite; color: var(--purple); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .sync-syncing, .sync-connecting { animation: none; } }
+
+/* 42-day challenge (seekers) */
+.ch-day-title { font-family: var(--serif); font-size: 2.6rem; color: var(--purple); margin: 4px 0 10px; line-height: 1; }
+.ch-day-title span { font-size: 1rem; color: var(--muted); font-family: var(--sans); }
+.ch-dots { display: flex; justify-content: center; gap: 18px; margin: 6px auto 16px; flex-wrap: wrap; }
+.ch-group { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ch-glabel { font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.ch-grid { display: grid; grid-template-columns: repeat(7, 14px); gap: 5px; }
+.ch-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--purple-soft); border: 1.5px solid var(--line); box-sizing: border-box; }
+.ch-dot.p2 { border-radius: 3px; }
+.ch-dot.done { background: var(--gold-bright); border-color: var(--gold-bright); }
+.ch-dot.done.p2 { background: var(--purple-2); border-color: var(--purple-2); }
+.ch-dot.now { border-color: var(--purple-2); box-shadow: 0 0 0 2px var(--purple-soft); }
+.ch-today { background: var(--card-2); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; text-align: left; }
+.ch-today b { display: block; }
+.ch-today span { font-size: .88rem; color: var(--muted); }
+.ch-today.met { background: var(--ok-soft); }
+.ch-today.met b { color: var(--ok); }
+.ch-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.ch-day { text-align: center; border-radius: 12px; padding: 8px 2px; background: var(--card-2); border: 1px solid var(--line); font-size: .72rem; }
+.ch-day b { display: block; font-size: .72rem; }
+.ch-day span { display: block; color: var(--muted); }
+.ch-day i { font-style: normal; font-weight: 800; }
+.ch-day.met i { color: var(--ok); }
+.ch-day.miss i { color: var(--danger); }
+.ch-phases { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ch-phases div { background: var(--card-2); border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
+.ch-phases b { display: block; font-family: var(--serif); color: var(--purple); }
+.ch-phases span { display: block; font-size: .8rem; color: var(--muted); }
+.ch-phases em { font-style: normal; font-weight: 600; color: var(--gold-ink); }
+details.ch-rules summary, details.rw-more summary { cursor: pointer; font-weight: 600; color: var(--purple); padding: 6px 0; }
+details.ch-rules ul { padding-left: 18px; margin: 6px 0 0; }
+details.ch-rules li { margin-bottom: 6px; }
+
+/* Points & rewards */
+.points-line { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; padding: 12px 14px; margin-bottom: 16px; box-shadow: var(--shadow); font-size: .95rem; }
+.points-line b { font-family: var(--serif); font-size: 1.2rem; color: var(--purple); }
+.pl-ic { font-size: 1.2rem; }
+.pl-lvl { background: var(--gold-soft); color: var(--gold-ink); border-radius: 99px; padding: 2px 10px; font-size: .78rem; font-weight: 700; }
+.pl-next { margin-left: auto; color: var(--muted); font-size: .8rem; white-space: nowrap; }
+.rw-total b { font-family: var(--serif); font-size: 2.2rem; color: var(--purple); }
+.rw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-top: 14px; }
+.rw { border: 1px solid var(--line); background: var(--card-2); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 2px; opacity: .75; }
+.rw.earned { opacity: 1; background: linear-gradient(135deg, var(--gold-soft), var(--purple-soft)); border-color: var(--gold-bright); }
+.rw-ic { font-size: 1.4rem; }
+.rw b { font-size: .88rem; }
+.rw small { font-size: .74rem; color: var(--muted); }
+.profile-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }

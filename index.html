@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://arvindknaik.github.io/Meditation-Copilot/">
 <meta property="og:type" content="website">
 
-<link rel="stylesheet" href="css/styles.css?v=8">
+<link rel="stylesheet" href="css/styles.css?v=11">
 </head>
 <body>
 <!-- Shared gradient for progress rings -->
@@ -51,6 +51,8 @@
       <div class="card backup-banner" id="backupBanner" hidden></div>
 
       <blockquote class="quote flat" id="thought" style="margin-bottom:16px"></blockquote>
+
+      <div id="pointsLine"></div>
 
       <div class="card today-card">
         <div class="ring-wrap">
@@ -162,6 +164,8 @@
         <p class="small muted" style="margin:8px 2px 0">Tap a bar for details. The dashed line is your target.</p>
       </div>
 
+      <div class="card" id="rewardsCard"></div>
+
       <div class="card">
         <div class="section-title">Your patterns <span class="small muted">last 30 days</span></div>
         <div class="stats" id="patternTiles"></div>
@@ -182,6 +186,7 @@
 
     <!-- ================= ROADMAP ================= -->
     <section class="view" id="v-roadmap" aria-label="Roadmap">
+      <section class="screen" id="s-challenge"></section>
       <section class="screen" id="s-welcome">
         <div class="card hero">
           <div class="lotus" aria-hidden="true">🪷</div>
@@ -455,6 +460,36 @@
   </form>
 </dialog>
 
+<!-- Practice type: New Seeker or Initiated Member -->
+<dialog class="sheet" id="typeDlg" aria-labelledby="tyTitle">
+  <div class="sheet-body">
+    <h2 class="sheet-title" id="tyTitle" tabindex="-1" autofocus style="outline:none">Welcome 🙏</h2>
+    <div id="tyStep1">
+      <p style="margin:6px 0 16px">Are you an initiate of Science of Spirituality?</p>
+      <div class="stack" style="margin-top:0">
+        <button class="btn btn-primary" id="tyYes" type="button">Yes, I am initiated</button>
+        <button class="btn btn-soft" id="tyNo" type="button">No, I'm a new seeker</button>
+      </div>
+      <p class="small muted" style="margin:14px 0 0">New seekers get a gentle 42-day challenge to build a daily habit. Initiates get the full 10,000-hour Roadmap. You can change this anytime in Account &amp; settings.</p>
+    </div>
+    <form id="tyForm">
+      <div id="tyStep2">
+        <label class="field" for="tyDate">When were you initiated?</label>
+        <input type="date" id="tyDate" required>
+        <label class="field" for="tyBy">By whom?</label>
+        <select id="tyBy" required><option value="" disabled selected>Choose…</option><option value="Sant Rajinder Singh Ji Maharaj">Sant Rajinder Singh Ji Maharaj</option><option value="Sant Darshan Singh Ji Maharaj">Sant Darshan Singh Ji Maharaj</option><option value="Sant Kirpal Singh Ji Maharaj">Sant Kirpal Singh Ji Maharaj</option><option value="Baba Sawan Singh Ji Maharaj">Baba Sawan Singh Ji Maharaj</option><option value="Other">Other</option></select>
+        <p class="small muted" style="margin:10px 2px 0">Your initiation date is also used as the start of your meditation journey on the Roadmap. This stays private: it is never included in statistics or diagnostics.</p>
+        <div class="error" id="tyErr" role="alert"></div>
+        <div class="actions">
+          <button type="button" class="btn btn-ghost" id="tyBack">Back</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </form>
+    <div class="links" style="margin-top:6px"><button class="link" id="tyCancel" type="button">Cancel</button></div>
+  </div>
+</dialog>
+
 <!-- Account sheet -->
 <dialog class="sheet" id="accountDlg" aria-labelledby="acTitle">
   <div class="sheet-body">
@@ -475,19 +510,22 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js?v=8"></script>
-<script src="js/quotes.js?v=8"></script>
-<script src="js/core.js?v=8"></script>
-<script src="js/diag.js?v=8"></script>
-<script src="js/roadmap.js?v=8"></script>
-<script src="js/sessions-ui.js?v=8"></script>
-<script src="js/timer.js?v=8"></script>
-<script src="js/insights.js?v=8"></script>
-<script src="js/home.js?v=8"></script>
-<script src="js/knowledge.js?v=8"></script>
-<script src="js/learn.js?v=8"></script>
-<script src="js/sync.js?v=8"></script>
-<script src="js/account.js?v=8"></script>
-<script src="js/app.js?v=8"></script>
+<script src="js/config.js?v=11"></script>
+<script src="js/quotes.js?v=11"></script>
+<script src="js/core.js?v=11"></script>
+<script src="js/diag.js?v=11"></script>
+<script src="js/challenge.js?v=11"></script>
+<script src="js/rewards.js?v=11"></script>
+<script src="js/roadmap.js?v=11"></script>
+<script src="js/sessions-ui.js?v=11"></script>
+<script src="js/timer.js?v=11"></script>
+<script src="js/insights.js?v=11"></script>
+<script src="js/home.js?v=11"></script>
+<script src="js/knowledge.js?v=11"></script>
+<script src="js/learn.js?v=11"></script>
+<script src="js/sync.js?v=11"></script>
+<script src="js/account.js?v=11"></script>
+<script src="js/profile.js?v=11"></script>
+<script src="js/app.js?v=11"></script>
 </body>
 </html>

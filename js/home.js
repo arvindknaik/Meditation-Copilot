@@ -42,7 +42,7 @@
 
     $('todayMin').textContent = MC.fmtMin(today.minutes);
     $('todayOf').textContent = 'of ' + MC.fmtMin(target) + ' min today';
-    $('targetVal').textContent = MC.fmtMin(target) + ' min';
+    $('targetVal').textContent = MC.fmtMin(target) + ' min' + (MC.targetLocked() ? ' · set by your challenge' : '');
     var ring = $('todayRing');
     MC.setRing(ring, 0);
     requestAnimationFrame(function () { requestAnimationFrame(function () { MC.setRing(ring, today.minutes / target); }); });
@@ -51,9 +51,14 @@
     $('hWeek').textContent = MC.fmtDur(week.minutes);
     $('hWeekCount').textContent = week.count;
 
-    // 10,000-hour journey
+    // Points
+    $('pointsLine').innerHTML = MC.rewardsHomeLine();
+
+    // Seekers: 42-day challenge · Initiates: 10,000-hour journey
     var jc = $('journeyCard');
-    if (MC.hasProfile()) {
+    if (MC.isSeeker()) {
+      jc.innerHTML = MC.challengeHomeCard();
+    } else if (MC.hasProfile()) {
       var r = MC.compute(), pct = r.completed / MC.GOAL_HOURS * 100;
       var next = MC.MILESTONES.filter(function (m) { return m > r.completed; })[0];
       jc.innerHTML = '<div class="section-title">10,000-hour journey <a class="link" href="#roadmap" style="padding:0">Roadmap</a></div>' +
@@ -94,6 +99,7 @@
   /* Daily target sheet */
   var dlg = $('targetDlg');
   $('targetBtn').addEventListener('click', function () {
+    if (MC.targetLocked()) { MC.go('roadmap'); return; }
     $('tdMin').value = MC.dailyTarget();
     $('tdHint').textContent = MC.settings.dailyTarget ? '' : 'Currently using the average from your roadmap answers.';
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');

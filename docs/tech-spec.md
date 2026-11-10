@@ -1,6 +1,6 @@
 # Meditation Copilot — Technical Specification
 
-> **Status:** Prototype (v0.7.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
+> **Status:** Prototype (v0.8.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
 > Sections are brief by design and will grow as the app expands.
 
 ## 1. Architecture overview
@@ -62,6 +62,9 @@ flowchart TB
 | `js/config.js` | Public configuration: Google and Microsoft Client IDs, analytics endpoint, support contact |
 | `js/diag.js` | Private diagnostic log, error capture, `MC.track()` anonymous usage events |
 | `js/sync.js` | Google (GIS token client + Drive `appDataFolder`) and Microsoft (PKCE redirect + Graph app folder) providers; sync engine (pull → merge → push, debounced auto-sync) |
+| `js/challenge.js` | New Seekers' 42-day challenge: rules engine (replays each day) and the seeker Roadmap screen |
+| `js/rewards.js` | Rewards: rules list, points, levels, badges (computed from data) |
+| `js/profile.js` | "Are you an initiate?" question, initiation date and Master, Profile section |
 | `js/account.js` | Welcome / sign-in choice, guest mode and warning, Account & settings sheet, backup reminder, send diagnostics |
 | `privacy.html` | Privacy notice (draft for review); needed for the Google/Microsoft consent screens |
 | `sw.js` · `manifest.json` · `icons/` | Offline caching, install metadata, app icons |
@@ -169,8 +172,43 @@ The header must match exactly. Rows are strictly validated, and any invalid row 
 
 Client IDs go into `js/config.js`; they are public identifiers. On moving to `sosmn.org`, add the new origin and redirect URI to both registrations. Step-by-step guide: `docs/setup-accounts.md`.
 
-## 14. Known limitations
+## 14. User types, seeker challenge and rewards (v0.8.0)
+
+### 14.1 User types
+- `profile.userType`: `'seeker'` (New Seeker) or `'initiated'` (Initiated Member). It's asked once after sign-in or guest choice, and can be changed in Account & settings.
+- Initiates also give `profile.start` (initiation date, the same value as the Roadmap's journey start) and `profile.initiatedBy`: Sant Rajinder Singh Ji Maharaj · Sant Darshan Singh Ji Maharaj · Sant Kirpal Singh Ji Maharaj · Baba Sawan Singh Ji Maharaj · Other.
+- **Roadmap by type:** initiates get the 10,000-hour Roadmap; seekers get the 42-day challenge only (no 5 questions).
+- **Privacy:** user type and initiation details sync like other profile data but are **never** sent to analytics or diagnostics.
+
+### 14.2 Seeker 42-day challenge
+- `profile.challenges = [{ startedOn, endedOn? }]`. Day 1 starts when the seeker taps Start; a restart closes the current run and starts a new one, keeping history.
+- Each completed day is replayed with: target = 15 min for days 1–21, then `round(15 + (n − 21) × 15/21)` for n = 22…42 (reaching 30); a day is met when the total **actual** minutes that day ≥ target.
+  - Missed in phase 1 (count < 21): count − 1 (minimum 0).
+  - Missed in phase 2: count → 21; more than 7 phase-2 misses in total → count 0 (back to day 1).
+  - Today is never counted as missed until it's over.
+- The Today screen's daily target follows the challenge, so seekers can't edit it while a challenge runs. After completion it's 30 min.
+
+### 14.3 Rewards
+- **Rules list** in `js/rewards.js` (`id`, `category`, `icon`, `name`, `points`, `repeat`, `who`, `count(data)`). Points = Σ times × points, **computed from data**, so they're never double-counted, sync automatically, and are never taken away.
+- **Current rules:**
+
+  | Rule | Points |
+  |---|---|
+  | First sitting | 10 |
+  | Daily target met | 5 / day |
+  | 7-day streak (at 7, 14, 28, 35…) | 25 |
+  | 21-day streak (every 21) | 50 |
+  | Challenge Phase 1 complete | 50 |
+  | 42-day challenge complete | 100 |
+  | Logged hours: 25 / 50 / 100 / 250 / 500 / 1,000 / 2,500 / 5,000 / 10,000 | 25 / 50 / 100 / 150 / 200 / 250 / 300 / 500 / 1,000 |
+
+  Hours count **only sittings logged in the app**, not the Roadmap estimate.
+- **Levels:** Seed 0 · Sprout 100 · Bud 300 · Bloom 700 · Lotus 1,500 · Radiant Lotus 3,000. Initiates' thresholds are **× 2**.
+- **Categories for future rules:** practice, consistency, goals, learning, community. New rewards are added as new rules.
+- **Celebration:** a toast appears when a newly earned reward is first seen on a device (tracked in `meditation-copilot:rewards-seen`).
+
+## 15. Known limitations
 - iOS doesn't play the bells while the screen is locked (mitigated by keeping the screen awake).
 - No reminders or notifications yet (Phase B/C).
 - Data is per-device until sync ships; guest data can be lost (warning and backup reminders in place).
-- Google/Microsoft sign-in buttons show "coming soon" until Client IDs are added to `js/config.js`.
+- Streaks and "target met" for days outside a challenge use the **current** daily target (past target changes aren't stored).

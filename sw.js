@@ -1,6 +1,6 @@
 /* Meditation Copilot service worker
  * Release checklist: bump CACHE_VERSION here AND the ?v= number on the css/js links in index.html. */
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v11';
 const CACHE = 'meditation-copilot-' + CACHE_VERSION;
 const ASSETS = [
   './',
@@ -12,6 +12,8 @@ const ASSETS = [
   './js/quotes.js',
   './js/core.js',
   './js/diag.js',
+  './js/challenge.js',
+  './js/rewards.js',
   './js/roadmap.js',
   './js/sessions-ui.js',
   './js/timer.js',
@@ -21,6 +23,7 @@ const ASSETS = [
   './js/learn.js',
   './js/sync.js',
   './js/account.js',
+  './js/profile.js',
   './js/app.js',
   './icons/icon.svg',
   './icons/icon-192.png',

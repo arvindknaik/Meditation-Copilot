@@ -24,7 +24,11 @@ js/insights.js        Totals, chart, patterns, session log, CSV export/import
 js/home.js            Today screen
 js/knowledge.js       Learn articles and sos.org links (draft for SOS review)
 js/learn.js           Learn: search, paginated results, articles
+js/sync.js            Google / Microsoft sign-in and Drive / OneDrive sync
+js/challenge.js       New Seekers' 42-day challenge (rules + screen)
+js/rewards.js         Points, badges and levels (rules list, easy to extend)
 js/account.js         Welcome / sign-in choice, guest mode, Account & settings, backup reminder
+js/profile.js         New Seeker / Initiated Member, initiation date and Master
 js/app.js             Startup and service-worker registration
 manifest.json         PWA manifest (name, colors, icons, shortcuts)
 sw.js                 Service worker: offline support + caching
@@ -37,7 +41,7 @@ push.bat              Windows: add, commit (asks for a message) and push
 ## Features
 - **Today, Timer, Insights, Roadmap, Learn:** see `docs/intent.md` and `docs/product-status.md`.
 - **Guest mode:** data stays on this device only, with a warning and backup reminders. Google and Microsoft sign-in are coming next (`docs/setup-accounts.md`).
-- **CSV export/import:** header must be exactly `date,start_time,minutes,quality_pct,effective_minutes,reflection,source`. Invalid files are rejected; rows overlapping existing sittings are skipped and listed.
+- **CSV export/import:** header must be exactly `date,start_time,minutes,quality_pct,effective_minutes,reflection,source`. Export writes dates as YYYY-MM-DD and times as HH:MM. Import also accepts Excel-style values: dates like `11/9/2026` (US month/day; day/month only when the first number is over 12), `9-Nov-2026` or `Nov 9, 2026`; times like `6:00`; quality like `75%`. Invalid files are rejected; rows overlapping existing sittings are skipped and listed.
 
 **Prototype only. Not an official or approved Science of Spirituality app.**
 
