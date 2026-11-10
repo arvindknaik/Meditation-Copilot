@@ -13,6 +13,10 @@ window.MC_CONFIG = {
   // GoatCounter: 'https://YOURCODE.goatcounter.com/count'
   analyticsEndpoint: 'https://meditation-copilot.goatcounter.com/count',
 
+  // Events server (Cloudflare Worker). Fill in after deploying: docs/setup-cloudflare.md
+  // e.g. 'https://meditation-copilot-api.YOUR-SUBDOMAIN.workers.dev'
+  apiBase: 'https://meditation-copilot-api.aknaik.workers.dev',
+
   support: {
     email: 'MinneapolisCenter@sos.org',
     phone: '612-216-4444'

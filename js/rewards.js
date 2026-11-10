@@ -97,7 +97,11 @@
     };
   }
 
-  MC.rewards = { RULES: RULES, LEVELS: LEVELS, compute: compute };
+  MC.rewards = {
+    RULES: RULES, LEVELS: LEVELS, compute: compute,
+    // Other modules register their own rules (e.g. calendar: "Scheduled Sitting Kept")
+    addRule: function (rule) { if (!RULES.some(function (r) { return r.id === rule.id; })) RULES.push(rule); }
+  };
 
   /* ---------- Celebrate newly earned rewards (per device) ---------- */
   var SEEN_KEY = 'meditation-copilot:rewards-seen';

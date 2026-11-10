@@ -25,6 +25,9 @@ js/home.js            Today screen
 js/knowledge.js       Learn articles and sos.org links (draft for SOS review)
 js/learn.js           Learn: search, paginated results, articles
 js/sync.js            Google / Microsoft sign-in and Drive / OneDrive sync
+js/calendar.js        Calendar: personal schedule, month view, reminders, phone-calendar export
+js/events.js          SOS events: list, event page, RSVP, check-in (code/QR/online), admin tools
+js/vendor/qrcode.js   QR code generator (qrcode-generator 1.5.2, MIT)
 js/challenge.js       New Seekers' 42-day challenge (rules + screen)
 js/rewards.js         Points, badges and levels (rules list, easy to extend)
 js/account.js         Welcome / sign-in choice, guest mode, Account & settings, backup reminder
@@ -33,8 +36,11 @@ js/app.js             Startup and service-worker registration
 manifest.json         PWA manifest (name, colors, icons, shortcuts)
 sw.js                 Service worker: offline support + caching
 icons/                SVG + PNG icons (192, 512, maskable 512, Apple touch 180)
-docs/                 intent.md, tech-spec.md, product-status.md, setup-accounts.md
+docs/                 intent.md, tech-spec.md, product-status.md, setup-accounts.md, events-requirements.md, setup-cloudflare.md
+api/                  Events server (Cloudflare Worker + D1): src/index.js, schema.sql, wrangler.toml
 push.bat              Windows: add, commit (asks for a message) and push
+server-start.bat      Windows: start a local test server at http://localhost:8000/
+server-stop.bat       Windows: stop the local test server
 .nojekyll             Tells GitHub Pages to serve files as-is
 ```
 

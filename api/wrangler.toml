@@ -1,0 +1,20 @@
+# Meditation Copilot — events API on Cloudflare Workers + D1
+# Setup steps: docs/setup-cloudflare.md
+name = "meditation-copilot-api"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://arvindknaik.github.io,http://localhost:8000"
+GOOGLE_CLIENT_ID = "108186102394-sv306m8272h9p5eo4r5fvtolfgut3b09.apps.googleusercontent.com"
+MS_CLIENT_ID = "cc706be3-4021-4460-9705-95d4cd0c00d0"
+# Secrets (NOT in this file):  npx wrangler secret put SESSION_SECRET
+#                              npx wrangler secret put ADMIN_EMAILS
+
+[[d1_databases]]
+binding = "DB"
+database_name = "meditation-copilot"
+database_id = "06f08984-06fa-49cf-9277-88dc293f584f"
+
+[observability]
+enabled = true

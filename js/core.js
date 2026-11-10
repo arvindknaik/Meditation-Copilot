@@ -3,7 +3,7 @@
   'use strict';
   var MC = window.MC = {};
 
-  MC.VERSION = '0.8.0';          // shown in Account and diagnostics
+  MC.VERSION = '0.10.1';          // shown in Account and diagnostics
   MC.SCHEMA = 2;                 // data snapshot format used for cloud sync
   MC.GOAL_HOURS = 10000;           // fixed spiritual goal — not user-editable
   MC.MAX_AGE = 90;
@@ -428,9 +428,49 @@
     persist();
   };
 
+  /* ---------- Other synced lists (e.g. personal schedule) ----------
+     MC.collection('schedule') returns { all, get, add, update, remove }. Items get id, createdAt,
+     updatedAt; deletions leave tombstones so they sync. Included in MC.snapshot() automatically. */
+  var collections = {};
+  function mergeLists(items, tombs, rItems, rTombs) {
+    var changed = false, tomb = {}, cutoff = Date.now() - 365 * 86400000, byId = {};
+    tombs.concat(rTombs || []).forEach(function (t) { if (t && t.id && t.at > cutoff && (!tomb[t.id] || t.at > tomb[t.id])) tomb[t.id] = t.at; });
+    items.forEach(function (x) { byId[x.id] = x; });
+    (rItems || []).forEach(function (r) {
+      if (!r || !r.id) return;
+      var l = byId[r.id];
+      if (!l || (r.updatedAt || 0) > (l.updatedAt || 0)) { byId[r.id] = r; changed = true; }
+    });
+    var merged = Object.keys(byId).map(function (k) { return byId[k]; }).filter(function (x) { return !(tomb[x.id] && tomb[x.id] >= (x.updatedAt || 0)); });
+    if (merged.length !== items.length) changed = true;
+    return { items: merged, tombs: Object.keys(tomb).map(function (id) { return { id: id, at: tomb[id] }; }), changed: changed };
+  }
+  MC.collection = function (name) {
+    if (collections[name]) return collections[name].api;
+    var key = 'meditation-copilot:' + name, dkey = key + ':deleted';
+    var c = { items: MC.store.get(key, []), tombs: MC.store.get(dkey, []) };
+    if (!Array.isArray(c.items)) c.items = [];
+    if (!Array.isArray(c.tombs)) c.tombs = [];
+    c.persist = function (local) {
+      MC.store.set(key, c.items); MC.store.set(dkey, c.tombs);
+      MC.emit(name); if (local) MC.emit('changed');
+    };
+    c.api = {
+      all: function () { return c.items.slice(); },
+      get: function (id) { return c.items.filter(function (x) { return x.id === id; })[0] || null; },
+      add: function (o) { var now = Date.now(); o.id = o.id || newId(); o.createdAt = o.createdAt || now; o.updatedAt = now; c.items.push(o); c.persist(true); return o; },
+      update: function (id, patch) { var x = c.api.get(id); if (x) { Object.assign(x, patch, { updatedAt: Date.now() }); c.persist(true); } return x; },
+      remove: function (id) { c.items = c.items.filter(function (x) { return x.id !== id; }); c.tombs.push({ id: id, at: Date.now() }); c.persist(true); }
+    };
+    c.name = name;
+    collections[name] = c;
+    return c.api;
+  };
+
   // Remove all personal data from this device (used on sign-out when the user asks)
   MC.clearLocalData = function () {
     [KEYS.profile, KEYS.sessions, KEYS.deleted, KEYS.meta, KEYS.active].forEach(function (k) { MC.store.del(k); });
+    Object.keys(collections).forEach(function (n) { var c = collections[n]; c.items = []; c.tombs = []; c.persist(false); });
     sessions = []; deleted = []; meta.profileUpdatedAt = 0; meta.settingsUpdatedAt = 0;
     MC.profile = Object.assign({}, DEFAULT_PROFILE);
     MC.emit('data'); MC.emit('profile');
@@ -449,7 +489,10 @@
       app: 'meditation-copilot', schema: MC.SCHEMA, savedAt: Date.now(),
       profile: MC.profile, profileUpdatedAt: meta.profileUpdatedAt,
       settings: st, settingsUpdatedAt: meta.settingsUpdatedAt,
-      sessions: sessions.slice(), deleted: deleted.slice()
+      sessions: sessions.slice(), deleted: deleted.slice(),
+      collections: Object.keys(collections).reduce(function (o, n) {
+        o[n] = { items: collections[n].items.slice(), deleted: collections[n].tombs.slice() }; return o;
+      }, {})
     };
   };
   MC.mergeSnapshot = function (remote) {
@@ -483,6 +526,15 @@
       Object.assign(MC.settings, remote.settings); MC.store.set(KEYS.settings, MC.settings);
       meta.settingsUpdatedAt = remote.settingsUpdatedAt; changed = true;
     }
+    // Other synced lists (schedule, …)
+    var rc = remote.collections || {};
+    Object.keys(rc).forEach(function (n) {
+      MC.collection(n);
+      var c = collections[n], m = mergeLists(c.items, c.tombs, rc[n].items, rc[n].deleted);
+      c.items = m.items; c.tombs = m.tombs;
+      c.persist(false);
+      if (m.changed) changed = true;
+    });
     saveMeta();
     sessions.sort(function (a, b) { return b.start - a.start; });
     MC.store.set(KEYS.sessions, sessions); MC.store.set(KEYS.deleted, deleted);
@@ -557,7 +609,7 @@
   /* ---------- Router (hash-based: #home, #timer, #insights, #roadmap) ---------- */
   MC.views = {};
   MC.current = null;
-  var VIEWS = ['home', 'timer', 'insights', 'roadmap', 'learn'];
+  var VIEWS = ['home', 'timer', 'calendar', 'insights', 'roadmap', 'learn', 'event'];
   MC.route = function () {
     var name = (location.hash || '#home').slice(1).split('?')[0];
     if (VIEWS.indexOf(name) < 0) name = 'home';

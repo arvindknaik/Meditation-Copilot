@@ -1,6 +1,6 @@
 # Meditation Copilot — Technical Specification
 
-> **Status:** Prototype (v0.8.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
+> **Status:** Prototype (v0.10.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
 > Sections are brief by design and will grow as the app expands.
 
 ## 1. Architecture overview
@@ -62,6 +62,7 @@ flowchart TB
 | `js/config.js` | Public configuration: Google and Microsoft Client IDs, analytics endpoint, support contact |
 | `js/diag.js` | Private diagnostic log, error capture, `MC.track()` anonymous usage events |
 | `js/sync.js` | Google (GIS token client + Drive `appDataFolder`) and Microsoft (PKCE redirect + Graph app folder) providers; sync engine (pull → merge → push, debounced auto-sync) |
+| `js/calendar.js` | Calendar tab: personal schedule (synced), month view, day agenda (kept/missed), next sitting, in-app reminders, `.ics` export, "Scheduled Sitting Kept" reward |
 | `js/challenge.js` | New Seekers' 42-day challenge: rules engine (replays each day) and the seeker Roadmap screen |
 | `js/rewards.js` | Rewards: rules list, points, levels, badges (computed from data) |
 | `js/profile.js` | "Are you an initiate?" question, initiation date and Master, Profile section |
@@ -207,7 +208,44 @@ Client IDs go into `js/config.js`; they are public identifiers. On moving to `so
 - **Categories for future rules:** practice, consistency, goals, learning, community. New rewards are added as new rules.
 - **Celebration:** a toast appears when a newly earned reward is first seen on a device (tracked in `meditation-copilot:rewards-seen`).
 
-## 15. Known limitations
+## 15. Calendar: personal schedule (v0.9.0)
+Full requirements for the calendar and SOS-hosted events are in `docs/events-requirements.md`.
+
+- **Synced collection:** `MC.collection('schedule')` gives a generic list with `createdAt`/`updatedAt` and deletion tombstones. It's included in `MC.snapshot().collections` and merged like sittings, so new synced lists need no core changes.
+- **Sitting time:** `{ id, title, time 'HH:MM', minutes, days [0–6, 0 = Sunday], remind (−1 = none, else minutes before), enabled }`. Several per day are allowed.
+- **Kept:** a logged sitting starts between 30 min before and 60 min after the scheduled time. Matching is greedy and earliest-first, one sitting per scheduled time, and counts only from the day the time was created.
+- **Reminders:**
+  - **Phone calendar:** `.ics` export (weekly `RRULE`, `VALARM`) for reliable reminders.
+  - **In-app:** a message, plus a notification if permitted, while the app is open.
+  - **Push when the app is closed:** needs the Part 2 server.
+- **Reward:** "Scheduled Sitting Kept", 10 points each, registered through `MC.rewards.addRule()`.
+- **SOS-hosted events:** built in v0.10.0, see §16.
+
+## 16. SOS-hosted events (v0.10.0)
+Requirements and decisions D1–D9 are in `docs/events-requirements.md`. Deployment steps are in `docs/setup-cloudflare.md`.
+
+- **Backend (pilot):** a Cloudflare Worker (`api/src/index.js`) with a D1 (SQLite) database (`api/schema.sql`). It is plain JavaScript with standard SQL and no Cloudflare-only libraries, so it can move to Azure Functions with Azure SQL or PostgreSQL later.
+- **Data held on the server:** users (id `provider:sub`, email, name), events, RSVPs and check-ins. It holds no sittings, reflections, profile or initiation details: those stay in the user's own storage.
+- **Identity:**
+  - Google access tokens are checked with `tokeninfo`, and the audience must be our client ID.
+  - Microsoft `id_token`s are verified with RS256 against the consumers JWKS, with audience and issuer checks.
+  - The server then issues its own 30-day HS256 session token.
+  - Admins are listed in the `ADMIN_EMAILS` secret.
+  - `DEV_LOGIN` exists for local testing only.
+- **Endpoints:**
+  - Session, profile and events: `POST /api/session`, `GET /api/me`, `GET /api/events`, `GET /api/events/:id`, `PUT …/rsvp`, `POST …/checkin`.
+  - Admin: `/api/admin/events` (create, edit, cancel/restore, new code), attendees (JSON or CSV), host check-in and undo, user search.
+- **Visibility:** guests see public events only. The online link is shown only to signed-in users, and the check-in code only to admins.
+- **Check-in:**
+  - Methods: 4-digit code, door QR (`#event?e=<id>&c=<code>`), host check-in, or "Join & check in" for online events.
+  - In-person check-in is open from 30 min before start until 30 min after the end. Online check-in is open from 15 min before start until the end.
+  - Check-in is idempotent and sets the RSVP to Going.
+- **Rewards:** `hosted_online` earns 25 points and `hosted_in_person` earns 50, computed from the user's check-ins (cached on the device).
+- **App:** `js/events.js` (events card, event page, admin tools, create/edit form) and `js/vendor/qrcode.js` (qrcode-generator 1.5.2, MIT). The server address is `apiBase` in `js/config.js`. If it is empty, the Calendar shows an "SOS events — coming soon" card with a link to sos.org.
+- **Security:** a CORS allowlist (`ALLOWED_ORIGINS`). Secrets are set with `wrangler secret put` and never committed.
+- **Not built yet:** email reminders (B5, through a cron trigger and an email provider), SMS, and a waitlist (on hold).
+
+## 17. Known limitations
 - iOS doesn't play the bells while the screen is locked (mitigated by keeping the screen awake).
 - No reminders or notifications yet (Phase B/C).
 - Data is per-device until sync ships; guest data can be lost (warning and backup reminders in place).

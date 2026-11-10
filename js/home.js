@@ -51,8 +51,9 @@
     $('hWeek').textContent = MC.fmtDur(week.minutes);
     $('hWeekCount').textContent = week.count;
 
-    // Points
+    // Points and next scheduled sitting
     $('pointsLine').innerHTML = MC.rewardsHomeLine();
+    $('nextSitting').innerHTML = MC.nextSittingHTML ? MC.nextSittingHTML() : '';
 
     // Seekers: 42-day challenge · Initiates: 10,000-hour journey
     var jc = $('journeyCard');

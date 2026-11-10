@@ -144,7 +144,9 @@
   function msSaveTokens(r) {
     tokens.microsoft = Object.assign(tokens.microsoft || {}, {
       access: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000,
-      refresh: r.refresh_token || (tokens.microsoft && tokens.microsoft.refresh) || ''
+      refresh: r.refresh_token || (tokens.microsoft && tokens.microsoft.refresh) || '',
+      idToken: r.id_token || (tokens.microsoft && tokens.microsoft.idToken) || '',       // proves identity to our events server
+      idExp: r.id_token ? Date.now() + 55 * 60000 : ((tokens.microsoft && tokens.microsoft.idExp) || 0)
     });
     saveTokens();
   }
@@ -239,7 +241,13 @@
     if (!x) return '';
     var ss = (x.sessions || []).slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; });
     var dd = (x.deleted || []).slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; });
-    return JSON.stringify([x.profile, x.profileUpdatedAt, x.settings, x.settingsUpdatedAt, ss, dd]);
+    var cols = {};
+    Object.keys(x.collections || {}).sort().forEach(function (n) {
+      var c = x.collections[n];
+      cols[n] = [(c.items || []).slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; }),
+                 (c.deleted || []).slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; })];
+    });
+    return JSON.stringify([x.profile, x.profileUpdatedAt, x.settings, x.settingsUpdatedAt, ss, dd, cols]);
   }
 
   var running = null, again = false, timer = null;
@@ -299,8 +307,27 @@
     },
     // "Reconnect" after a token expired (Google ~1 hour; Microsoft after about a day)
     reconnect: function () { var p = current(); return p ? MC.sync.signIn(p.id) : Promise.resolve(); },
+    // Token our events server can verify: Google access token (audience-checked) or Microsoft ID token.
+    // Returns a promise; for Microsoft it renews silently with the refresh token if needed.
+    identityToken: function () {
+      var p = current();
+      if (!p) return Promise.reject(err('Please sign in with Google or Microsoft.', { needsAuth: true }));
+      if (p.id === 'google') {
+        return G.canSync() ? Promise.resolve({ provider: 'google', accessToken: tokens.google.access })
+          : Promise.reject(err('Please reconnect Google.', { needsAuth: true }));
+      }
+      var t = tokens.microsoft || {};
+      if (t.idToken && t.idExp > Date.now() + 60000) return Promise.resolve({ provider: 'microsoft', idToken: t.idToken });
+      if (!t.refresh) return Promise.reject(err('Please reconnect Microsoft.', { needsAuth: true }));
+      return msToken({ grant_type: 'refresh_token', refresh_token: t.refresh, scope: MS_SCOPE }).then(function () {
+        var n = tokens.microsoft;
+        if (!n.idToken) throw err('Please reconnect Microsoft.', { needsAuth: true });
+        return { provider: 'microsoft', idToken: n.idToken };
+      });
+    },
     signOut: function (removeLocal) {
       var p = current();
+      MC.emit('signout');
       return (p ? p.signOut() : Promise.resolve()).then(function () {
         MC.track('signout', { provider: p ? p.id : 'none' });
         meta.lastSyncAt = 0; saveMeta();

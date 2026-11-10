@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://arvindknaik.github.io/Meditation-Copilot/">
 <meta property="og:type" content="website">
 
-<link rel="stylesheet" href="css/styles.css?v=11">
+<link rel="stylesheet" href="css/styles.css?v=14">
 </head>
 <body>
 <!-- Shared gradient for progress rings -->
@@ -66,6 +66,7 @@
         <div class="stack" style="margin-top:12px">
           <a class="btn btn-primary btn-xl btn-block" href="#timer">🪷 Start Meditation</a>
         </div>
+        <div id="nextSitting"></div>
       </div>
 
       <div class="stats three" style="margin-bottom:16px">
@@ -146,6 +147,17 @@
         </div>
       </div>
     </section>
+
+    <!-- ================= CALENDAR ================= -->
+    <section class="view" id="v-calendar" aria-label="Calendar">
+      <div class="card" id="calMonth"></div>
+      <div class="card" id="calAgenda"></div>
+      <div class="card" id="calSchedule"></div>
+      <div class="card" id="calEvents"></div>
+    </section>
+
+    <!-- ================= EVENT PAGE (#event?e=<id>) ================= -->
+    <section class="view" id="v-event" aria-label="Event"></section>
 
     <!-- ================= INSIGHTS ================= -->
     <section class="view" id="v-insights" aria-label="Insights">
@@ -372,6 +384,9 @@
     <a class="tab" href="#timer" data-tab="timer">
       <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9.5 2.5h5"/></svg></span>Timer
     </a>
+    <a class="tab" href="#calendar" data-tab="calendar">
+      <span class="ic"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg></span>Calendar
+    </a>
     <a class="tab" href="#insights" data-tab="insights">
       <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M21 20H3"/></svg></span>Insights
     </a>
@@ -460,6 +475,81 @@
   </form>
 </dialog>
 
+<!-- Admin: create / edit an SOS event -->
+<dialog class="sheet" id="evDlg" aria-labelledby="efHead">
+  <form class="sheet-body" id="efForm">
+    <h2 class="sheet-title" id="efHead" tabindex="-1" autofocus style="outline:none">New SOS event</h2>
+    <label class="field" for="efTitle">Title</label>
+    <input type="text" id="efTitle" class="text-input" maxlength="120" required placeholder="e.g. Sunday Group Meditation">
+    <label class="field" for="efFormat">Format</label>
+    <select id="efFormat"><option value="in_person">In person</option><option value="online">Online</option><option value="hybrid">In person &amp; online</option></select>
+    <div class="row2" style="grid-template-columns:1.3fr 1fr 1fr">
+      <div><label class="field" for="efDate">Date</label><input type="date" id="efDate" required></div>
+      <div><label class="field" for="efStart">Starts</label><input type="time" id="efStart" required></div>
+      <div><label class="field" for="efEnd">Ends</label><input type="time" id="efEnd" required></div>
+    </div>
+    <div id="efPlace">
+      <label class="field" for="efVenue">Venue</label>
+      <input type="text" id="efVenue" class="text-input" maxlength="120">
+      <label class="field" for="efAddress">Address</label>
+      <input type="text" id="efAddress" class="text-input" maxlength="300" placeholder="Street, city">
+    </div>
+    <div id="efOnline">
+      <label class="field" for="efUrl">Online link (Zoom, YouTube…)</label>
+      <input type="url" id="efUrl" class="text-input" maxlength="500" placeholder="https://">
+      <p class="small muted" style="margin:6px 2px 0">Shown only to signed-in members; opens when they check in.</p>
+    </div>
+    <label class="field" for="efDesc">Description</label>
+    <textarea id="efDesc" maxlength="4000" rows="4"></textarea>
+    <label class="field" for="efVis">Who can see it</label>
+    <select id="efVis"><option value="public">Everyone (shareable)</option><option value="members">Signed-in members only</option></select>
+    <div class="error" id="efErr" role="alert"></div>
+    <div class="actions"><button type="button" class="btn btn-ghost" id="efCancel">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+  </form>
+</dialog>
+
+<!-- Add / edit a sitting time -->
+<dialog class="sheet" id="schedDlg" aria-labelledby="scTitle">
+  <form class="sheet-body" id="scForm">
+    <h2 class="sheet-title" id="scTitle" tabindex="-1" autofocus style="outline:none">Add a sitting time</h2>
+    <div class="row2">
+      <div><label class="field" for="scTime">Time</label><input type="time" id="scTime" required></div>
+      <div><label class="field" for="scMin">Minutes</label><input type="number" id="scMin" inputmode="numeric" min="1" max="600" required></div>
+    </div>
+    <div class="chips" id="scMinChips" style="margin-top:10px">
+      <button type="button" class="chip" data-m="15">15</button><button type="button" class="chip" data-m="30">30</button>
+      <button type="button" class="chip" data-m="45">45</button><button type="button" class="chip" data-m="60">60</button>
+      <button type="button" class="chip" data-m="90">90</button><button type="button" class="chip" data-m="120">120</button>
+    </div>
+    <label class="field">Days</label>
+    <div class="chips" id="sdDays" style="margin-top:0">
+      <button type="button" class="chip" data-d="1">Mon</button><button type="button" class="chip" data-d="2">Tue</button>
+      <button type="button" class="chip" data-d="3">Wed</button><button type="button" class="chip" data-d="4">Thu</button>
+      <button type="button" class="chip" data-d="5">Fri</button><button type="button" class="chip" data-d="6">Sat</button>
+      <button type="button" class="chip" data-d="0">Sun</button>
+      <button type="button" class="chip preset" data-preset="all">Every day</button>
+      <button type="button" class="chip preset" data-preset="wk">Weekdays</button>
+      <button type="button" class="chip preset" data-preset="we">Weekends</button>
+    </div>
+    <label class="field" for="scRemind">Reminder</label>
+    <select id="scRemind">
+      <option value="-1">No reminder</option><option value="0">At start time</option>
+      <option value="5">5 minutes before</option><option value="10">10 minutes before</option>
+      <option value="15">15 minutes before</option><option value="30">30 minutes before</option>
+    </select>
+    <label class="field" for="scName">Name <span style="font-weight:400">(optional)</span></label>
+    <input type="text" id="scName" maxlength="40" placeholder="e.g. Morning meditation" class="text-input">
+    <div class="toggle" id="scEnabledRow"><div><b>Active</b><div class="small muted">Turn off to pause this time without deleting it</div></div>
+      <label class="switch"><input type="checkbox" id="scEnabled" aria-label="Active"><span></span></label></div>
+    <div class="error" id="scErr" role="alert"></div>
+    <div class="actions">
+      <button type="button" class="btn btn-danger" id="scDelete" hidden>Delete</button>
+      <button type="button" class="btn btn-ghost" id="scCancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- Practice type: New Seeker or Initiated Member -->
 <dialog class="sheet" id="typeDlg" aria-labelledby="tyTitle">
   <div class="sheet-body">
@@ -510,22 +600,25 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js?v=11"></script>
-<script src="js/quotes.js?v=11"></script>
-<script src="js/core.js?v=11"></script>
-<script src="js/diag.js?v=11"></script>
-<script src="js/challenge.js?v=11"></script>
-<script src="js/rewards.js?v=11"></script>
-<script src="js/roadmap.js?v=11"></script>
-<script src="js/sessions-ui.js?v=11"></script>
-<script src="js/timer.js?v=11"></script>
-<script src="js/insights.js?v=11"></script>
-<script src="js/home.js?v=11"></script>
-<script src="js/knowledge.js?v=11"></script>
-<script src="js/learn.js?v=11"></script>
-<script src="js/sync.js?v=11"></script>
-<script src="js/account.js?v=11"></script>
-<script src="js/profile.js?v=11"></script>
-<script src="js/app.js?v=11"></script>
+<script src="js/config.js?v=14"></script>
+<script src="js/quotes.js?v=14"></script>
+<script src="js/core.js?v=14"></script>
+<script src="js/diag.js?v=14"></script>
+<script src="js/challenge.js?v=14"></script>
+<script src="js/rewards.js?v=14"></script>
+<script src="js/roadmap.js?v=14"></script>
+<script src="js/sessions-ui.js?v=14"></script>
+<script src="js/timer.js?v=14"></script>
+<script src="js/insights.js?v=14"></script>
+<script src="js/home.js?v=14"></script>
+<script src="js/knowledge.js?v=14"></script>
+<script src="js/learn.js?v=14"></script>
+<script src="js/calendar.js?v=14"></script>
+<script src="js/vendor/qrcode.js?v=14"></script>
+<script src="js/events.js?v=14"></script>
+<script src="js/sync.js?v=14"></script>
+<script src="js/account.js?v=14"></script>
+<script src="js/profile.js?v=14"></script>
+<script src="js/app.js?v=14"></script>
 </body>
 </html>
