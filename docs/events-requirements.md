@@ -134,3 +134,68 @@ Hosted check-ins are recorded by the server, so they can't be self-awarded.
 | B4 | Admin: create/edit events, RSVP and check-in lists, manual check-in, CSV export |
 | B4.1 (v0.11.0) | Repeating events, cancelled events visible, center QR poster, contact details with consent |
 | B5 | Email reminders and announcements; then SMS and push |
+
+## 11. Part 3 — Community features (requested 10 Nov 2026)
+
+### 11.1 Member categories
+| Category | Who | App experience | Event access |
+|---|---|---|---|
+| **Seeker** | New to meditation | 42-day challenge; no 10k roadmap (as today) | Public events |
+| **Seeker Friend** | A seeker who has attended a few events (typically 4–8; the admin's judgement) | Same as Seeker | Public + Satsang events |
+| **Initiate** | Initiated by one of the Masters | 10k roadmap; initiate point thresholds (as today) | All events |
+
+- **Self-declared Seeker or Initiate**, on the phone, as today. Initiates give their initiation date and Master, which only a real initiate can; those details stay on the phone and are never sent to the server. The app sends the server only the word `seeker` or `initiate`.
+- **Seeker Friend is set by an admin** from the new **People** screen (search by name or email), typically after a seeker has attended a few events. An admin can also set someone back to Seeker.
+- New sign-ups are Seeker on the server until the app reports their choice (at the next connection).
+
+### 11.2 Event access level (replaces "visibility")
+| Level | Badge | Who sees it at all |
+|---|---|---|
+| **Public** | 🌍 Public | Everyone, including guests who aren't signed in |
+| **Satsang** | 🪷 Satsang | Initiates and Seeker Friends |
+| **Initiates only** | 🔒 Initiates | Initiates |
+
+- **An event is shown only to people who can attend it.** Anyone else doesn't see it listed, can't open its page, and gets "Event not found" from a shared link. The badge is for those who can see it, so they know who the event is for.
+- RSVP and check-in by code, QR or the center poster follow the same rule. **Host check-in does not** (the host is there and decides).
+- Center poster: if the only open event is one the person can't attend, they see *"Please see the host at the welcome table."* with no further detail.
+- Admins see every event.
+- Existing events: `public` stays public; the old `members` level becomes Satsang.
+- The access level can be changed later, for "this event" or "this and following".
+
+### 11.3 Flyer image
+- Admin can add a flyer when creating an event **or to any existing event** (edit → Flyer → choose image). Replace or remove at any time. For a series: "this event" or "this and following".
+- Formats: JPG or PNG (what the phone camera and most flyers come as). The phone resizes before upload: full size up to 1600 px on the long side (≈ 300 KB) and a 320 px thumbnail. PDF flyers: save as an image first (phones and computers can do this with "Share → Save as image" or a screenshot).
+- Storage: in the events database (one table `flyers`), served by the API with long caching. No extra Cloudflare product or payment method needed. Budget: 1,000 flyers ≈ 300 MB, well within the free 5 GB.
+- Where it shows: thumbnail on the Calendar's event list and day agenda; full flyer at the top of the event page (tap to view full screen). Flyers follow the event's access level.
+
+### 11.4 Featured video on the Today screen
+- Admin sets a **YouTube link** plus a short title (and optional one-line caption) from the SOS events card → "Featured video". One video at a time; clear it to remove.
+- Shown as a card on the Today screen for everyone (guests included), with the video's thumbnail. Tapping opens YouTube (app or new tab). No embedded player, so no YouTube cookies or tracking inside the app, and the page stays light.
+- Only official Science of Spirituality / Sant Rajinder Singh Ji Maharaj channel videos should be featured (same rule as quotes).
+
+### 11.5 Messages and likes on events
+- Signed-in members who can open an event can **like** it (one per person, tap again to unlike) and post a **short message** (up to 280 characters, plain text). Messages show the name from the person's sign-in (editable in Account) and the time.
+- Messages are shown newest first on the event page, with the like count and "Going" count. No replies, no editing: delete and post again.
+- A member can delete their own messages. An admin can delete any message. No notifications for new messages in this phase.
+- Rewards (in the spirit of "reward anything positive"): **+5 points for your first message on an event** (once per event). Likes earn nothing (too cheap to be meaningful).
+- Not visible to guests who aren't signed in.
+
+### 11.6 Blocking a member (low priority; built with the People screen)
+- Admin → People → **Block** (with a reason kept for admins only) / **Unblock**.
+- A blocked person can still use the app on their own phone, but on events they see *"Your account can't take part in center events. Please contact MinneapolisCenter@sos.org."* They can't RSVP, check in, like or post. Their existing RSVPs stay (hidden from counts), and their messages are hidden.
+
+### 11.7 Decisions
+| # | Decision | Agreed / proposed |
+|---|---|---|
+| D15 | Category source | Seeker / Initiate self-declared on the phone (only the word is sent to the server; initiation details stay on the phone). Seeker Friend set by an admin on the People screen. **Amends D8** |
+| D16 | Seeker Friend app experience | Same as Seeker (challenge, thresholds); differs only in event access |
+| D17 | Restricted events visible? | **No.** People see only events they can attend; shared links to others say "Event not found" |
+| D18 | Flyer storage | In the database (no R2 / payment method); JPG/PNG only, resized on the phone |
+| D19 | Video | One featured YouTube link at a time, opens in YouTube; official channels only |
+| D20 | Messages | 280 chars, no replies/edits; own-delete and admin-delete; +5 points for first message per event |
+| D21 | Blocking | Admin-only; blocked people lose events only |
+
+### 11.8 Phasing
+| Phase | Scope |
+|---|---|
+| C1–C4 (v0.12.0) | Built: categories, access levels, People screen with block/unblock, badges, flyers, featured video, likes and messages with the +5 reward |

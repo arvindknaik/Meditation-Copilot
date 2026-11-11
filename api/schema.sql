@@ -23,7 +23,11 @@ CREATE TABLE IF NOT EXISTS users (
   phone         TEXT,                        -- optional, E.164 (+16125551234)
   sms_ok        INTEGER NOT NULL DEFAULT 0,  -- agreed to text reminders
   sms_consent_at INTEGER,                    -- when they agreed (cleared if withdrawn)
-  contact_ack_at INTEGER                     -- when they confirmed contact details and saw the notice
+  contact_ack_at INTEGER,                    -- when they confirmed contact details and saw the notice
+  category      TEXT NOT NULL DEFAULT 'seeker', -- 'seeker' | 'friend' | 'initiate' (seeker/initiate self-declared; friend set by an admin)
+  category_at   INTEGER,
+  blocked_at    INTEGER,                     -- set while blocked from events
+  block_reason  TEXT                         -- admins only
 );
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
@@ -48,7 +52,9 @@ CREATE TABLE IF NOT EXISTS events (
   starts_at     INTEGER NOT NULL,
   ends_at       INTEGER NOT NULL,
   timezone      TEXT NOT NULL DEFAULT 'America/Chicago',
-  visibility    TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'members')),
+  visibility    TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'members')),  -- unused since v0.12 (see access)
+  access        TEXT NOT NULL DEFAULT 'public',  -- 'public' | 'satsang' (initiates + seeker friends) | 'initiates'
+  flyer_id      TEXT,                            -- flyers.id
   status        TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'cancelled')),
   checkin_code  TEXT NOT NULL,              -- 4-digit code shown/announced at the venue (also inside the QR)
   created_by    TEXT,
@@ -76,6 +82,44 @@ CREATE TABLE IF NOT EXISTS checkins (
   PRIMARY KEY (event_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_checkins_user ON checkins(user_id);
+
+CREATE TABLE IF NOT EXISTS flyers (
+  id          TEXT PRIMARY KEY,
+  mime        TEXT NOT NULL,            -- image/jpeg or image/png
+  full        BLOB NOT NULL,            -- up to 1600 px on the long side (resized on the phone)
+  thumb       BLOB NOT NULL,            -- 320 px thumbnail
+  bytes       INTEGER NOT NULL,
+  created_by  TEXT,
+  created_at  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS settings (  -- per-center settings, e.g. the featured video on Today
+  center_id   TEXT NOT NULL REFERENCES centers(id),
+  key         TEXT NOT NULL,
+  value       TEXT,                     -- JSON
+  updated_at  INTEGER NOT NULL,
+  updated_by  TEXT,
+  PRIMARY KEY (center_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS likes (
+  event_id    TEXT NOT NULL REFERENCES events(id),
+  user_id     TEXT NOT NULL REFERENCES users(id),
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (event_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id          TEXT PRIMARY KEY,
+  event_id    TEXT NOT NULL REFERENCES events(id),
+  user_id     TEXT NOT NULL REFERENCES users(id),
+  body        TEXT NOT NULL,            -- plain text, up to 280 characters
+  created_at  INTEGER NOT NULL,
+  deleted_at  INTEGER,                  -- hidden, not removed (author or admin)
+  deleted_by  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_messages_event ON messages(event_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id);
 
 INSERT OR IGNORE INTO centers (id, name, timezone, address)
 VALUES ('mpls', 'Minneapolis Center', 'America/Chicago', NULL);

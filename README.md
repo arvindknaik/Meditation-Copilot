@@ -36,7 +36,7 @@ js/app.js             Startup and service-worker registration
 manifest.json         PWA manifest (name, colors, icons, shortcuts)
 sw.js                 Service worker: offline support + caching
 icons/                SVG + PNG icons (192, 512, maskable 512, Apple touch 180)
-docs/                 intent.md, tech-spec.md, product-status.md, setup-accounts.md, events-requirements.md, setup-cloudflare.md
+docs/                 intent.md, tech-spec.md, product-status.md, setup-accounts.md, events-requirements.md, setup-cloudflare.md, data-model.md
 api/                  Events server (Cloudflare Worker + D1): src/index.js, migrations/, schema.sql, wrangler.toml
 push.bat              Windows: add, commit (asks for a message) and push
 server-start.bat      Windows: start a local test server at http://localhost:8000/

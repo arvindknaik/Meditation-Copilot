@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://arvindknaik.github.io/Meditation-Copilot/">
 <meta property="og:type" content="website">
 
-<link rel="stylesheet" href="css/styles.css?v=15">
+<link rel="stylesheet" href="css/styles.css?v=16">
 </head>
 <body>
 <!-- Shared gradient for progress rings -->
@@ -51,6 +51,8 @@
       <div class="card backup-banner" id="backupBanner" hidden></div>
 
       <blockquote class="quote flat" id="thought" style="margin-bottom:16px"></blockquote>
+
+      <div id="featured"></div>
 
       <div id="pointsLine"></div>
 
@@ -161,6 +163,9 @@
 
     <!-- ================= CENTER CHECK-IN (#checkin — the printed QR at the welcome table) ================= -->
     <section class="view" id="v-checkin" aria-label="Check in"></section>
+
+    <!-- ================= PEOPLE (admin: categories, block) ================= -->
+    <section class="view" id="v-people" aria-label="People"></section>
 
     <!-- ================= INSIGHTS ================= -->
     <section class="view" id="v-insights" aria-label="Insights">
@@ -519,10 +524,30 @@
     </div>
     <label class="field" for="efDesc">Description</label>
     <textarea id="efDesc" maxlength="4000" rows="4"></textarea>
-    <label class="field" for="efVis">Who can see it</label>
-    <select id="efVis"><option value="public">Everyone (shareable)</option><option value="members">Signed-in members only</option></select>
+    <label class="field" for="efAccess">Who can attend</label>
+    <select id="efAccess"><option value="public">🌍 Public — everyone</option><option value="satsang">🪷 Satsang — initiates and seeker friends</option><option value="initiates">🔒 Initiates only</option></select>
+    <p class="small muted" style="margin:6px 2px 0">People only see events they can attend.</p>
+    <label class="field" for="efFlyer">Flyer image <span class="muted">(optional, JPG or PNG)</span></label>
+    <input type="file" id="efFlyer" accept="image/jpeg,image/png,image/*">
+    <div id="efFlyerPrev" class="flyer-prev" hidden><img id="efFlyerImg" alt="Flyer preview"><button type="button" class="link small" id="efFlyerRemove">Remove flyer</button></div>
     <div class="error" id="efErr" role="alert"></div>
     <div class="actions"><button type="button" class="btn btn-ghost" id="efCancel">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+  </form>
+</dialog>
+
+<!-- Admin: featured video on the Today screen -->
+<dialog class="sheet" id="vidDlg" aria-labelledby="vidHead">
+  <form class="sheet-body" id="vidForm">
+    <h2 class="sheet-title" id="vidHead" tabindex="-1" autofocus style="outline:none">Featured video</h2>
+    <p class="small" style="margin:-4px 0 12px">Shown on everyone's Today screen and opens in YouTube. Use official Science of Spirituality videos only.</p>
+    <label class="field" for="vidUrl">YouTube link</label>
+    <input type="url" id="vidUrl" class="text-input" placeholder="https://www.youtube.com/watch?v=…" maxlength="300">
+    <label class="field" for="vidTitle">Title</label>
+    <input type="text" id="vidTitle" class="text-input" maxlength="120" placeholder="e.g. Meditation as Medication for the Soul">
+    <label class="field" for="vidCaption">One-line caption <span class="muted">(optional)</span></label>
+    <input type="text" id="vidCaption" class="text-input" maxlength="200">
+    <div class="error" id="vidErr" role="alert"></div>
+    <div class="actions"><button type="button" class="btn btn-ghost" id="vidCancel">Cancel</button><button type="button" class="btn btn-danger" id="vidClear">Remove</button><button type="submit" class="btn btn-primary">Save</button></div>
   </form>
 </dialog>
 
@@ -636,25 +661,25 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js?v=15"></script>
-<script src="js/quotes.js?v=15"></script>
-<script src="js/core.js?v=15"></script>
-<script src="js/diag.js?v=15"></script>
-<script src="js/challenge.js?v=15"></script>
-<script src="js/rewards.js?v=15"></script>
-<script src="js/roadmap.js?v=15"></script>
-<script src="js/sessions-ui.js?v=15"></script>
-<script src="js/timer.js?v=15"></script>
-<script src="js/insights.js?v=15"></script>
-<script src="js/home.js?v=15"></script>
-<script src="js/knowledge.js?v=15"></script>
-<script src="js/learn.js?v=15"></script>
-<script src="js/calendar.js?v=15"></script>
-<script src="js/vendor/qrcode.js?v=15"></script>
-<script src="js/events.js?v=15"></script>
-<script src="js/sync.js?v=15"></script>
-<script src="js/account.js?v=15"></script>
-<script src="js/profile.js?v=15"></script>
-<script src="js/app.js?v=15"></script>
+<script src="js/config.js?v=16"></script>
+<script src="js/quotes.js?v=16"></script>
+<script src="js/core.js?v=16"></script>
+<script src="js/diag.js?v=16"></script>
+<script src="js/challenge.js?v=16"></script>
+<script src="js/rewards.js?v=16"></script>
+<script src="js/roadmap.js?v=16"></script>
+<script src="js/sessions-ui.js?v=16"></script>
+<script src="js/timer.js?v=16"></script>
+<script src="js/insights.js?v=16"></script>
+<script src="js/home.js?v=16"></script>
+<script src="js/knowledge.js?v=16"></script>
+<script src="js/learn.js?v=16"></script>
+<script src="js/calendar.js?v=16"></script>
+<script src="js/vendor/qrcode.js?v=16"></script>
+<script src="js/events.js?v=16"></script>
+<script src="js/sync.js?v=16"></script>
+<script src="js/account.js?v=16"></script>
+<script src="js/profile.js?v=16"></script>
+<script src="js/app.js?v=16"></script>
 </body>
 </html>

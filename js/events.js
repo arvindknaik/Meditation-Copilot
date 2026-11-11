@@ -22,6 +22,12 @@
   var CENTER = 'mpls';
   var REPEAT = { weekly: 'Repeats weekly', biweekly: 'Repeats every other week', monthly: 'Repeats monthly' };
   var FORMAT = { in_person: '📍 In person', online: '💻 Online', hybrid: '📍💻 In person & online' };
+  var ACCESS = { public: '🌍 Public', satsang: '🪷 Satsang', initiates: '🔒 Initiates' };
+  var CATEGORY = { seeker: 'Seeker', friend: 'Seeker Friend', initiate: 'Initiate' };
+  var MSG_KEY = 'meditation-copilot:event-messages';      // events I've posted a message on (for the +5 reward)
+  var SETTINGS_KEY = 'meditation-copilot:center-settings';
+  function badge(e) { var a = e.access || 'public'; return a === 'public' ? '' : '<span class="badge ' + a + '">' + ACCESS[a] + '</span>'; }
+  function flyerUrl(id, thumb) { return base() + '/api/flyers/' + encodeURIComponent(id) + (thumb ? '?size=thumb' : ''); }
 
   function base() { return String(MC.store.get('meditation-copilot:api-override', null) || CFG.apiBase || '').replace(/\/+$/, ''); }
   var session = MC.store.get(SESSION_KEY, null);
@@ -118,14 +124,28 @@
     MC.toast('Sign in with Google or Microsoft to RSVP and check in.', 4500);
     $('accountBtn').click();
   }
+  var meAt = 0;
   function refreshMe() {
     if (!valid()) return Promise.resolve();
+    meAt = Date.now();
     return api('GET', '/api/me').then(function (j) {
       session.user = j.user; if (j.contact) session.contact = j.contact; MC.store.set(SESSION_KEY, session);
       MC.store.set(CK_KEY, j.checkins || []);
+      MC.store.set(MSG_KEY, j.messageEvents || []);
       MC.emit('data');                          // re-evaluate rewards
+    }).then(syncCategory).catch(function () {});
+  }
+  // Tell the server only the word 'seeker' or 'initiate' (never the initiation details). Seeker Friend is set by an admin.
+  function syncCategory() {
+    if (!valid() || !MC.profile.userType) return Promise.resolve();
+    var mine = MC.profile.userType === 'initiated' ? 'initiate' : 'seeker';
+    var have = session.user && session.user.category;
+    if (have === mine || (mine === 'seeker' && have === 'friend')) return Promise.resolve();
+    return api('PUT', '/api/me/category', { category: mine }).then(function (j) {
+      session.user.category = j.category; MC.store.set(SESSION_KEY, session);
     }).catch(function () {});
   }
+  MC.on('profile', function () { if (valid()) syncCategory(); });
 
   MC.events = {
     enabled: function () { return !!base(); },
@@ -134,8 +154,12 @@
     // Account & settings: event contact details
     accountHTML: function () {
       if (!MC.events.enabled() || !valid()) return '';
+      var cat = session.user && session.user.category;
       return '<div class="section-title" style="margin-top:20px">SOS events</div>' +
-        '<p class="small" style="margin:-6px 0 10px">Contact details: ' + contactSummary() + '</p>' +
+        (cat ? '<p class="small" style="margin:-6px 0 6px">Events status: <b>' + MC.esc(CATEGORY[cat] || cat) + '</b>' +
+          (cat === 'seeker' ? ' <span class="muted">· the center can mark you a Seeker Friend after a few visits</span>' : '') + '</p>' : '') +
+        (session.user && session.user.blocked ? '<p class="small" style="margin:0 0 6px;color:var(--danger,#b00)">Your account can\u2019t take part in center events. Contact MinneapolisCenter@sos.org.</p>' : '') +
+        '<p class="small" style="margin:0 0 10px">Contact details: ' + contactSummary() + '</p>' +
         '<button class="btn btn-ghost btn-sm btn-block" id="acContact">✎ Edit contact details</button>';
     },
     bindAccount: function (close) {
@@ -151,6 +175,8 @@
       count: function () { return MC.events.hostedCheckins().filter(function (c) { return !isInPerson(c); }).length; } });
     MC.rewards.addRule({ id: 'hosted_in_person', category: 'community', icon: '📍', name: 'Attended an SOS Event in Person', desc: 'Check in at an SOS-hosted event in person', points: 50, repeat: true,
       count: function () { return MC.events.hostedCheckins().filter(isInPerson).length; } });
+    MC.rewards.addRule({ id: 'event_message', category: 'community', icon: '💬', name: 'Shared a Reflection on an Event', desc: 'Post your first message on an SOS event', points: 5, repeat: true,
+      count: function () { return (MC.store.get(MSG_KEY, []) || []).length; } });
   }
 
   /* ---------- Formatting ---------- */
@@ -175,7 +201,7 @@
     if (!MC.events.enabled()) return Promise.resolve(cache.events);
     var from = Date.now() - 6 * 3600000, to = Date.now() + 90 * 86400000;
     return api('GET', '/api/events?from=' + from + '&to=' + to).then(function (j) {
-      cache = { events: j.events || [], at: Date.now() };
+      cache = { events: j.events || [], at: Date.now(), blocked: !!j.blocked, blockedMessage: j.message || '' };
       MC.store.set(CACHE_KEY, cache);
       return cache.events;
     });
@@ -191,7 +217,9 @@
       : e.myRsvp === 'going' ? '<span class="ag-st now">Going</span>'
       : e.myRsvp === 'maybe' ? '<span class="ag-st up">Maybe</span>' : '';
     return '<a class="ev-row' + (e.status === 'cancelled' ? ' cx' : '') + '" href="#event?e=' + encodeURIComponent(e.id) + '"><span class="ev-date"><b>' + new Date(e.startsAt).getDate() + '</b>' +
-      new Date(e.startsAt).toLocaleDateString(undefined, { month: 'short' }) + '</span><span class="ag-main"><b>' + MC.esc(e.title) + '</b><small>' +
+      new Date(e.startsAt).toLocaleDateString(undefined, { month: 'short' }) + '</span>' +
+      (e.flyerId ? '<img class="ev-thumb" src="' + MC.esc(flyerUrl(e.flyerId, true)) + '" alt="" loading="lazy">' : '') +
+      '<span class="ag-main"><b>' + MC.esc(e.title) + '</b> ' + badge(e) + '<small>' +
       MC.esc(fmtWhen(e).split(' · ')[1]) + ' · ' + MC.esc(FORMAT[e.format] || '') + (e.going ? ' · ' + e.going + ' going' : '') + '</small></span>' + tag + '</a>';
   }
   function renderCard() {
@@ -203,7 +231,9 @@
       return;
     }
     var html = '<div class="section-title">SOS events' + (MC.events.isAdmin() ? ' <button class="btn btn-soft btn-sm" id="evNew" style="flex:0 0 auto">+ New event</button>' : '') + '</div>';
-    if (MC.events.isAdmin()) html += '<button class="link small" id="evPoster" style="padding:0;margin:-4px 0 8px">🖨 Print the center check-in QR poster</button>';
+    if (MC.events.isAdmin()) html += '<div class="tool-row" style="grid-template-columns:1fr 1fr 1fr;margin:-4px 0 10px">' +
+      '<button class="btn btn-ghost btn-sm" id="evPoster">🖨 QR poster</button><a class="btn btn-ghost btn-sm" href="#people">👥 People</a><button class="btn btn-ghost btn-sm" id="evVideo">▶ Video</button></div>';
+    if (cache.blocked) { el.innerHTML = html + '<p class="small">' + MC.esc(cache.blockedMessage || '') + '</p>'; return; }
     var list = (cache.events || []).filter(function (e) { return e.endsAt > Date.now() - 3600000; });
     html += list.length ? list.slice(0, 12).map(eventRow).join('') : '<p class="small muted" style="margin:0">No upcoming events yet.</p>';
     if (!signedInMode()) html += '<p class="small muted" style="margin:12px 0 0">Sign in with Google or Microsoft to RSVP and check in.</p>';
@@ -211,6 +241,7 @@
     el.innerHTML = html;
     if ($('evNew')) $('evNew').addEventListener('click', function () { openForm(null); });
     if ($('evPoster')) $('evPoster').addEventListener('click', printPoster);
+    if ($('evVideo')) $('evVideo').addEventListener('click', openVideoForm);
     if ($('evConnect')) $('evConnect').addEventListener('click', function () {
       withSession(function () { MC.renderEventsCard(); }).catch(function () {});
     });
@@ -219,7 +250,7 @@
     renderCard();
     // Signed in but not yet connected to the events server: connect quietly (no pop-up) so admin tools and RSVPs show
     var pre = (signedInMode() && !valid() && MC.events.enabled()) ? ensureSession().catch(function () {}) : Promise.resolve();
-    pre.then(loadUpcoming).then(function () { renderCard(); if (MC.current === 'calendar' && MC.views.calendar.refreshMonth) MC.views.calendar.refreshMonth(); })
+    pre.then(function () { if (valid() && Date.now() - meAt > 60000) refreshMe(); }).then(loadUpcoming).then(function () { renderCard(); if (MC.current === 'calendar' && MC.views.calendar.refreshMonth) MC.views.calendar.refreshMonth(); })
       .catch(function (e) { if ($('calEvents') && !(cache.events || []).length) $('calEvents').insertAdjacentHTML('beforeend', '<p class="small muted">' + MC.esc(e.message) + '</p>'); });
   };
 
@@ -246,7 +277,8 @@
     var e = current, view = $('v-event'), html = '';
     var ended = Date.now() > e.endsAt + 30 * 60000, cancelled = e.status === 'cancelled';
     html += '<a class="link" href="#calendar" style="padding:4px 0;display:inline-block">‹ Calendar</a>';
-    html += '<div class="card"><span class="ev-format">' + MC.esc(FORMAT[e.format] || '') + (e.visibility === 'members' ? ' · Members' : '') + '</span>' +
+    html += '<div class="card">' + (e.flyerId ? '<a href="' + MC.esc(flyerUrl(e.flyerId)) + '" target="_blank" rel="noopener"><img class="flyer" src="' + MC.esc(flyerUrl(e.flyerId)) + '" alt="Event flyer"></a>' : '') +
+      '<span class="ev-format">' + MC.esc(FORMAT[e.format] || '') + '</span> ' + badge(e) +
       '<h1 class="ev-title">' + MC.esc(e.title) + '</h1>' +
       '<p class="ev-when">🗓 ' + MC.esc(fmtWhen(e)) + (e.repeats ? '<br><span class="small muted">↻ ' + MC.esc(REPEAT[e.repeats] || '') + '</span>' : '') + '</p>' +
       (cancelled ? '<div class="status behind" style="margin:10px 0">This event has been cancelled.</div>' : '') +
@@ -289,6 +321,14 @@
         (signedInMode() ? '' : '<p class="small muted" style="margin:10px 0 0">Sign in with Google or Microsoft to RSVP. Adults bringing friends: each person registers in the app, before the event or at the door.</p>') + '</div>';
     }
     html += '<div class="tool-row two"><button class="btn btn-ghost btn-sm" id="evIcs">📅 Add to calendar</button><button class="btn btn-ghost btn-sm" id="evShare">↗ Share</button></div>';
+
+    // Likes and messages (signed-in members)
+    html += '<div class="card" id="evSocial" style="margin-top:16px"><div class="section-title">Reflections</div>' +
+      (signedInMode() ? '<div class="social-row"><button class="like-btn' + (e.myLike ? ' on' : '') + '" id="evLike" aria-pressed="' + !!e.myLike + '">🙏 ' + (e.likes || 0) + '</button>' +
+          '<span class="small muted">' + (e.messages || 0) + ' message' + ((e.messages || 0) === 1 ? '' : 's') + '</span></div>' +
+        '<form class="msg-form" id="msgForm"><textarea id="msgText" maxlength="280" rows="2" placeholder="Share a brief reflection or a kind word… (+5 points for your first)" aria-label="Message"></textarea>' +
+          '<button class="btn btn-soft btn-sm" type="submit">Post</button></form><div class="msg-count" id="msgCount">0 / 280</div><div id="msgList" class="small muted">Loading…</div>'
+        : '<p class="small muted" style="margin:-6px 0 0">Sign in to see and share reflections on this event.</p>') + '</div>';
 
     // Admin tools
     if (MC.events.isAdmin()) html += '<div class="card admin-card" id="evAdmin" style="margin-top:16px"></div>';
@@ -337,6 +377,7 @@
       setTimeout(function () { if (w && !w.closed && w.location.href === 'about:blank' && !valid()) w.close(); }, 15000);
     });
     $('evIcs').addEventListener('click', function () { downloadIcs(e); });
+    if ($('msgForm')) bindSocial(e);
     $('evShare').addEventListener('click', function () {
       var text = '🙏 Join me at "' + e.title + '" · ' + fmtWhen(e) + (e.format === 'online' ? ' (online)' : e.venue ? ' at ' + e.venue : '') + '\n' + linkFor(e);
       MC.track('event_share');
@@ -358,6 +399,159 @@
     a.href = url; a.download = 'sos-event.ics'; document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1000);
     MC.toast('Calendar file downloaded. Open it to add the event.');
+  }
+
+  /* ---------- Likes and messages ---------- */
+  function bindSocial(e) {
+    var list = $('msgList');
+    function row(mg) {
+      return '<div class="msg" data-id="' + MC.esc(mg.id) + '"><div class="msg-head"><span><b>' + MC.esc(mg.name || 'Member') + '</b> · ' + MC.esc(MC.fmtDate(new Date(mg.createdAt), { month: 'short', day: 'numeric' })) + ' ' + MC.esc(MC.fmtTime(mg.createdAt)) + '</span>' +
+        (mg.mine || MC.events.isAdmin() ? '<button class="link small" data-del="' + MC.esc(mg.id) + '" style="padding:0">Delete</button>' : '') + '</div><p class="msg-body">' + MC.esc(mg.body) + '</p></div>';
+    }
+    function load() {
+      if (!valid()) { list.innerHTML = '<p class="small muted">Connect to SOS events to see reflections.</p>'; return; }
+      api('GET', '/api/events/' + encodeURIComponent(e.id) + '/messages').then(function (j) {
+        $('evLike').textContent = '🙏 ' + j.likes; $('evLike').classList.toggle('on', !!j.myLike); $('evLike').setAttribute('aria-pressed', String(!!j.myLike));
+        list.className = ''; list.innerHTML = (j.messages || []).length ? j.messages.map(row).join('') : '<p class="small muted">No reflections yet. Be the first 🙏</p>';
+      }).catch(function (x) { list.innerHTML = '<p class="small muted">' + MC.esc(x.message) + '</p>'; });
+    }
+    $('msgText').addEventListener('input', function () { $('msgCount').textContent = $('msgText').value.length + ' / 280'; });
+    $('evLike').addEventListener('click', function () {
+      var on = $('evLike').classList.contains('on');
+      withSession(function () {
+        return api(on ? 'DELETE' : 'PUT', '/api/events/' + encodeURIComponent(e.id) + '/like').then(function (j) {
+          $('evLike').textContent = '🙏 ' + j.likes; $('evLike').classList.toggle('on', !!j.myLike); $('evLike').setAttribute('aria-pressed', String(!!j.myLike));
+          MC.track('event_like', { on: !on });
+        });
+      }).catch(function () {});
+    });
+    $('msgForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var text = $('msgText').value.trim(); if (!text) return;
+      withSession(function () {
+        return api('POST', '/api/events/' + encodeURIComponent(e.id) + '/messages', { body: text }).then(function (j) {
+          $('msgText').value = ''; $('msgCount').textContent = '0 / 280';
+          if (j.firstOnEvent) { var m = MC.store.get(MSG_KEY, []) || []; if (m.indexOf(e.id) < 0) { m.push(e.id); MC.store.set(MSG_KEY, m); MC.emit('data'); } MC.toast('Thank you for sharing 🙏 +5 points'); }
+          else MC.toast('Posted.');
+          MC.track('event_message'); load();
+        });
+      }).catch(function () {});
+    });
+    list.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-del]'); if (!b) return;
+      if (!window.confirm('Delete this message?')) return;
+      api('DELETE', '/api/events/' + encodeURIComponent(e.id) + '/messages/' + encodeURIComponent(b.dataset.del)).then(function () { refreshMe(); load(); }).catch(function (x) { MC.toast(x.message); });
+    });
+    load();
+  }
+
+  /* ---------- Featured video on Today (everyone) ---------- */
+  var settingsAt = 0;
+  MC.renderFeatured = function () {
+    var el = $('featured'); if (!el || !MC.events.enabled()) return;
+    var paint = function (st) {
+      var v = st && st.featuredVideo;
+      el.innerHTML = v ? '<a class="card featured" href="' + MC.esc(v.url) + '" target="_blank" rel="noopener" id="featuredLink"><span class="ft-img"><img src="https://i.ytimg.com/vi/' + MC.esc(v.videoId) + '/mqdefault.jpg" alt=""><span class="ft-play">▶</span></span>' +
+        '<span><b>' + MC.esc(v.title) + '</b>' + (v.caption ? '<small>' + MC.esc(v.caption) + '</small>' : '') + '<small>Watch on YouTube ↗</small></span></a>' : '';
+      if ($('featuredLink')) $('featuredLink').addEventListener('click', function () { MC.track('featured_video'); });
+    };
+    var cached = MC.store.get(SETTINGS_KEY, null);
+    if (cached) paint(cached.settings);
+    if (Date.now() - settingsAt < 5 * 60000) return;
+    settingsAt = Date.now();
+    // The browser may cache this for 5 minutes; the ?v= changes after an admin saves, so the new value shows at once
+    api('GET', '/api/centers/' + CENTER + '/settings?v=' + ((cached && cached.at) || 0)).then(function (j) { MC.store.set(SETTINGS_KEY, { settings: j.settings || {}, at: Date.now() }); paint(j.settings); })
+      .catch(function () { settingsAt = 0; });
+  };
+  var vidDlg = $('vidDlg');
+  function openVideoForm() {
+    var cur = (MC.store.get(SETTINGS_KEY, null) || {}).settings; cur = cur && cur.featuredVideo;
+    $('vidUrl').value = cur ? cur.url : ''; $('vidTitle').value = cur ? cur.title : ''; $('vidCaption').value = cur ? (cur.caption || '') : ''; $('vidErr').textContent = '';
+    $('vidClear').hidden = !cur;
+    if (vidDlg.showModal) vidDlg.showModal(); else vidDlg.setAttribute('open', '');
+  }
+  function saveVideo(v) {
+    return api('PUT', '/api/admin/centers/' + CENTER + '/settings', { featuredVideo: v }).then(function (j) {
+      MC.store.set(SETTINGS_KEY, { settings: j.settings || {}, at: Date.now() }); settingsAt = 0;
+      vidDlg.close(); MC.toast(v ? 'Featured video updated.' : 'Featured video removed.');
+    }).catch(function (x) { $('vidErr').textContent = x.message; });
+  }
+  $('vidCancel').addEventListener('click', function () { vidDlg.close(); });
+  $('vidClear').addEventListener('click', function () { if (window.confirm('Remove the featured video from the Today screen?')) saveVideo(null); });
+  $('vidForm').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var url = $('vidUrl').value.trim();
+    if (!url) { $('vidErr').textContent = 'Paste a YouTube link.'; return; }
+    saveVideo({ url: url, title: $('vidTitle').value.trim() || 'Featured video', caption: $('vidCaption').value.trim() });
+  });
+
+  /* ---------- People (admin): categories and blocking ---------- */
+  function showPeople() {
+    var view = $('v-people');
+    if (!MC.events.isAdmin()) { view.innerHTML = '<div class="card">Admins only.</div>'; return; }
+    view.innerHTML = '<a class="link" href="#calendar" style="padding:4px 0;display:inline-block">‹ Calendar</a>' +
+      '<div class="card"><div class="section-title">People <span class="small muted">admin</span></div>' +
+      '<p class="small" style="margin:-6px 0 10px">Seeker and Initiate are what people chose on their phone. Mark a seeker a <b>Seeker Friend</b> after a few visits so they can attend Satsang events.</p>' +
+      '<input type="search" id="ppFind" class="text-input" placeholder="Search by name or email" autocomplete="off"><div id="ppList" style="margin-top:8px"></div></div>';
+    var t, list = $('ppList');
+    function row(u) {
+      var blocked = !!u.blockedAt;
+      return '<div class="pp-row' + (blocked ? ' blocked' : '') + '" data-uid="' + MC.esc(u.userId) + '"><span class="ag-main"><b>' + MC.esc(u.name || '') + '</b><small>' + MC.esc(u.email || '') +
+        (u.phone ? ' · ' + MC.esc(fmtPhone(u.phone)) : '') + ' · ' + (u.visits || 0) + ' visit' + (u.visits === 1 ? '' : 's') +
+        (u.lastVisitAt ? ', last ' + MC.esc(MC.fmtDate(new Date(u.lastVisitAt), { month: 'short', day: 'numeric' })) : '') +
+        (blocked ? ' · <b>Blocked</b>' + (u.blockReason ? ' (' + MC.esc(u.blockReason) + ')' : '') : '') + '</small></span>' +
+        '<select data-cat aria-label="Category">' + ['seeker', 'friend', 'initiate'].map(function (c) { return '<option value="' + c + '"' + (u.category === c ? ' selected' : '') + '>' + CATEGORY[c] + '</option>'; }).join('') + '</select>' +
+        '<button class="btn btn-ghost btn-sm" data-block="' + (blocked ? '0' : '1') + '">' + (blocked ? 'Unblock' : 'Block') + '</button></div>';
+    }
+    function search() {
+      var q = $('ppFind').value.trim();
+      if (q.length < 2) { list.innerHTML = '<p class="small muted">Type at least two letters.</p>'; return; }
+      api('GET', '/api/admin/users?q=' + encodeURIComponent(q)).then(function (j) {
+        list.innerHTML = (j.users || []).length ? j.users.map(row).join('') : '<p class="small muted">No one found. They need to sign in to the app first.</p>';
+      }).catch(function (x) { list.innerHTML = '<p class="small muted">' + MC.esc(x.message) + '</p>'; });
+    }
+    $('ppFind').addEventListener('input', function () { clearTimeout(t); t = setTimeout(search, 300); });
+    list.addEventListener('change', function (ev) {
+      var sel = ev.target.closest('[data-cat]'); if (!sel) return;
+      var uid = sel.closest('.pp-row').dataset.uid;
+      api('PATCH', '/api/admin/users?user=' + encodeURIComponent(uid), { category: sel.value }).then(function (j) { MC.toast(MC.esc(j.user.name) + ' is now ' + CATEGORY[j.user.category] + '.'); })
+        .catch(function (x) { MC.toast(x.message); search(); });
+    });
+    list.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-block]'); if (!b) return;
+      var uid = b.closest('.pp-row').dataset.uid, block = b.dataset.block === '1', reason = '';
+      if (block) { reason = window.prompt('Block this person from center events? Add a short note for admins (optional):'); if (reason === null) return; }
+      else if (!window.confirm('Unblock this person?')) return;
+      api('PATCH', '/api/admin/users?user=' + encodeURIComponent(uid), { blocked: block, reason: reason }).then(function () { MC.toast(block ? 'Blocked.' : 'Unblocked.'); search(); })
+        .catch(function (x) { MC.toast(x.message); });
+    });
+    list.innerHTML = '<p class="small muted">Type at least two letters.</p>';
+    setTimeout(function () { $('ppFind').focus(); }, 50);
+  }
+  MC.views.people = { show: showPeople };
+
+  /* ---------- Flyer images: resized on the phone, uploaded as JPEG ---------- */
+  function readImage(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(err('That file is not an image the phone can read. Use a JPG or PNG.')); };
+      img.src = url;
+    });
+  }
+  function scaled(img, max, quality) {
+    var w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, max / Math.max(w, h));
+    var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+    var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', quality).split(',')[1];
+  }
+  function prepareFlyer(file) {
+    if (file.size > 25 * 1024 * 1024) return Promise.reject(err('That image is too large (over 25 MB).'));
+    return readImage(file).then(function (img) {
+      var full = scaled(img, 1600, 0.82);
+      if (full.length > 1100000) full = scaled(img, 1200, 0.72);
+      return { mime: 'image/jpeg', full: full, thumb: scaled(img, 320, 0.8) };
+    });
   }
 
   /* ---------- Admin: door screen, attendees, host check-in ---------- */
@@ -427,7 +621,7 @@
       var going = a.filter(function (x) { return x.rsvp === 'going'; }).length;
       $('adList').innerHTML = '<p class="small" style="margin:0 0 8px"><b>' + inN + '</b> checked in · <b>' + going + '</b> going · ' + a.length + ' responded</p>' +
         (a.length ? a.map(function (x) {
-          return '<div class="ad-row"><span class="ag-main"><b>' + MC.esc(x.name || '') + '</b><small>' + MC.esc(x.email || '') + (x.phone ? ' · ' + MC.esc(fmtPhone(x.phone)) : '') + ' · ' +
+          return '<div class="ad-row"><span class="ag-main"><b>' + MC.esc(x.name || '') + '</b> <span class="badge">' + MC.esc(CATEGORY[x.category] || 'Seeker') + '</span><small>' + MC.esc(x.email || '') + (x.phone ? ' · ' + MC.esc(fmtPhone(x.phone)) : '') + ' · ' +
             (x.rsvp ? { going: 'Going', maybe: 'Maybe', no: 'Can\u2019t go' }[x.rsvp] : 'No RSVP') +
             (x.checkedInAt ? ' · ✓ ' + MC.esc(MC.fmtTime(x.checkedInAt)) + ' (' + x.method + ')' : '') + '</small></span>' +
             (x.checkedInAt ? '<button class="btn btn-ghost btn-sm" data-unck="' + MC.esc(x.userId) + '">Undo</button>'
@@ -461,7 +655,9 @@
     $('efAddress').value = e ? (e.address || '') : '';
     $('efUrl').value = e ? (e.onlineUrl || '') : '';
     $('efDesc').value = e ? (e.description || '') : '';
-    $('efVis').value = e ? e.visibility : 'public';
+    $('efAccess').value = e ? (e.access || 'public') : 'public';
+    flyerPending = null; flyerRemove = false; $('efFlyer').value = '';
+    setFlyerPreview(e && e.flyerId ? flyerUrl(e.flyerId, true) : null);
     $('efHead').textContent = e ? 'Edit event' : 'New SOS event';
     $('efErr').textContent = '';
     $('efRepeatBox').hidden = !!e;
@@ -479,6 +675,15 @@
     $('efOnline').hidden = f === 'in_person';
   }
   $('efFormat').addEventListener('change', syncFormat);
+  var flyerPending = null, flyerRemove = false;
+  function setFlyerPreview(src) { $('efFlyerPrev').hidden = !src; if (src) $('efFlyerImg').src = src; }
+  $('efFlyer').addEventListener('change', function () {
+    var f = $('efFlyer').files && $('efFlyer').files[0]; if (!f) return;
+    $('efErr').textContent = 'Preparing image…';
+    prepareFlyer(f).then(function (p) { flyerPending = p; flyerRemove = false; setFlyerPreview('data:image/jpeg;base64,' + p.thumb); $('efErr').textContent = ''; })
+      .catch(function (x) { $('efErr').textContent = x.message; $('efFlyer').value = ''; });
+  });
+  $('efFlyerRemove').addEventListener('click', function () { flyerPending = null; flyerRemove = true; $('efFlyer').value = ''; setFlyerPreview(null); });
 
   /* Repeating events: dates are worked out here in local time (daylight saving stays right) */
   var skipped = {};
@@ -540,7 +745,7 @@
       title: $('efTitle').value, format: f, startsAt: startsAt, endsAt: endsAt,
       timezone: (Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago'),
       venue: f === 'online' ? '' : $('efVenue').value, address: f === 'online' ? '' : $('efAddress').value,
-      onlineUrl: f === 'in_person' ? '' : $('efUrl').value, description: $('efDesc').value, visibility: $('efVis').value
+      onlineUrl: f === 'in_person' ? '' : $('efUrl').value, description: $('efDesc').value, access: $('efAccess').value
     };
     var freq = !editing && $('efRepeat').value;
     if (freq) {
@@ -554,8 +759,18 @@
       payload.startsAt = payload.occurrences[0].startsAt; payload.endsAt = payload.occurrences[0].endsAt;
     }
     var scope = editing && editing.seriesId && $('efScope').value === 'future' ? '?scope=future' : '';
-    var req = editing ? api('PATCH', '/api/admin/events/' + encodeURIComponent(editing.id) + scope, payload) : api('POST', '/api/admin/events', payload);
+    $('efErr').textContent = flyerPending ? 'Uploading flyer…' : '';
+    var upload = flyerPending ? api('POST', '/api/admin/flyers', flyerPending).then(function (j) { return j.flyerId; }) : Promise.resolve(null);
+    var req = upload.then(function (flyerId) {
+      if (!editing) { if (flyerId) payload.flyerId = flyerId; return api('POST', '/api/admin/events', payload); }
+      return api('PATCH', '/api/admin/events/' + encodeURIComponent(editing.id) + scope, payload).then(function (j) {
+        var fl = flyerId ? api('PUT', '/api/admin/events/' + encodeURIComponent(editing.id) + '/flyer' + scope, { flyerId: flyerId })
+          : flyerRemove && editing.flyerId ? api('DELETE', '/api/admin/events/' + encodeURIComponent(editing.id) + '/flyer' + scope) : Promise.resolve();
+        return fl.then(function () { return j; });
+      });
+    });
     req.then(function (j) {
+      flyerPending = null; flyerRemove = false;
       dlg.close();
       MC.toast(editing ? (j.count > 1 ? j.count + ' events updated.' : 'Event updated.') : (j.count > 1 ? j.count + ' events created. 🙏' : 'Event created. 🙏'));
       MC.track(editing ? 'event_edit' : 'event_create');
@@ -592,6 +807,10 @@
     withSession(function () {
       return api('POST', '/api/centers/' + CENTER + '/checkin', eventId ? { eventId: eventId } : {}).then(function (r) {
         MC.store.del(PENDING_KEY);
+        if (!r.open && r.seeHost) {
+          view.innerHTML = '<div class="card ck-big"><div class="ck-icon">🙏</div><h1>Welcome</h1><p>Please see the host at the welcome table.</p><a class="btn btn-ghost btn-block" href="#calendar" style="margin-top:10px">See all events</a></div>';
+          return;
+        }
         if (!r.open) {
           view.innerHTML = '<div class="card ck-big"><div class="ck-icon">🕊</div><h1>No event right now</h1>' +
             '<p>Check-in opens 30 minutes before an event starts.</p>' +

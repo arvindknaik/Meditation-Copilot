@@ -144,6 +144,46 @@ async function verifyMicrosoft(env, idToken) {
   return { id: 'microsoft:' + (claims.oid || claims.sub), provider: 'microsoft', email, name: claims.name || email.split('@')[0] };
 }
 
+/* ---------------- access levels and categories ---------------- */
+const ACCESS_RANK = { public: 0, satsang: 1, initiates: 2 };
+const CATEGORY_RANK = { seeker: 0, friend: 1, initiate: 2 };
+const ACCESS_LEVELS = Object.keys(ACCESS_RANK), CATEGORIES = Object.keys(CATEGORY_RANK);
+// Which access levels a person may see / attend. Admins see everything; guests only public events.
+function levelsFor(u, admin) {
+  if (admin) return ACCESS_LEVELS;
+  const r = u ? CATEGORY_RANK[u.category] || 0 : 0;
+  return ACCESS_LEVELS.filter((a) => ACCESS_RANK[a] <= r);
+}
+const sqlIn = (list) => '(' + list.map((x) => "'" + x + "'").join(',') + ')';
+async function loadUser(db, uid) { return uid ? db.prepare('SELECT * FROM users WHERE id = ?1').bind(uid).first() : null; }
+const BLOCKED_MSG = 'Your account can\u2019t take part in center events. Please contact MinneapolisCenter@sos.org.';
+// A signed-in member who may take part in events (not blocked). Returns the user row.
+async function requireMember(request, env, db) {
+  const s = await requireUser(request, env);
+  const u = await loadUser(db, s.uid);
+  if (!u) throw new HttpError(401, 'Please sign in again');
+  if (u.blocked_at) throw new HttpError(403, BLOCKED_MSG);
+  return { s, u, admin: isAdmin(env, s.email) };
+}
+function canAttend(e, u, admin) { return levelsFor(u, admin).includes(e.access || 'public'); }
+function meOf(s, u, env) {
+  return { id: s.uid, email: s.email, name: (u && u.name) || s.name, isAdmin: isAdmin(env, s.email),
+    category: (u && u.category) || 'seeker', blocked: !!(u && u.blocked_at) };
+}
+const esc = (v) => String(v == null ? '' : v);
+// Plain-text message: collapse whitespace, strip control characters, cap length
+function cleanMessage(v) {
+  const t = esc(v).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  if (!t) throw bad('Write a short message first.');
+  if (t.length > 280) throw bad('Messages can be up to 280 characters.');
+  return t;
+}
+// YouTube link → video id (watch, youtu.be, shorts, embed, live)
+function youtubeId(url) {
+  const m = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/.exec(esc(url));
+  return m ? m[1] : null;
+}
+
 /* ---------------- events helpers ---------------- */
 function windowFor(ev, method) {
   if (method === 'online') return [ev.starts_at - 15 * MIN, ev.ends_at];
@@ -153,8 +193,9 @@ function publicEvent(ev, opts = {}) {
   const out = {
     id: ev.id, centerId: ev.center_id, title: ev.title, description: ev.description, format: ev.format,
     venue: ev.venue, address: ev.address, startsAt: ev.starts_at, endsAt: ev.ends_at, timezone: ev.timezone,
-    visibility: ev.visibility, status: ev.status, going: ev.going || 0, checkedIn: ev.checked_in || 0,
-    seriesId: ev.series_id || null, repeats: ev.series_freq || null
+    access: ev.access || 'public', status: ev.status, going: ev.going || 0, checkedIn: ev.checked_in || 0,
+    seriesId: ev.series_id || null, repeats: ev.series_freq || null, flyerId: ev.flyer_id || null,
+    likes: ev.likes || 0, messages: ev.message_count || 0
   };
   if (opts.signedIn) out.onlineUrl = ev.online_url || null;
   if (opts.admin) out.checkinCode = ev.checkin_code;
@@ -164,7 +205,9 @@ function publicEvent(ev, opts = {}) {
 }
 const EVENT_COLS = `e.*, (SELECT COUNT(*) FROM rsvps r WHERE r.event_id = e.id AND r.status = 'going') AS going,
   (SELECT COUNT(*) FROM checkins c WHERE c.event_id = e.id) AS checked_in,
-  (SELECT freq FROM series sr WHERE sr.id = e.series_id) AS series_freq`;
+  (SELECT freq FROM series sr WHERE sr.id = e.series_id) AS series_freq,
+  (SELECT COUNT(*) FROM likes l WHERE l.event_id = e.id) AS likes,
+  (SELECT COUNT(*) FROM messages mg WHERE mg.event_id = e.id AND mg.deleted_at IS NULL) AS message_count`;
 const MAX_OCCURRENCES = 120;   // about two years of weekly events
 
 /* ---- contact details ---- */
@@ -216,7 +259,7 @@ function validateEvent(b, partial) {
   if (!partial || b.endsAt !== undefined) { o.ends_at = Number(b.endsAt); if (!Number.isFinite(o.ends_at)) throw bad('End time is required'); }
   if (o.starts_at && o.ends_at && o.ends_at <= o.starts_at) throw bad('End time must be after the start time');
   if (b.timezone !== undefined) o.timezone = str(b.timezone, 60) || 'America/Chicago';
-  if (b.visibility !== undefined) { if (!['public', 'members'].includes(b.visibility)) throw bad('Visibility must be public or members'); o.visibility = b.visibility; }
+  if (b.access !== undefined) { if (!ACCESS_LEVELS.includes(b.access)) throw bad('Access must be public, satsang or initiates'); o.access = b.access; }
   return o;
 }
 const code4 = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, '0');
@@ -247,7 +290,7 @@ async function handle(request, env) {
       ON CONFLICT(id) DO UPDATE SET email = ?3, name = ?4, last_seen_at = ?5`).bind(u.id, u.provider, u.email, u.name, t).run();
     const token = await signSession(env, { uid: u.id, email: u.email, name: u.name, exp: t + SESSION_DAYS * 86400000 });
     const row = await db.prepare('SELECT * FROM users WHERE id = ?1').bind(u.id).first();
-    return J({ token, user: { id: u.id, email: u.email, name: u.name, isAdmin: isAdmin(env, u.email) }, contact: contactOf(row) });
+    return J({ token, user: meOf({ uid: u.id, email: u.email, name: u.name }, row, env), contact: contactOf(row) });
   }
 
   if (path === '/api/me' && request.method === 'GET') {
@@ -255,7 +298,56 @@ async function handle(request, env) {
     const rows = await db.prepare(`SELECT c.event_id AS eventId, c.method, c.checked_in_at AS checkedInAt, e.format, e.title, e.starts_at AS startsAt
       FROM checkins c JOIN events e ON e.id = c.event_id WHERE c.user_id = ?1 ORDER BY c.checked_in_at`).bind(s.uid).all();
     const row = await db.prepare('SELECT * FROM users WHERE id = ?1').bind(s.uid).first();
-    return J({ user: { id: s.uid, email: s.email, name: s.name, isAdmin: isAdmin(env, s.email) }, contact: row ? contactOf(row) : null, checkins: rows.results });
+    const msgs = (await db.prepare('SELECT DISTINCT event_id AS eventId FROM messages WHERE user_id = ?1 AND deleted_at IS NULL').bind(s.uid).all()).results;
+    return J({ user: meOf(s, row, env), contact: row ? contactOf(row) : null, checkins: rows.results, messageEvents: msgs.map((x) => x.eventId) });
+  }
+
+  // Self-declared Seeker / Initiate from the phone's profile (only the word; initiation details never come here).
+  // Seeker Friend is set by an admin and is kept when the phone says 'seeker'.
+  if (path === '/api/me/category' && request.method === 'PUT') {
+    const s = await requireUser(request, env);
+    const c = (await body(request)).category;
+    if (!['seeker', 'initiate'].includes(c)) throw bad('Category must be seeker or initiate');
+    const u = await loadUser(db, s.uid);
+    if (!u) throw new HttpError(401, 'Please sign in again');
+    const next = (c === 'seeker' && u.category === 'friend') ? 'friend' : c;
+    if (next !== u.category) await db.prepare('UPDATE users SET category = ?2, category_at = ?3 WHERE id = ?1').bind(s.uid, next, now()).run();
+    return J({ category: next });
+  }
+
+  /* ---- center settings (featured video on Today) ---- */
+  if ((m = /^\/api\/centers\/([\w-]+)\/settings$/.exec(path)) && request.method === 'GET') {
+    const rows = (await db.prepare('SELECT key, value FROM settings WHERE center_id = ?1').bind(m[1]).all()).results;
+    const out = {}; rows.forEach((r) => { try { out[r.key] = JSON.parse(r.value); } catch { out[r.key] = null; } });
+    return new Response(JSON.stringify({ settings: out }), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300', ...cors(request, env) } });
+  }
+  if ((m = /^\/api\/admin\/centers\/([\w-]+)\/settings$/.exec(path)) && request.method === 'PUT') {
+    const s = await requireAdmin(request, env);
+    const b = await body(request);
+    const stmts = [];
+    if (b.featuredVideo !== undefined) {
+      let v = null;
+      if (b.featuredVideo) {
+        const id = youtubeId(b.featuredVideo.url);
+        if (!id) throw bad('Please paste a YouTube link (youtube.com/watch?v=… or youtu.be/…).');
+        v = { url: 'https://www.youtube.com/watch?v=' + id, videoId: id, title: str(b.featuredVideo.title, 120) || 'Featured video', caption: str(b.featuredVideo.caption, 200) };
+      }
+      stmts.push(db.prepare('INSERT INTO settings (center_id, key, value, updated_at, updated_by) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(center_id, key) DO UPDATE SET value = ?3, updated_at = ?4, updated_by = ?5')
+        .bind(m[1], 'featuredVideo', JSON.stringify(v), now(), s.uid));
+    }
+    if (stmts.length) await db.batch(stmts);
+    const rows = (await db.prepare('SELECT key, value FROM settings WHERE center_id = ?1').bind(m[1]).all()).results;
+    const out = {}; rows.forEach((r) => { try { out[r.key] = JSON.parse(r.value); } catch { out[r.key] = null; } });
+    return J({ settings: out });
+  }
+
+  /* ---- flyer images (public; flyers follow the event's access level, so the id is unguessable) ---- */
+  if ((m = /^\/api\/flyers\/([\w-]+)$/.exec(path)) && request.method === 'GET') {
+    const thumb = url.searchParams.get('size') === 'thumb';
+    const f = await db.prepare(`SELECT mime, ${thumb ? 'thumb' : 'full'} AS data FROM flyers WHERE id = ?1`).bind(m[1]).first();
+    if (!f) throw new HttpError(404, 'Not found');
+    const data = Array.isArray(f.data) ? Uint8Array.from(f.data) : f.data;   // D1 returns BLOBs as ArrayBuffer (or an array locally)
+    return new Response(data, { headers: { 'Content-Type': f.mime, 'Cache-Control': 'public, max-age=31536000, immutable', ...cors(request, env) } });
   }
 
   // Contact details: email comes from sign-in (required); phone and text reminders are optional
@@ -287,39 +379,89 @@ async function handle(request, env) {
   /* ---- public: list and view events ---- */
   if (path === '/api/events' && request.method === 'GET') {
     const s = await readSession(request, env);
+    const u = s ? await loadUser(db, s.uid) : null;
+    const admin = !!(s && isAdmin(env, s.email));
+    if (u && u.blocked_at) return J({ events: [], blocked: true, message: BLOCKED_MSG });
     const from = Number(url.searchParams.get('from')) || now() - 86400000;
     const to = Number(url.searchParams.get('to')) || now() + 120 * 86400000;
-    const vis = s ? "('public','members')" : "('public')";
-    const rows = await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.ends_at >= ?1 AND e.starts_at <= ?2 AND e.visibility IN ${vis} ORDER BY e.starts_at LIMIT 200`).bind(from, to).all();
+    // People see only events they can attend (seekers: public; seeker friends: + satsang; initiates: all)
+    const vis = sqlIn(levelsFor(u, admin));
+    const rows = await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.ends_at >= ?1 AND e.starts_at <= ?2 AND e.access IN ${vis} ORDER BY e.starts_at LIMIT 200`).bind(from, to).all();
     let mine = {}, myCk = {};
     if (s) {
       (await db.prepare('SELECT event_id, status FROM rsvps WHERE user_id = ?1').bind(s.uid).all()).results.forEach((r) => { mine[r.event_id] = r.status; });
       (await db.prepare('SELECT event_id, checked_in_at FROM checkins WHERE user_id = ?1').bind(s.uid).all()).results.forEach((r) => { myCk[r.event_id] = r.checked_in_at; });
     }
-    const admin = s && isAdmin(env, s.email);
     return J({ events: rows.results.map((e) => publicEvent(e, { signedIn: !!s, admin, myRsvp: s ? mine[e.id] || null : undefined, myCheckin: s ? myCk[e.id] || null : undefined })) });
   }
 
   if ((m = /^\/api\/events\/([\w-]+)$/.exec(path)) && request.method === 'GET') {
     const s = await readSession(request, env);
+    const u = s ? await loadUser(db, s.uid) : null;
+    const admin = !!(s && isAdmin(env, s.email));
+    if (u && u.blocked_at) throw new HttpError(403, BLOCKED_MSG);
     const e = await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.id = ?1`).bind(m[1]).first();
-    if (!e || (e.visibility === 'members' && !s)) throw new HttpError(404, 'Event not found');
-    let myRsvp, myCheckin;
+    if (!e || !canAttend(e, u, admin)) throw new HttpError(404, 'Event not found');
+    let myRsvp, myCheckin, myLike;
     if (s) {
       myRsvp = (await db.prepare('SELECT status FROM rsvps WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).first())?.status || null;
       myCheckin = (await db.prepare('SELECT checked_in_at FROM checkins WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).first())?.checked_in_at || null;
+      myLike = !!(await db.prepare('SELECT 1 FROM likes WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).first());
     }
-    return J({ event: publicEvent(e, { signedIn: !!s, admin: s && isAdmin(env, s.email), myRsvp, myCheckin }) });
+    const out = publicEvent(e, { signedIn: !!s, admin, myRsvp, myCheckin });
+    if (s) out.myLike = myLike;
+    return J({ event: out });
+  }
+
+  /* ---- likes and messages (signed-in members who can see the event) ---- */
+  if ((m = /^\/api\/events\/([\w-]+)\/messages$/.exec(path)) && request.method === 'GET') {
+    const { s, u, admin } = await requireMember(request, env, db);
+    const e = await db.prepare('SELECT id, access FROM events WHERE id = ?1').bind(m[1]).first();
+    if (!e || !canAttend(e, u, admin)) throw new HttpError(404, 'Event not found');
+    const rows = (await db.prepare(`SELECT mg.id, mg.user_id AS userId, u.name, mg.body, mg.created_at AS createdAt FROM messages mg JOIN users u ON u.id = mg.user_id
+      WHERE mg.event_id = ?1 AND mg.deleted_at IS NULL AND u.blocked_at IS NULL ORDER BY mg.created_at DESC LIMIT 200`).bind(e.id).all()).results;
+    const likes = (await db.prepare('SELECT COUNT(*) AS n FROM likes WHERE event_id = ?1').bind(e.id).first()).n;
+    const myLike = !!(await db.prepare('SELECT 1 FROM likes WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).first());
+    return J({ messages: rows.map((r) => ({ ...r, mine: r.userId === s.uid })), likes, myLike });
+  }
+  if ((m = /^\/api\/events\/([\w-]+)\/messages$/.exec(path)) && request.method === 'POST') {
+    const { s, u, admin } = await requireMember(request, env, db);
+    const e = await db.prepare('SELECT id, access FROM events WHERE id = ?1').bind(m[1]).first();
+    if (!e || !canAttend(e, u, admin)) throw new HttpError(404, 'Event not found');
+    const text = cleanMessage((await body(request)).body);
+    const recent = (await db.prepare('SELECT COUNT(*) AS n FROM messages WHERE user_id = ?1 AND created_at > ?2').bind(s.uid, now() - 10 * MIN).first()).n;
+    if (recent >= 5) throw bad('Please wait a few minutes before posting more.');
+    const id = crypto.randomUUID(), t = now();
+    const first = !(await db.prepare('SELECT 1 FROM messages WHERE event_id = ?1 AND user_id = ?2 AND deleted_at IS NULL').bind(e.id, s.uid).first());
+    await db.prepare('INSERT INTO messages (id, event_id, user_id, body, created_at) VALUES (?1, ?2, ?3, ?4, ?5)').bind(id, e.id, s.uid, text, t).run();
+    return J({ message: { id, userId: s.uid, name: u.name, body: text, createdAt: t, mine: true }, firstOnEvent: first }, 201);
+  }
+  if ((m = /^\/api\/events\/([\w-]+)\/messages\/([\w-]+)$/.exec(path)) && request.method === 'DELETE') {
+    const { s, admin } = await requireMember(request, env, db);
+    const mg = await db.prepare('SELECT id, user_id FROM messages WHERE id = ?1 AND event_id = ?2').bind(m[2], m[1]).first();
+    if (!mg) throw new HttpError(404, 'Message not found');
+    if (mg.user_id !== s.uid && !admin) throw new HttpError(403, 'You can only delete your own messages');
+    await db.prepare('UPDATE messages SET deleted_at = ?2, deleted_by = ?3 WHERE id = ?1').bind(mg.id, now(), s.uid).run();
+    return J({ ok: true });
+  }
+  if ((m = /^\/api\/events\/([\w-]+)\/like$/.exec(path)) && (request.method === 'PUT' || request.method === 'DELETE')) {
+    const { s, u, admin } = await requireMember(request, env, db);
+    const e = await db.prepare('SELECT id, access FROM events WHERE id = ?1').bind(m[1]).first();
+    if (!e || !canAttend(e, u, admin)) throw new HttpError(404, 'Event not found');
+    if (request.method === 'PUT') await db.prepare('INSERT OR IGNORE INTO likes (event_id, user_id, created_at) VALUES (?1, ?2, ?3)').bind(e.id, s.uid, now()).run();
+    else await db.prepare('DELETE FROM likes WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).run();
+    const likes = (await db.prepare('SELECT COUNT(*) AS n FROM likes WHERE event_id = ?1').bind(e.id).first()).n;
+    return J({ likes, myLike: request.method === 'PUT' });
   }
 
   /* ---- members: RSVP and check in ---- */
   if ((m = /^\/api\/events\/([\w-]+)\/rsvp$/.exec(path)) && request.method === 'PUT') {
-    const s = await requireUser(request, env);
+    const { s, u, admin } = await requireMember(request, env, db);
     const st = (await body(request)).status;
     if (!['going', 'maybe', 'no'].includes(st)) throw bad('Status must be going, maybe or no');
+    const e = await db.prepare('SELECT id, status, ends_at, access FROM events WHERE id = ?1').bind(m[1]).first();
+    if (!e || !canAttend(e, u, admin)) throw new HttpError(404, 'Event not found');
     await requireContact(db, s.uid);
-    const e = await db.prepare('SELECT id, status, ends_at FROM events WHERE id = ?1').bind(m[1]).first();
-    if (!e) throw new HttpError(404, 'Event not found');
     if (e.status === 'cancelled') throw bad('This event was cancelled');
     if (e.ends_at < now()) throw bad('This event has ended');
     await db.prepare(`INSERT INTO rsvps (event_id, user_id, status, updated_at) VALUES (?1, ?2, ?3, ?4)
@@ -328,12 +470,12 @@ async function handle(request, env) {
   }
 
   if ((m = /^\/api\/events\/([\w-]+)\/checkin$/.exec(path)) && request.method === 'POST') {
-    const s = await requireUser(request, env);
+    const { s, u, admin } = await requireMember(request, env, db);
     const b = await body(request);
     const method = b.method;
     if (!['code', 'qr', 'online'].includes(method)) throw bad('Unknown check-in method');
     const e = await db.prepare('SELECT * FROM events WHERE id = ?1').bind(m[1]).first();
-    if (!e) throw new HttpError(404, 'Event not found');
+    if (!e || !canAttend(e, u, admin)) throw new HttpError(404, 'Event not found');
     if (e.status === 'cancelled') throw bad('This event was cancelled');
     if (method === 'online' && e.format === 'in_person') throw bad('This is an in-person event. Please use the code at the venue.');
     if (method !== 'online' && e.format === 'online') throw bad('This is an online event. Tap Join to check in.');
@@ -348,14 +490,17 @@ async function handle(request, env) {
 
   /* ---- center QR (printed poster): check in to whichever in-person event is open now ---- */
   if ((m = /^\/api\/centers\/([\w-]+)\/checkin$/.exec(path)) && request.method === 'POST') {
-    const s = await requireUser(request, env);
+    const { s, u, admin } = await requireMember(request, env, db);
     const b = await body(request);
     const t = now();
-    const open = (await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.center_id = ?1 AND e.status = 'scheduled'
+    const all = (await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.center_id = ?1 AND e.status = 'scheduled'
       AND e.format IN ('in_person', 'hybrid') AND e.starts_at - ?3 <= ?2 AND e.ends_at + ?3 >= ?2 ORDER BY e.starts_at`).bind(m[1], t, 30 * MIN).all()).results;
+    const open = all.filter((e) => canAttend(e, u, admin));
     if (!open.length) {
+      if (all.length) return J({ open: false, seeHost: true });    // an event is on, but not one this person can attend
+      const vis = sqlIn(levelsFor(u, admin));
       const next = await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.center_id = ?1 AND e.status = 'scheduled' AND e.format IN ('in_person', 'hybrid')
-        AND e.starts_at > ?2 AND e.visibility = 'public' ORDER BY e.starts_at LIMIT 1`).bind(m[1], t).first();
+        AND e.starts_at > ?2 AND e.access IN ${vis} ORDER BY e.starts_at LIMIT 1`).bind(m[1], t).first();
       return J({ open: false, next: next ? publicEvent(next, {}) : null });
     }
     let e = open.length === 1 ? open[0] : open.find((x) => x.id === b.eventId);
@@ -383,11 +528,12 @@ async function handle(request, env) {
       occ.sort((a, z) => a.startsAt - z.startsAt);
       seriesId = crypto.randomUUID();
     }
-    const ins = db.prepare(`INSERT INTO events (id, center_id, title, description, format, venue, address, online_url, starts_at, ends_at, timezone, visibility, status, checkin_code, created_by, created_at, updated_at, series_id)
-      VALUES (?1, 'mpls', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'scheduled', ?12, ?13, ?14, ?14, ?15)`);
+    const ins = db.prepare(`INSERT INTO events (id, center_id, title, description, format, venue, address, online_url, starts_at, ends_at, timezone, access, status, checkin_code, created_by, created_at, updated_at, series_id, flyer_id)
+      VALUES (?1, 'mpls', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'scheduled', ?12, ?13, ?14, ?14, ?15, ?16)`);
     const ids = occ.map(() => crypto.randomUUID());
+    const flyerId = b.flyerId ? str(b.flyerId, 60) : null;
     const stmts = occ.map((x, i) => ins.bind(ids[i], o.title, o.description || null, o.format, o.venue || null, o.address || null, o.online_url || null,
-      x.startsAt, x.endsAt, o.timezone || 'America/Chicago', o.visibility || 'public', code4(), s.uid, t, seriesId));
+      x.startsAt, x.endsAt, o.timezone || 'America/Chicago', o.access || 'public', code4(), s.uid, t, seriesId, flyerId));
     if (seriesId) stmts.unshift(db.prepare('INSERT INTO series (id, center_id, freq, until_at, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
       .bind(seriesId, 'mpls', b.repeat.freq, occ[occ.length - 1].startsAt, s.uid, t));
     await db.batch(stmts);
@@ -416,6 +562,35 @@ async function handle(request, env) {
     return J({ event: publicEvent(e, { signedIn: true, admin: true }), count: res.meta ? res.meta.changes : 1 });
   }
 
+  // Flyer: upload once, then attach to the event (or this and following).  Body: { mime, full, thumb } base64 (resized on the phone).
+  if (path === '/api/admin/flyers' && request.method === 'POST') {
+    const s = await requireAdmin(request, env);
+    const b = await body(request);
+    if (!['image/jpeg', 'image/png'].includes(b.mime)) throw bad('Flyers must be JPG or PNG images');
+    const full = b64urlDecode(esc(b.full)), thumb = b64urlDecode(esc(b.thumb));
+    if (full.length < 100 || thumb.length < 100) throw bad('The image could not be read');
+    if (full.length > 900000) throw bad('The flyer image is too large (max 900 KB after resizing)');
+    const id = crypto.randomUUID();
+    await db.prepare('INSERT INTO flyers (id, mime, full, thumb, bytes, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
+      .bind(id, b.mime, full.buffer, thumb.buffer, full.length, s.uid, now()).run();
+    return J({ flyerId: id }, 201);
+  }
+  if ((m = /^\/api\/admin\/events\/([\w-]+)\/flyer$/.exec(path)) && (request.method === 'PUT' || request.method === 'DELETE')) {
+    await requireAdmin(request, env);
+    const cur = await db.prepare('SELECT id, series_id, starts_at FROM events WHERE id = ?1').bind(m[1]).first();
+    if (!cur) throw new HttpError(404, 'Event not found');
+    let flyerId = null;
+    if (request.method === 'PUT') {
+      flyerId = str((await body(request)).flyerId, 60);
+      if (!flyerId || !(await db.prepare('SELECT 1 FROM flyers WHERE id = ?1').bind(flyerId).first())) throw bad('Upload the flyer first');
+    }
+    const future = url.searchParams.get('scope') === 'future' && cur.series_id;
+    const res = future
+      ? await db.prepare('UPDATE events SET flyer_id = ?3, updated_at = ?4 WHERE series_id = ?1 AND starts_at >= ?2').bind(cur.series_id, cur.starts_at, flyerId, now()).run()
+      : await db.prepare('UPDATE events SET flyer_id = ?2, updated_at = ?3 WHERE id = ?1').bind(m[1], flyerId, now()).run();
+    return J({ ok: true, flyerId, count: res.meta ? res.meta.changes : 1 });
+  }
+
   if ((m = /^\/api\/admin\/events\/([\w-]+)\/(cancel|restore|new-code)$/.exec(path)) && request.method === 'POST') {
     await requireAdmin(request, env);
     const cur = await db.prepare('SELECT id, series_id, starts_at FROM events WHERE id = ?1').bind(m[1]).first();
@@ -431,15 +606,15 @@ async function handle(request, env) {
 
   if ((m = /^\/api\/admin\/events\/([\w-]+)\/attendees$/.exec(path)) && request.method === 'GET') {
     await requireAdmin(request, env);
-    const rows = await db.prepare(`SELECT u.id AS userId, u.name, u.email, u.phone, u.sms_ok AS smsOk, r.status AS rsvp, r.updated_at AS rsvpAt, c.checked_in_at AS checkedInAt, c.method
+    const rows = await db.prepare(`SELECT u.id AS userId, u.name, u.email, u.phone, u.sms_ok AS smsOk, u.category, r.status AS rsvp, r.updated_at AS rsvpAt, c.checked_in_at AS checkedInAt, c.method
       FROM users u
       LEFT JOIN rsvps r ON r.user_id = u.id AND r.event_id = ?1
       LEFT JOIN checkins c ON c.user_id = u.id AND c.event_id = ?1
       WHERE r.event_id IS NOT NULL OR c.event_id IS NOT NULL
       ORDER BY (c.checked_in_at IS NULL), u.name COLLATE NOCASE`).bind(m[1]).all();
     if (url.searchParams.get('format') === 'csv') {
-      const lines = [['name', 'email', 'phone', 'texts_ok', 'rsvp', 'rsvp_at', 'checked_in_at', 'method']].concat(rows.results.map((r) =>
-        [r.name, r.email, r.phone || '', r.smsOk ? 'yes' : 'no', r.rsvp || '', r.rsvpAt ? new Date(r.rsvpAt).toISOString() : '', r.checkedInAt ? new Date(r.checkedInAt).toISOString() : '', r.method || '']));
+      const lines = [['name', 'email', 'phone', 'texts_ok', 'category', 'rsvp', 'rsvp_at', 'checked_in_at', 'method']].concat(rows.results.map((r) =>
+        [r.name, r.email, r.phone || '', r.smsOk ? 'yes' : 'no', r.category || 'seeker', r.rsvp || '', r.rsvpAt ? new Date(r.rsvpAt).toISOString() : '', r.checkedInAt ? new Date(r.checkedInAt).toISOString() : '', r.method || '']));
       return new Response('﻿' + lines.map((l) => l.map(csvCell).join(',')).join('\r\n') + '\r\n',
         { headers: { 'Content-Type': 'text/csv; charset=utf-8', ...cors(request, env) } });
     }
@@ -466,8 +641,32 @@ async function handle(request, env) {
   if (path === '/api/admin/users' && request.method === 'GET') {
     await requireAdmin(request, env);
     const q = '%' + (url.searchParams.get('q') || '').trim().toLowerCase() + '%';
-    const rows = await db.prepare(`SELECT id AS userId, name, email FROM users WHERE lower(name) LIKE ?1 OR lower(email) LIKE ?1 ORDER BY name COLLATE NOCASE LIMIT 20`).bind(q).all();
+    const rows = await db.prepare(`SELECT u.id AS userId, u.name, u.email, u.phone, u.category, u.blocked_at AS blockedAt, u.block_reason AS blockReason, u.created_at AS createdAt, u.last_seen_at AS lastSeenAt,
+        (SELECT COUNT(*) FROM checkins c WHERE c.user_id = u.id) AS visits,
+        (SELECT MAX(checked_in_at) FROM checkins c WHERE c.user_id = u.id) AS lastVisitAt
+      FROM users u WHERE lower(u.name) LIKE ?1 OR lower(u.email) LIKE ?1 ORDER BY u.name COLLATE NOCASE LIMIT 30`).bind(q).all();
     return J({ users: rows.results });
+  }
+
+  // People admin: set category (seeker ↔ friend; initiate is self-declared but can be corrected) and block / unblock
+  if (path === '/api/admin/users' && request.method === 'PATCH') {
+    const s = await requireAdmin(request, env);
+    const userId = url.searchParams.get('user') || '';
+    const u = await loadUser(db, userId);
+    if (!u) throw new HttpError(404, 'Person not found');
+    if (userId === s.uid) throw bad('You can\u2019t change your own account here');
+    const b = await body(request), t = now(), stmts = [];
+    if (b.category !== undefined) {
+      if (!CATEGORIES.includes(b.category)) throw bad('Category must be seeker, friend or initiate');
+      stmts.push(db.prepare('UPDATE users SET category = ?2, category_at = ?3 WHERE id = ?1').bind(userId, b.category, t));
+    }
+    if (b.blocked !== undefined) {
+      if (b.blocked) stmts.push(db.prepare('UPDATE users SET blocked_at = ?2, block_reason = ?3 WHERE id = ?1').bind(userId, t, str(b.reason, 200)));
+      else stmts.push(db.prepare('UPDATE users SET blocked_at = NULL, block_reason = NULL WHERE id = ?1').bind(userId));
+    }
+    if (stmts.length) await db.batch(stmts);
+    const row = await loadUser(db, userId);
+    return J({ user: { userId: row.id, name: row.name, email: row.email, category: row.category, blockedAt: row.blocked_at, blockReason: row.block_reason } });
   }
 
   throw new HttpError(404, 'Not found');

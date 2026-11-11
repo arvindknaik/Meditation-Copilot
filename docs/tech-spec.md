@@ -1,6 +1,6 @@
 # Meditation Copilot — Technical Specification
 
-> **Status:** Prototype (v0.11.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
+> **Status:** Prototype (v0.12.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
 > Sections are brief by design and will grow as the app expands.
 
 ## 1. Architecture overview
@@ -221,11 +221,11 @@ Full requirements for the calendar and SOS-hosted events are in `docs/events-req
 - **Reward:** "Scheduled Sitting Kept", 10 points each, registered through `MC.rewards.addRule()`.
 - **SOS-hosted events:** built in v0.10.0, see §16.
 
-## 16. SOS-hosted events (v0.10.0, extended in v0.11.0)
+## 16. SOS-hosted events (v0.10.0, extended in v0.11.0 and v0.12.0)
 Requirements and decisions D1–D9 are in `docs/events-requirements.md`. Deployment steps are in `docs/setup-cloudflare.md`.
 
 - **Backend (pilot):** a Cloudflare Worker (`api/src/index.js`) with a D1 (SQLite) database. `api/migrations/` holds the numbered schema changes, applied with `npm run db:remote` (Wrangler records which have run). `api/schema.sql` is the full current schema for reference. It is plain JavaScript with standard SQL and no Cloudflare-only libraries, so it can move to Azure Functions with Azure SQL or PostgreSQL later.
-- **Data held on the server:** users (id `provider:sub`, email, name, optional phone, text consent and its date, date contact details were confirmed), series, events, RSVPs and check-ins. It holds no sittings, reflections, profile or initiation details: those stay in the user's own storage.
+- **Data held on the server:** users (id `provider:sub`, email, name, optional phone, text consent and its date, date contact details were confirmed, category, blocked flag), series, events, RSVPs, check-ins, flyers, likes, messages and center settings. See `docs/data-model.md`. It holds no sittings, reflections, profile or initiation details: those stay in the user's own storage.
 - **Identity:**
   - Google access tokens are checked with `tokeninfo`, and the audience must be our client ID.
   - Microsoft `id_token`s are verified with RS256 against the consumers JWKS, with audience and issuer checks.
@@ -242,6 +242,13 @@ Requirements and decisions D1–D9 are in `docs/events-requirements.md`. Deploym
   - Skipped dates are left out. The app sends `{repeat:{freq}, occurrences:[{startsAt, endsAt}]}`; the server creates a `series` row plus one event per date, each with its own code, RSVPs and check-ins.
   - `PATCH …?scope=future` applies field changes to this and later events in the series and moves their times by the same amount. `POST …/cancel?scope=future` (and `restore`) work the same way.
   - Cancelled events stay listed: struck through and tagged on the list and day agenda, with a hollow dot on the month grid.
+- **Member categories and access (v0.12.0):**
+  - `users.category` is `seeker`, `friend` (Seeker Friend) or `initiate`. The app sends `PUT /api/me/category` with just the word `seeker` or `initiate` from the phone's profile; initiation details never leave the phone. `friend` is set by an admin (`PATCH /api/admin/users?user=<id>`) and is kept when the phone says `seeker`.
+  - `events.access` is `public`, `satsang` (initiates and seeker friends) or `initiates`. Every list and lookup filters by what the person may attend; others get `Event not found`. Admins see all. Host check-in ignores access. Badges: 🌍 🪷 🔒 (public shows no badge).
+  - Blocking: `users.blocked_at`. A blocked person gets a 403 with a fixed message on every member action, and the events list returns `blocked:true`. Admin screen: `#people` (search, category, block/unblock, visit count).
+- **Flyers:** the phone resizes the image (canvas, JPEG; up to 1600 px, plus a 320 px thumbnail) and uploads it as base64 to `POST /api/admin/flyers`; `PUT|DELETE /api/admin/events/:id/flyer[?scope=future]` attaches or removes it. `GET /api/flyers/:id[?size=thumb]` serves it with a one-year immutable cache. Stored in D1 (`flyers` table), so no R2 or payment method is needed.
+- **Featured video:** `settings` table (`featuredVideo` = `{url, videoId, title, caption}`), `GET /api/centers/:id/settings` (cached 5 min; the app adds `?v=` to bypass after a save) and `PUT /api/admin/centers/:id/settings`. Today shows a card with the YouTube thumbnail that opens YouTube; nothing is embedded.
+- **Likes and messages:** `PUT|DELETE /api/events/:id/like`, `GET|POST /api/events/:id/messages`, `DELETE …/messages/:mid` (author or admin; soft delete). Messages are plain text, 280 characters, at most 5 per person per 10 minutes. `GET /api/me` returns `messageEvents` so the `event_message` reward (5 points, first message per event) is computed on the device like check-ins.
 - **Contact details:** RSVP and check-in return `428` until the user has confirmed contact details once. The app then shows the contact sheet (email from sign-in, read-only; optional phone; optional text opt-in; privacy notice) and retries. Host check-in skips this.
 - **Visibility:** guests see public events only. The online link is shown only to signed-in users, and the check-in code only to admins.
 - **Check-in:**
@@ -252,7 +259,7 @@ Requirements and decisions D1–D9 are in `docs/events-requirements.md`. Deploym
 - **Rewards:** `hosted_online` earns 25 points and `hosted_in_person` earns 50, computed from the user's check-ins (cached on the device).
 - **App:** `js/events.js` (events card, event page, admin tools, create/edit form) and `js/vendor/qrcode.js` (qrcode-generator 1.5.2, MIT). The server address is `apiBase` in `js/config.js`. If it is empty, the Calendar shows an "SOS events — coming soon" card with a link to sos.org.
 - **Security:** a CORS allowlist (`ALLOWED_ORIGINS`). Secrets are set with `wrangler secret put` and never committed.
-- **Not built yet:** email reminders (B5, through a cron trigger and an email provider), SMS, email-link sign-in, and a waitlist (on hold).
+- **Not built yet:** email reminders (B5, through a cron trigger and an email provider), SMS, email-link sign-in, notifications for new messages, and a waitlist (on hold).
 
 ## 17. Known limitations
 - iOS doesn't play the bells while the screen is locked (mitigated by keeping the screen awake).

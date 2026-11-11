@@ -53,6 +53,7 @@
 
     // Points and next scheduled sitting
     $('pointsLine').innerHTML = MC.rewardsHomeLine();
+    if (MC.renderFeatured) MC.renderFeatured();
     $('nextSitting').innerHTML = MC.nextSittingHTML ? MC.nextSittingHTML() : '';
 
     // Seekers: 42-day challenge · Initiates: 10,000-hour journey
