@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://arvindknaik.github.io/Meditation-Copilot/">
 <meta property="og:type" content="website">
 
-<link rel="stylesheet" href="css/styles.css?v=16">
+<link rel="stylesheet" href="css/styles.css?v=17">
 </head>
 <body>
 <!-- Shared gradient for progress rings -->
@@ -487,6 +487,15 @@
 <dialog class="sheet" id="evDlg" aria-labelledby="efHead">
   <form class="sheet-body" id="efForm">
     <h2 class="sheet-title" id="efHead" tabindex="-1" autofocus style="outline:none">New SOS event</h2>
+    <div class="notice" id="efScopeBox" hidden style="margin-bottom:12px">
+      <b>This event repeats.</b> Apply these changes (and the flyer) to:
+      <div class="chips" style="margin-top:8px" id="efScopeChips" role="radiogroup">
+        <button type="button" class="chip on" data-scope="this" aria-pressed="true">This event only</button>
+        <button type="button" class="chip" data-scope="future" aria-pressed="false">This &amp; following</button>
+        <button type="button" class="chip" data-scope="all" aria-pressed="false">Whole series</button>
+      </div>
+      <input type="hidden" id="efScope" value="this">
+    </div>
     <label class="field" for="efTitle">Title</label>
     <input type="text" id="efTitle" class="text-input" maxlength="120" required placeholder="e.g. Sunday Group Meditation">
     <label class="field" for="efFormat">Format</label>
@@ -506,10 +515,6 @@
         <p class="small muted" style="margin:8px 2px 4px" id="efRepeatSum"></p>
         <div class="chips ef-dates" id="efDates" aria-label="Dates (tap a date to skip it)"></div>
       </div>
-    </div>
-    <div id="efScopeBox" hidden>
-      <label class="field" for="efScope">Apply changes to</label>
-      <select id="efScope"><option value="this">This event only</option><option value="future">This and all following events</option></select>
     </div>
     <div id="efPlace">
       <label class="field" for="efVenue">Venue</label>
@@ -661,25 +666,25 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js?v=16"></script>
-<script src="js/quotes.js?v=16"></script>
-<script src="js/core.js?v=16"></script>
-<script src="js/diag.js?v=16"></script>
-<script src="js/challenge.js?v=16"></script>
-<script src="js/rewards.js?v=16"></script>
-<script src="js/roadmap.js?v=16"></script>
-<script src="js/sessions-ui.js?v=16"></script>
-<script src="js/timer.js?v=16"></script>
-<script src="js/insights.js?v=16"></script>
-<script src="js/home.js?v=16"></script>
-<script src="js/knowledge.js?v=16"></script>
-<script src="js/learn.js?v=16"></script>
-<script src="js/calendar.js?v=16"></script>
-<script src="js/vendor/qrcode.js?v=16"></script>
-<script src="js/events.js?v=16"></script>
-<script src="js/sync.js?v=16"></script>
-<script src="js/account.js?v=16"></script>
-<script src="js/profile.js?v=16"></script>
-<script src="js/app.js?v=16"></script>
+<script src="js/config.js?v=17"></script>
+<script src="js/quotes.js?v=17"></script>
+<script src="js/core.js?v=17"></script>
+<script src="js/diag.js?v=17"></script>
+<script src="js/challenge.js?v=17"></script>
+<script src="js/rewards.js?v=17"></script>
+<script src="js/roadmap.js?v=17"></script>
+<script src="js/sessions-ui.js?v=17"></script>
+<script src="js/timer.js?v=17"></script>
+<script src="js/insights.js?v=17"></script>
+<script src="js/home.js?v=17"></script>
+<script src="js/knowledge.js?v=17"></script>
+<script src="js/learn.js?v=17"></script>
+<script src="js/calendar.js?v=17"></script>
+<script src="js/vendor/qrcode.js?v=17"></script>
+<script src="js/events.js?v=17"></script>
+<script src="js/sync.js?v=17"></script>
+<script src="js/account.js?v=17"></script>
+<script src="js/profile.js?v=17"></script>
+<script src="js/app.js?v=17"></script>
 </body>
 </html>

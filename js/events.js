@@ -571,22 +571,25 @@
       '<div class="tool-row" style="grid-template-columns:1fr 1fr 1fr;margin-top:14px">' +
       '<button class="btn btn-ghost btn-sm" id="adCsv">⬇ CSV</button><button class="btn btn-ghost btn-sm" id="adEdit">✎ Edit</button>' +
       '<button class="btn btn-danger btn-sm" id="adCancel">' + (e.status === 'cancelled' ? 'Restore' : 'Cancel event') + '</button></div>' +
-      (e.seriesId ? '<button class="link small" id="adCancelAll" style="display:block;margin:10px auto 0">' +
-        (e.status === 'cancelled' ? 'Restore this and all following events' : 'Cancel this and all following events') + '</button>' : '');
+      (e.seriesId ? '<div class="small" style="text-align:center;margin-top:10px"><button class="link small" id="adCancelAll">' +
+        (e.status === 'cancelled' ? 'Restore this & following' : 'Cancel this & following') + '</button> · <button class="link small" id="adCancelSeries">' +
+        (e.status === 'cancelled' ? 'Restore whole series' : 'Cancel whole series') + '</button></div>' : '');
     $('adRefresh').addEventListener('click', loadAttendees);
     $('adEdit').addEventListener('click', function () { openForm(current); });
     $('adCsv').addEventListener('click', downloadCsv);
-    function cancelOrRestore(all) {
+    function cancelOrRestore(scope) {
       var cancel = current.status !== 'cancelled';
-      if (cancel && !window.confirm(all ? 'Cancel this and all following events in the series? They stay on the calendar, marked Cancelled.'
+      if (cancel && !window.confirm(scope === 'all' ? 'Cancel every event in this series, past and future? They stay on the calendar, marked Cancelled.'
+        : scope === 'future' ? 'Cancel this and all following events in the series? They stay on the calendar, marked Cancelled.'
         : 'Cancel this event? It stays on the calendar, marked Cancelled, so people who RSVP\u2019d know.')) return;
-      api('POST', '/api/admin/events/' + encodeURIComponent(current.id) + (cancel ? '/cancel' : '/restore') + (all ? '?scope=future' : '')).then(function () {
-        MC.toast(cancel ? (all ? 'Events cancelled.' : 'Event cancelled.') : (all ? 'Events restored.' : 'Event restored.'));
+      api('POST', '/api/admin/events/' + encodeURIComponent(current.id) + (cancel ? '/cancel' : '/restore') + (scope ? '?scope=' + scope : '')).then(function () {
+        MC.toast(cancel ? (scope ? 'Events cancelled.' : 'Event cancelled.') : (scope ? 'Events restored.' : 'Event restored.'));
         showEvent(); loadUpcoming().catch(function () {});
       }).catch(function (x) { MC.toast(x.message); });
     }
-    $('adCancel').addEventListener('click', function () { cancelOrRestore(false); });
-    if ($('adCancelAll')) $('adCancelAll').addEventListener('click', function () { cancelOrRestore(true); });
+    $('adCancel').addEventListener('click', function () { cancelOrRestore(''); });
+    if ($('adCancelAll')) $('adCancelAll').addEventListener('click', function () { cancelOrRestore('future'); });
+    if ($('adCancelSeries')) $('adCancelSeries').addEventListener('click', function () { cancelOrRestore('all'); });
     if ($('adNewCode')) $('adNewCode').addEventListener('click', function () {
       if (!window.confirm('Create a new check-in code? The old code and QR stop working.')) return;
       api('POST', '/api/admin/events/' + encodeURIComponent(current.id) + '/new-code').then(function (j) { current = j.event; renderAdmin(); }).catch(function (x) { MC.toast(x.message); });
@@ -665,7 +668,7 @@
     $('efUntil').value = MC.toISO(MC.addDays(new Date(start), 7 * 12));
     skipped = {};
     $('efScopeBox').hidden = !(e && e.seriesId);
-    $('efScope').value = 'this';
+    setScope('this');
     syncFormat(); syncRepeat();
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
@@ -675,6 +678,11 @@
     $('efOnline').hidden = f === 'in_person';
   }
   $('efFormat').addEventListener('change', syncFormat);
+  function setScope(v) {
+    $('efScope').value = v;
+    Array.prototype.forEach.call($('efScopeChips').querySelectorAll('.chip'), function (c) { c.classList.toggle('on', c.dataset.scope === v); c.setAttribute('aria-pressed', String(c.dataset.scope === v)); });
+  }
+  $('efScopeChips').addEventListener('click', function (ev) { var c = ev.target.closest('[data-scope]'); if (c) setScope(c.dataset.scope); });
   var flyerPending = null, flyerRemove = false;
   function setFlyerPreview(src) { $('efFlyerPrev').hidden = !src; if (src) $('efFlyerImg').src = src; }
   $('efFlyer').addEventListener('change', function () {
@@ -758,7 +766,7 @@
       if (!payload.occurrences.length) { $('efErr').textContent = 'Every date is skipped. Tap a date to include it.'; return; }
       payload.startsAt = payload.occurrences[0].startsAt; payload.endsAt = payload.occurrences[0].endsAt;
     }
-    var scope = editing && editing.seriesId && $('efScope').value === 'future' ? '?scope=future' : '';
+    var scope = editing && editing.seriesId && $('efScope').value !== 'this' ? '?scope=' + $('efScope').value : '';
     $('efErr').textContent = flyerPending ? 'Uploading flyer…' : '';
     var upload = flyerPending ? api('POST', '/api/admin/flyers', flyerPending).then(function (j) { return j.flyerId; }) : Promise.resolve(null);
     var req = upload.then(function (flyerId) {

@@ -263,6 +263,13 @@ function validateEvent(b, partial) {
   return o;
 }
 const code4 = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, '0');
+// Which events an admin change applies to: this one, this and following in the series, or the whole series
+function scopeWhere(url, cur) {
+  const sc = url.searchParams.get('scope');
+  if (cur.series_id && sc === 'all') return { where: 'series_id = ?1', args: [cur.series_id] };
+  if (cur.series_id && sc === 'future') return { where: 'series_id = ?1 AND starts_at >= ?2', args: [cur.series_id, cur.starts_at] };
+  return { where: 'id = ?1', args: [cur.id] };
+}
 function csvCell(v) { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 
 /* ---------------- router ---------------- */
@@ -546,15 +553,13 @@ async function handle(request, env) {
     const o = validateEvent(await body(request), true);
     const cur = await db.prepare('SELECT * FROM events WHERE id = ?1').bind(m[1]).first();
     if (!cur) throw new HttpError(404, 'Event not found');
-    const future = url.searchParams.get('scope') === 'future' && cur.series_id;
     const st = o.starts_at !== undefined ? o.starts_at : cur.starts_at, en = o.ends_at !== undefined ? o.ends_at : cur.ends_at;
     if (en <= st) throw bad('End time must be after the start time');
-    // This event and all later ones in the series: same field changes; a time change moves each by the same amount
+    // Series scope: same field changes on each event; a time change moves each by the same amount
     const dS = st - cur.starts_at, dE = en - cur.ends_at;
     delete o.starts_at; delete o.ends_at;
     const keys = Object.keys(o), t = now();
-    const where = future ? 'series_id = ?1 AND starts_at >= ?2' : 'id = ?1';
-    const whereArgs = future ? [cur.series_id, cur.starts_at] : [m[1]];
+    const sw = scopeWhere(url, cur), where = sw.where, whereArgs = sw.args;
     const n = whereArgs.length;
     const sets = keys.map((k, i) => `${k} = ?${n + i + 1}`).concat([`starts_at = starts_at + ?${n + keys.length + 1}`, `ends_at = ends_at + ?${n + keys.length + 2}`, `updated_at = ?${n + keys.length + 3}`]).join(', ');
     const res = await db.prepare(`UPDATE events SET ${sets} WHERE ${where}`).bind(...whereArgs, ...keys.map((k) => o[k]), dS, dE, t).run();
@@ -584,10 +589,8 @@ async function handle(request, env) {
       flyerId = str((await body(request)).flyerId, 60);
       if (!flyerId || !(await db.prepare('SELECT 1 FROM flyers WHERE id = ?1').bind(flyerId).first())) throw bad('Upload the flyer first');
     }
-    const future = url.searchParams.get('scope') === 'future' && cur.series_id;
-    const res = future
-      ? await db.prepare('UPDATE events SET flyer_id = ?3, updated_at = ?4 WHERE series_id = ?1 AND starts_at >= ?2').bind(cur.series_id, cur.starts_at, flyerId, now()).run()
-      : await db.prepare('UPDATE events SET flyer_id = ?2, updated_at = ?3 WHERE id = ?1').bind(m[1], flyerId, now()).run();
+    const sw = scopeWhere(url, cur), n = sw.args.length;
+    const res = await db.prepare(`UPDATE events SET flyer_id = ?${n + 1}, updated_at = ?${n + 2} WHERE ${sw.where}`).bind(...sw.args, flyerId, now()).run();
     return J({ ok: true, flyerId, count: res.meta ? res.meta.changes : 1 });
   }
 
@@ -596,9 +599,10 @@ async function handle(request, env) {
     const cur = await db.prepare('SELECT id, series_id, starts_at FROM events WHERE id = ?1').bind(m[1]).first();
     if (!cur) throw new HttpError(404, 'Event not found');
     if (m[2] === 'new-code') await db.prepare('UPDATE events SET checkin_code = ?2, updated_at = ?3 WHERE id = ?1').bind(m[1], code4(), now()).run();
-    else if (url.searchParams.get('scope') === 'future' && cur.series_id)   // cancelled events stay on the calendar, marked Cancelled
-      await db.prepare('UPDATE events SET status = ?3, updated_at = ?4 WHERE series_id = ?1 AND starts_at >= ?2').bind(cur.series_id, cur.starts_at, m[2] === 'cancel' ? 'cancelled' : 'scheduled', now()).run();
-    else await db.prepare('UPDATE events SET status = ?2, updated_at = ?3 WHERE id = ?1').bind(m[1], m[2] === 'cancel' ? 'cancelled' : 'scheduled', now()).run();
+    else {   // cancelled events stay on the calendar, marked Cancelled
+      const sw = scopeWhere(url, cur), n = sw.args.length;
+      await db.prepare(`UPDATE events SET status = ?${n + 1}, updated_at = ?${n + 2} WHERE ${sw.where}`).bind(...sw.args, m[2] === 'cancel' ? 'cancelled' : 'scheduled', now()).run();
+    }
     const e = await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.id = ?1`).bind(m[1]).first();
     if (!e) throw new HttpError(404, 'Event not found');
     return J({ event: publicEvent(e, { signedIn: true, admin: true }) });

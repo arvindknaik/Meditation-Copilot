@@ -1,6 +1,6 @@
 # Meditation Copilot — Technical Specification
 
-> **Status:** Prototype (v0.12.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
+> **Status:** Prototype (v0.12.1) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
 > Sections are brief by design and will grow as the app expands.
 
 ## 1. Architecture overview
@@ -240,7 +240,7 @@ Requirements and decisions D1–D9 are in `docs/events-requirements.md`. Deploym
 - **Repeating events:**
   - The app works out the dates in local time (so daylight saving is right): weekly, every other week, or monthly on the same nth weekday (or "last"). Up to 120 dates.
   - Skipped dates are left out. The app sends `{repeat:{freq}, occurrences:[{startsAt, endsAt}]}`; the server creates a `series` row plus one event per date, each with its own code, RSVPs and check-ins.
-  - `PATCH …?scope=future` applies field changes to this and later events in the series and moves their times by the same amount. `POST …/cancel?scope=future` (and `restore`) work the same way.
+  - `?scope=future` (this and following) or `?scope=all` (whole series, past included) on `PATCH`, `cancel`, `restore` and the flyer endpoints applies the change to each event in the series; a time change moves each by the same amount. The edit form shows the choice at the top.
   - Cancelled events stay listed: struck through and tagged on the list and day agenda, with a hollow dot on the month grid.
 - **Member categories and access (v0.12.0):**
   - `users.category` is `seeker`, `friend` (Seeker Friend) or `initiate`. The app sends `PUT /api/me/category` with just the word `seeker` or `initiate` from the phone's profile; initiation details never leave the phone. `friend` is set by an admin (`PATCH /api/admin/users?user=<id>`) and is kept when the phone says `seeker`.
