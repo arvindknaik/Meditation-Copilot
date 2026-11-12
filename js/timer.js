@@ -43,7 +43,7 @@
   });
 
   /* ---------- Running ---------- */
-  function save() { if (active) MC.store.set(MC.KEYS.active, active); else MC.store.del(MC.KEYS.active); }
+  function save() { if (active) MC.store.set(MC.KEYS.active, active); else MC.store.del(MC.KEYS.active); MC.emit('timer', { active: !!active }); }
   function elapsedSec() {
     if (!active) return 0;
     var now = active.pausedAt || Date.now();

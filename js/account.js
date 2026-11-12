@@ -171,6 +171,7 @@
 
     html += MC.profileSheetHTML();
     if (MC.events && MC.events.accountHTML) html += MC.events.accountHTML();
+    if (MC.buddiesAccountHTML) html += MC.buddiesAccountHTML();
 
     html += '<div class="section-title" style="margin-top:20px">Your data</div>' +
       '<p class="small" style="margin:-6px 0 10px">' + MC.sessions.count() + ' sittings · last CSV export: ' +
@@ -197,6 +198,7 @@
     if ($('sheetProviders')) $('sheetProviders').addEventListener('click', onProvider);
     $('acProfile').addEventListener('click', function () { close($('accountDlg')); MC.askUserType(true); });
     if (MC.events && MC.events.bindAccount) MC.events.bindAccount(function () { close($('accountDlg')); });
+    if (MC.bindBuddiesAccount) MC.bindBuddiesAccount(function () { close($('accountDlg')); });
     if ($('acSync')) $('acSync').addEventListener('click', function () { MC.sync.run(); });
     if ($('acReconnect')) $('acReconnect').addEventListener('click', reconnect);
     if ($('acSignOut')) $('acSignOut').addEventListener('click', signOut);

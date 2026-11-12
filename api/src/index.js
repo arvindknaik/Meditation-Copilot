@@ -184,6 +184,49 @@ function youtubeId(url) {
   return m ? m[1] : null;
 }
 
+/* ---------------- presence and buddies ---------------- */
+const PRESENCE_WINDOW = 3 * 60 * 1000;      // seen within 3 minutes = on the app now
+const MAX_BUDDIES = 10, INVITE_DAYS = 30;
+function centerDay(t) {   // YYYY-MM-DD in the center's time zone
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t));
+}
+async function presenceCounts(db) {
+  const t = now(), since = t - PRESENCE_WINDOW, day = centerDay(t);
+  const r = await db.prepare(`SELECT SUM(CASE WHEN seen_at >= ?1 THEN 1 ELSE 0 END) AS active,
+    SUM(CASE WHEN seen_at >= ?1 AND state = 'meditating' THEN 1 ELSE 0 END) AS meditating,
+    SUM(CASE WHEN meditated_on = ?2 THEN 1 ELSE 0 END) AS meditatedToday FROM presence`).bind(since, day).first();
+  return { active: r.active || 0, meditating: r.meditating || 0, meditatedToday: r.meditatedToday || 0, at: t };
+}
+function presenceOf(p, t) {
+  if (!p) return { state: 'offline', lastSeenAt: null };
+  const on = t - p.seen_at <= PRESENCE_WINDOW;
+  return { state: on ? p.state : 'offline', lastSeenAt: p.seen_at };
+}
+async function buddyLists(db, uid, email) {
+  const t = now(), cutoff = t - INVITE_DAYS * 86400000;
+  // Attach invites sent to my email before I first signed in
+  await db.prepare('UPDATE buddies SET invitee_id = ?1 WHERE invitee_email = ?2 AND invitee_id IS NULL').bind(uid, email).run();
+  const rows = (await db.prepare(`SELECT b.*, ui.name AS inviter_name, ui.email AS inviter_email, ue.name AS invitee_name,
+      pi.state AS i_state, pi.seen_at AS i_seen, pe.state AS e_state, pe.seen_at AS e_seen
+    FROM buddies b JOIN users ui ON ui.id = b.inviter_id LEFT JOIN users ue ON ue.id = b.invitee_id
+    LEFT JOIN presence pi ON pi.user_id = b.inviter_id LEFT JOIN presence pe ON pe.user_id = b.invitee_id
+    WHERE (b.inviter_id = ?1 OR b.invitee_id = ?1) AND b.status IN ('pending', 'accepted', 'declined') AND ui.blocked_at IS NULL AND (ue.id IS NULL OR ue.blocked_at IS NULL)
+    ORDER BY b.created_at`).bind(uid).all()).results;
+  const buddies = [], invitesIn = [], invitesOut = [];
+  for (const b of rows) {
+    const mineOut = b.inviter_id === uid;
+    if (b.status === 'accepted') {
+      const other = mineOut ? { id: b.invitee_id, name: b.invitee_name, state: b.e_state, seen: b.e_seen } : { id: b.inviter_id, name: b.inviter_name, state: b.i_state, seen: b.i_seen };
+      buddies.push({ id: b.id, userId: other.id, name: other.name, ...presenceOf(other.seen ? { state: other.state, seen_at: other.seen } : null, t), since: b.updated_at });
+    } else if (mineOut) {
+      if (b.created_at >= cutoff) invitesOut.push({ id: b.id, email: b.invitee_email, status: 'waiting', sentAt: b.created_at });   // declined looks the same as waiting
+    } else if (b.status === 'pending' && b.created_at >= cutoff) {
+      invitesIn.push({ id: b.id, name: b.inviter_name, email: b.inviter_email, sentAt: b.created_at });
+    }
+  }
+  return { buddies, invitesIn, invitesOut, max: MAX_BUDDIES };
+}
+
 /* ---------------- events helpers ---------------- */
 function windowFor(ev, method) {
   if (method === 'online') return [ev.starts_at - 15 * MIN, ev.ends_at];
@@ -320,6 +363,75 @@ async function handle(request, env) {
     const next = (c === 'seeker' && u.category === 'friend') ? 'friend' : c;
     if (next !== u.category) await db.prepare('UPDATE users SET category = ?2, category_at = ?3 WHERE id = ?1').bind(s.uid, next, now()).run();
     return J({ category: next });
+  }
+
+  /* ---- presence: counts only (names are never shown) ---- */
+  if (path === '/api/presence/counts' && request.method === 'GET') {
+    return new Response(JSON.stringify(await presenceCounts(db)), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30', ...cors(request, env) } });
+  }
+  if (path === '/api/presence' && request.method === 'POST') {
+    const { s, u } = await requireMember(request, env, db);
+    const st = (await body(request)).state === 'meditating' ? 'meditating' : 'active';
+    const t = now();
+    await db.batch([
+      db.prepare(`INSERT INTO presence (user_id, state, seen_at, meditated_on) VALUES (?1, ?2, ?3, ?4)
+        ON CONFLICT(user_id) DO UPDATE SET state = ?2, seen_at = ?3, meditated_on = COALESCE(?4, meditated_on)`).bind(s.uid, st, t, st === 'meditating' ? centerDay(t) : null),
+      db.prepare('UPDATE users SET last_seen_at = ?2 WHERE id = ?1').bind(s.uid, t),
+      db.prepare('DELETE FROM presence WHERE seen_at < ?1 AND (meditated_on IS NULL OR meditated_on < ?2)').bind(t - 7 * 86400000, centerDay(t))   // tidy old rows
+    ]);
+    const counts = await presenceCounts(db);
+    const pend = (await db.prepare(`SELECT COUNT(*) AS n FROM buddies WHERE status = 'pending' AND (invitee_id = ?1 OR invitee_email = ?2) AND created_at >= ?3`).bind(s.uid, u.email, t - INVITE_DAYS * 86400000).first()).n;
+    return J({ ...counts, invitesIn: pend });
+  }
+
+  /* ---- meditation buddies ---- */
+  if (path === '/api/buddies' && request.method === 'GET') {
+    const { s, u } = await requireMember(request, env, db);
+    return J(await buddyLists(db, s.uid, u.email));
+  }
+  if (path === '/api/buddies/invite' && request.method === 'POST') {
+    const { s, u } = await requireMember(request, env, db);
+    const email = esc((await body(request)).email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw bad('Please enter a valid email address.');
+    if (email === (u.email || '').toLowerCase()) throw bad('That\u2019s your own email.');
+    const lists = await buddyLists(db, s.uid, u.email);
+    if (lists.buddies.length >= MAX_BUDDIES) throw bad(`You can have up to ${MAX_BUDDIES} buddies.`);
+    if (lists.invitesOut.some((i) => i.email === email)) throw bad('You\u2019ve already invited them.');
+    const other = await db.prepare('SELECT id, blocked_at FROM users WHERE lower(email) = ?1').bind(email).first();
+    if (other && other.blocked_at) throw bad('That person can\u2019t be invited.');
+    if (other) {
+      const existing = await db.prepare(`SELECT id, status, inviter_id FROM buddies WHERE status IN ('pending','accepted') AND ((inviter_id = ?1 AND invitee_id = ?2) OR (inviter_id = ?2 AND invitee_id = ?1))`).bind(s.uid, other.id).first();
+      if (existing && existing.status === 'accepted') throw bad('You\u2019re already buddies.');
+      if (existing && existing.inviter_id === other.id) {   // they invited me first: accept it
+        await db.prepare('UPDATE buddies SET status = ?2, updated_at = ?3 WHERE id = ?1').bind(existing.id, 'accepted', now()).run();
+        return J({ accepted: true, ...(await buddyLists(db, s.uid, u.email)) });
+      }
+      if (existing) throw bad('You\u2019ve already invited them.');
+      const theirs = (await db.prepare(`SELECT COUNT(*) AS n FROM buddies WHERE status = 'accepted' AND (inviter_id = ?1 OR invitee_id = ?1)`).bind(other.id).first()).n;
+      if (theirs >= MAX_BUDDIES) throw bad('They already have the maximum number of buddies.');
+    }
+    const t = now();
+    await db.prepare('INSERT INTO buddies (id, inviter_id, invitee_email, invitee_id, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)')
+      .bind(crypto.randomUUID(), s.uid, email, other ? other.id : null, 'pending', t).run();
+    return J({ accepted: false, ...(await buddyLists(db, s.uid, u.email)) }, 201);
+  }
+  if ((m = /^\/api\/buddies\/([\w-]+)\/(accept|decline)$/.exec(path)) && request.method === 'POST') {
+    const { s, u } = await requireMember(request, env, db);
+    const b = await db.prepare(`SELECT * FROM buddies WHERE id = ?1 AND status = 'pending' AND (invitee_id = ?2 OR invitee_email = ?3)`).bind(m[1], s.uid, (u.email || '').toLowerCase()).first();
+    if (!b) throw new HttpError(404, 'Invite not found');
+    if (m[2] === 'accept') {
+      const mine = (await db.prepare(`SELECT COUNT(*) AS n FROM buddies WHERE status = 'accepted' AND (inviter_id = ?1 OR invitee_id = ?1)`).bind(s.uid).first()).n;
+      if (mine >= MAX_BUDDIES) throw bad(`You can have up to ${MAX_BUDDIES} buddies. Remove one first.`);
+    }
+    await db.prepare('UPDATE buddies SET status = ?2, invitee_id = ?3, updated_at = ?4 WHERE id = ?1').bind(b.id, m[2] === 'accept' ? 'accepted' : 'declined', s.uid, now()).run();
+    return J(await buddyLists(db, s.uid, u.email));
+  }
+  if ((m = /^\/api\/buddies\/([\w-]+)$/.exec(path)) && request.method === 'DELETE') {   // remove a buddy or withdraw an invite
+    const { s, u } = await requireMember(request, env, db);
+    const b = await db.prepare('SELECT * FROM buddies WHERE id = ?1 AND (inviter_id = ?2 OR invitee_id = ?2)').bind(m[1], s.uid).first();
+    if (!b) throw new HttpError(404, 'Not found');
+    await db.prepare('UPDATE buddies SET status = ?2, updated_at = ?3 WHERE id = ?1').bind(b.id, 'removed', now()).run();
+    return J(await buddyLists(db, s.uid, u.email));
   }
 
   /* ---- center settings (featured video on Today) ---- */

@@ -199,3 +199,65 @@ Hosted check-ins are recorded by the server, so they can't be self-awarded.
 | Phase | Scope |
 |---|---|
 | C1–C4 (v0.12.0) | Built: categories, access levels, People screen with block/unblock, badges, flyers, featured video, likes and messages with the +5 reward |
+
+## 12. Part 4 — Social: presence, buddies, challenges (requested 12 Nov 2026)
+
+### 12.1 Group feeling (presence counts)
+- While the app is open and the person is signed in, it sends a quiet heartbeat to the server every 60 seconds with one of two states: **active** or **meditating** (the Timer is running). Nothing else: no sitting details.
+- The server keeps one row per person (`presence`: state, last seen) and counts people seen in the last 3 minutes. A person who closes the app drops out of the count within 3 minutes.
+- Shown as counts only, never names: on **Today** ("🟢 12 on the app now · 🧘 3 meditating · 🌅 41 meditated today") and on the **Timer** while sitting ("3 others are meditating with you"). "Meditated today" counts people whose heartbeat showed *meditating* at any point today (Central time).
+- Guests can see the counts but aren't counted (they have no identity on the server). Counts update every minute while the screen is open.
+- Cost: ~1 small write per open app per minute, well within the free tier for hundreds of people.
+
+### 12.2 Meditation Buddy
+- From **Account → Buddies**, enter an email address to invite. Up to **10 buddies**.
+- The invitee must have signed in to the app at least once with that email. If they haven't yet, the invite waits and appears when they first sign in (no email is sent; we have no email service yet).
+- The invitee sees "Arvind invited you to be meditation buddies" on Today and in Account, with **Accept** / **Decline**. The inviter sees "Invited · waiting" until accepted; a declined invite simply stays "waiting" and expires after 30 days, so no one is embarrassed.
+- Buddies see each other's **name**, whether they're **on the app / meditating right now**, and **last active** ("today", "3 days ago"). No minutes, streaks or sittings are shared.
+- Either person can **remove** the buddy at any time; both lose visibility immediately. Blocked people can't invite or be invited.
+- Later (not now): a "🙏 thinking of you" nudge, email notification of invites, optional sharing of weekly minutes.
+
+### 12.3 Challenges (Roadmap tab)
+Four types. At most **one active challenge per type**; different types may overlap. Once started, a challenge can't be changed; it can be **dropped** (0 points) or it may **fail** (see points). Challenges run on the phone's local dates and are stored in the person's own synced data (Drive/OneDrive), like sittings. The weekly-attendance type uses check-ins from the events server.
+
+| Type | What counts | Length | Success | Fails when |
+|---|---|---|---|---|
+| **42-Day Challenge** (existing) | As today: phase 1 = 15 min/day, phase 2 builds to 30 | 42 days | Day 42 reached | As today |
+| **Hours** | Minutes logged in the timeframe | 7–365 days, target hours chosen | Target reached (ends early with full points) | End date passes short of the target |
+| **Amrit Vela** | **At least 15 minutes of a sitting between 4:00 and 7:00 am** (an earlier start is fine; only the part inside the window counts) | 7–365 days | Every day kept, within the allowance | Misses exceed the allowance: **1 missed day allowed per 10 days** (7 days → 0, 21 → 2, 42 → 4, 365 → 36) |
+| **Weekly attendance** | **At least one SOS event check-in per calendar week** (Mon–Sun), in person or online | 2–52 weeks | Every week kept, within the allowance | Missed weeks exceed **1 per 10 weeks** (2–9 weeks → 0, 10–19 → 1 …) |
+
+- The 42-Day Challenge becomes available to everyone (initiates opt in with "Start the 42-day challenge"); seekers keep getting it automatically.
+- Start date: today or up to 30 days ahead. Not in the past.
+- A challenge that fails ends at once; one that succeeds ends at once (Hours) or on its last day (others).
+
+**Points**
+
+| Type | Points on success | Example |
+|---|---|---|
+| Hours | **5 per target hour**, max 500 | 10 h in a month → 50; 60 h in 3 months → 300 |
+| Amrit Vela | **5 per day** | 21 days → 105; 42 days → 210 |
+| Weekly attendance | **15 per week** (on top of the check-in points themselves) | 12 weeks → 180 |
+| 42-Day | As today: 50 at day 21, 100 at day 42 | |
+
+- **Fail** → half of the prorated points, rounded down: `floor(points × done ÷ total ÷ 2)`, where *done* is hours logged, days kept or weeks kept. Example: 21-day Amrit Vela (105 points) failed after 15 kept days → floor(105 × 15/21 / 2) = **37**.
+- **Drop out** → 0 points.
+- Scale: for comparison, a day's target met is 5, an in-person check-in is 50 and the 42-Day Challenge is 150 in total.
+
+**Display:** a **Challenges** card on Roadmap with each active challenge's progress bar, days/hours done, misses used of the allowance, and Drop; a **Start a challenge** sheet (type, length or dates, target hours); a history list with outcome and points. Rewards appear under *Goals* with the icons ⏳ 🌅 🗓.
+
+### 12.4 Decisions
+| # | Decision | Proposed |
+|---|---|---|
+| D22 | Presence | Heartbeat every 60 s, counted within 3 min; counts only; signed-in only; Today + Timer |
+| D23 | Buddies | Up to 10; invite by sign-in email; pending shown as waiting, expires in 30 days; name + presence only; remove any time |
+| D24 | Challenge storage | On the phone, synced with the person's own data; the server holds no challenge data |
+| D25 | Amrit Vela rule | ≥ 15 min of a sitting inside 4:00–7:00 am local; 1 miss allowed per 10 days |
+| D26 | Weekly attendance rule | ≥ 1 check-in per Mon–Sun week; 1 miss per 10 weeks; 2–52 weeks |
+| D27 | Points | Hours 5/target hour (max 500); Amrit Vela 5/day; weekly 15/week; fail = floor(prorated ÷ 2); drop = 0 |
+| D28 | 42-Day for everyone | Initiates can opt in; seekers automatic |
+
+### 12.5 Phasing
+| Phase | Scope |
+|---|---|
+| E1–E3 (v0.13.0) | Built: presence counts, buddies (max 10), Hours / Amrit Vela / Weekly challenges, 42-Day opt-in |

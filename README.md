@@ -27,6 +27,8 @@ js/learn.js           Learn: search, paginated results, articles
 js/sync.js            Google / Microsoft sign-in and Drive / OneDrive sync
 js/calendar.js        Calendar: personal schedule, month view, reminders, phone-calendar export
 js/events.js          SOS events: list, event page, RSVP, check-in (code/QR/online), admin tools
+js/social.js          Presence counts and meditation buddies
+js/goals.js           Challenges: Hours, Amrit Vela, Weekly attendance
 js/vendor/qrcode.js   QR code generator (qrcode-generator 1.5.2, MIT)
 js/challenge.js       New Seekers' 42-day challenge (rules + screen)
 js/rewards.js         Points, badges and levels (rules list, easy to extend)

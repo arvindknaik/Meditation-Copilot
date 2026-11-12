@@ -3,7 +3,7 @@
   'use strict';
   var MC = window.MC = {};
 
-  MC.VERSION = '0.12.1';          // shown in Account and diagnostics
+  MC.VERSION = '0.13.0';          // shown in Account and diagnostics
   MC.SCHEMA = 2;                 // data snapshot format used for cloud sync
   MC.GOAL_HOURS = 10000;           // fixed spiritual goal — not user-editable
   MC.MAX_AGE = 90;
@@ -621,6 +621,7 @@
       if (on) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
     });
     if (MC.views[name] && MC.views[name].show) MC.views[name].show();
+    MC.emit('view', name);
     window.scrollTo(0, 0);
   };
   MC.go = function (name) { if (location.hash === '#' + name) MC.route(); else location.hash = name; };

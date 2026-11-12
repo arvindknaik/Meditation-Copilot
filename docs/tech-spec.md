@@ -1,6 +1,6 @@
 # Meditation Copilot — Technical Specification
 
-> **Status:** Prototype (v0.12.1) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
+> **Status:** Prototype (v0.13.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
 > Sections are brief by design and will grow as the app expands.
 
 ## 1. Architecture overview
@@ -261,7 +261,14 @@ Requirements and decisions D1–D9 are in `docs/events-requirements.md`. Deploym
 - **Security:** a CORS allowlist (`ALLOWED_ORIGINS`). Secrets are set with `wrangler secret put` and never committed.
 - **Not built yet:** email reminders (B5, through a cron trigger and an email provider), SMS, email-link sign-in, notifications for new messages, and a waitlist (on hold).
 
-## 17. Known limitations
+## 17. Social: presence, buddies, challenges (v0.13.0)
+Requirements: `docs/events-requirements.md` §12 (D22–D28).
+
+- **Presence** (`js/social.js`): while the app is open and the person is signed in, `POST /api/presence {state}` every 60 s (`active`, or `meditating` when the Timer is running; `MC.emit('timer')` triggers an immediate beat). The server keeps one `presence` row per person and counts rows seen in the last 3 minutes; `meditated_on` (center date) gives "meditated today". Guests read `GET /api/presence/counts` (cached 30 s). Shown on Today (`#presence`) and in the running Timer (`#timerPresence`), counts only.
+- **Buddies** (`buddies` table): `GET /api/buddies`, `POST /api/buddies/invite {email}`, `POST /api/buddies/:id/accept|decline`, `DELETE /api/buddies/:id`. Invites are keyed by lower-case sign-in email and attach to the person when they first sign in. Up to 10 buddies; declined invites look like "waiting" to the inviter and expire after 30 days. Buddies see name, state (active/meditating/offline) and last seen. UI: Account → Buddies sheet; Today shows "N buddy invites waiting". Blocked people are excluded.
+- **Challenges** (`js/goals.js`, synced collection `challenges`, nothing on the server): kinds `hours`, `amrit`, `weekly` plus the existing 42-day (now open to initiates via the same sheet; rewards `challenge_p1/42` no longer seeker-only). Evaluation is live from sittings and cached check-ins; a reached outcome is frozen on the item (`status`, `earned`, `finalDone`) so later edits don't reopen it. Amrit Vela: ≥ 15 minutes of a sitting between 04:00 and 07:00 local. Weekly: weeks start on Monday (the start date is moved to the next Monday). Allowance `floor(n/10)`. Rewards use a new `total` hook on rules (variable points); the generic reward toast skips those rules because goals.js announces results itself.
+
+## 18. Known limitations
 - iOS doesn't play the bells while the screen is locked (mitigated by keeping the screen awake).
 - No reminders or notifications yet (Phase B/C).
 - Data is per-device until sync ships; guest data can be lost (warning and backup reminders in place).

@@ -27,9 +27,9 @@
       count: function (d) { return d.runs.reduce(function (a, L) { return a + Math.floor(L / 7) - Math.floor(L / 21); }, 0); } },
     { id: 'streak21', category: 'consistency', icon: '🌿', name: '21-Day Streak', desc: '21 days in a row meeting your target (again every 21 days)', points: 50, repeat: true,
       count: function (d) { return d.runs.reduce(function (a, L) { return a + Math.floor(L / 21); }, 0); } },
-    { id: 'challenge_p1', category: 'goals', icon: '🪷', name: 'Phase 1 Complete', desc: 'Reach day 21 of the 42-day challenge', points: 50, repeat: true, who: 'seeker',
+    { id: 'challenge_p1', category: 'goals', icon: '🪷', name: 'Phase 1 Complete', desc: 'Reach day 21 of the 42-day challenge', points: 50, repeat: true,
       count: function (d) { return d.phase1Runs; } },
-    { id: 'challenge_42', category: 'goals', icon: '🏆', name: '42-Day Challenge Complete', desc: 'Complete all 42 days', points: 100, repeat: true, who: 'seeker',
+    { id: 'challenge_42', category: 'goals', icon: '🏆', name: '42-Day Challenge Complete', desc: 'Complete all 42 days', points: 100, repeat: true,
       count: function (d) { return d.challengesDone; } }
   ].concat(HOURS.map(function (h) {
     return { id: 'hours_' + h[0], category: 'goals', icon: '⏳', name: h[0].toLocaleString() + ' Hours', desc: 'Log ' + h[0].toLocaleString() + ' hours of meditation in the app', points: h[1],
@@ -84,8 +84,9 @@
     var d = summary(), total = 0, items = RULES.map(function (r) {
       var n = Math.max(0, r.count(d) || 0);
       if (!r.repeat) n = Math.min(1, n);
-      total += n * r.points;
-      return { rule: r, times: n, points: n * r.points };
+      var pts = r.total ? Math.max(0, r.total(d) || 0) : n * r.points;   // r.total: variable points (challenges)
+      total += pts;
+      return { rule: r, times: n, points: pts };
     });
     var scale = levelScale(), lvl = 0;
     for (var i = 0; i < LEVELS.length; i++) if (total >= LEVELS[i][1] * scale) lvl = i;
@@ -109,7 +110,8 @@
     var r = compute(), seen = MC.store.get(SEEN_KEY, null), now = {};
     r.items.forEach(function (it) { now[it.rule.id] = it.times; });
     if (seen) {
-      var fresh = r.items.filter(function (it) { return it.times > (seen[it.rule.id] || 0); });
+      // Challenge rules (variable points) announce their own result in goals.js
+      var fresh = r.items.filter(function (it) { return !it.rule.total && it.times > (seen[it.rule.id] || 0); });
       if (fresh.length) {
         var gained = fresh.reduce(function (a, it) { return a + (it.times - (seen[it.rule.id] || 0)) * it.rule.points; }, 0);
         var top = fresh.sort(function (a, b) { return b.rule.points - a.rule.points; })[0].rule;

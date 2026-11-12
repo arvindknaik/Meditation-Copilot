@@ -121,5 +121,26 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_event ON messages(event_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id);
 
+CREATE TABLE IF NOT EXISTS presence (   -- who is on the app right now (counts only are shown; buddies see each other)
+  user_id      TEXT PRIMARY KEY REFERENCES users(id),
+  state        TEXT NOT NULL,            -- 'active' | 'meditating'
+  seen_at      INTEGER NOT NULL,
+  meditated_on TEXT                      -- last day (YYYY-MM-DD, center time) seen meditating
+);
+CREATE INDEX IF NOT EXISTS idx_presence_seen ON presence(seen_at);
+
+CREATE TABLE IF NOT EXISTS buddies (
+  id            TEXT PRIMARY KEY,
+  inviter_id    TEXT NOT NULL REFERENCES users(id),
+  invitee_email TEXT NOT NULL,           -- lower-case sign-in email; may not have signed in yet
+  invitee_id    TEXT REFERENCES users(id),
+  status        TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'declined', 'removed')),
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_buddies_inviter ON buddies(inviter_id, status);
+CREATE INDEX IF NOT EXISTS idx_buddies_invitee ON buddies(invitee_email, status);
+CREATE INDEX IF NOT EXISTS idx_buddies_invitee_id ON buddies(invitee_id, status);
+
 INSERT OR IGNORE INTO centers (id, name, timezone, address)
 VALUES ('mpls', 'Minneapolis Center', 'America/Chicago', NULL);

@@ -148,6 +148,7 @@
   MC.on('profile', function () { if (valid()) syncCategory(); });
 
   MC.events = {
+    api: api, withSession: withSession, valid: valid, signedInMode: signedInMode, ensureSession: ensureSession,   // shared with social.js
     enabled: function () { return !!base(); },
     isAdmin: function () { return valid() && session.user && session.user.isAdmin; },
     hostedCheckins: function () { return MC.store.get(CK_KEY, []) || []; },

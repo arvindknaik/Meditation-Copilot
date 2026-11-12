@@ -61,7 +61,7 @@ The output ends with a URL such as `https://meditation-copilot-api.<your-subdoma
 4. Under **Attendees**, the person should show up. **CSV** downloads the list.
 
 ## Updating after a new version
-When a release adds a file under `api/migrations/` (for example `0003_community.sql` in v0.12.0), run these in the `api` folder before pushing the app:
+When a release adds a file under `api/migrations/` (for example `0004_social.sql` in v0.13.0), run these in the `api` folder before pushing the app:
 ```
 npm run db:remote
 npm run deploy

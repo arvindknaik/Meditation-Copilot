@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://arvindknaik.github.io/Meditation-Copilot/">
 <meta property="og:type" content="website">
 
-<link rel="stylesheet" href="css/styles.css?v=17">
+<link rel="stylesheet" href="css/styles.css?v=18">
 </head>
 <body>
 <!-- Shared gradient for progress rings -->
@@ -53,6 +53,7 @@
       <blockquote class="quote flat" id="thought" style="margin-bottom:16px"></blockquote>
 
       <div id="featured"></div>
+      <div id="presence"></div>
 
       <div id="pointsLine"></div>
 
@@ -141,6 +142,7 @@
             </div>
           </div>
           <p class="muted small" id="runNote" style="min-height:1.4em"></p>
+          <p class="small" id="timerPresence" style="margin:0 0 8px;color:var(--purple)"></p>
           <div class="actions">
             <button class="btn btn-ghost" id="pauseBtn">Pause</button>
             <button class="btn btn-gold" id="endBtn">End sitting</button>
@@ -540,6 +542,44 @@
   </form>
 </dialog>
 
+<!-- Start a challenge -->
+<dialog class="sheet" id="goalDlg" aria-labelledby="gHead">
+  <form class="sheet-body" id="gForm">
+    <h2 class="sheet-title" id="gHead" tabindex="-1" autofocus style="outline:none">Start a challenge</h2>
+    <div class="gtype" id="gTypes" role="radiogroup">
+      <button type="button" data-k="hours" class="on">⏳ Hours<small>Log a number of hours between two dates (7–365 days). 5 points per hour.</small></button>
+      <button type="button" data-k="amrit">🌅 Amrit Vela<small>Meditate at least 15 minutes between 4 and 7 am, every day for 7–365 days. 5 points per day.</small></button>
+      <button type="button" data-k="weekly">🗓 Weekly attendance<small>Check in to an SOS event every week, for 2–52 weeks. 15 points per week.</small></button>
+      <button type="button" data-k="42" id="gt42" hidden>🌱 42-Day Challenge<small>Build a daily habit in two phases. 150 points in total.</small></button>
+    </div>
+    <div id="gfHours"><label class="field" for="gHours">Target hours</label><input type="number" id="gHours" min="1" max="2000" step="1" inputmode="numeric"></div>
+    <div id="gfDays" hidden><label class="field" for="gDays">Number of days</label><input type="number" id="gDays" min="7" max="365" step="1" inputmode="numeric"></div>
+    <div id="gfWeeks" hidden><label class="field" for="gWeeks">Number of weeks</label><input type="number" id="gWeeks" min="2" max="52" step="1" inputmode="numeric"></div>
+    <div class="row2">
+      <div id="gfStart"><label class="field" for="gStart">Start</label><input type="date" id="gStart"></div>
+      <div id="gfEnd"><label class="field" for="gEnd">End</label><input type="date" id="gEnd"></div>
+    </div>
+    <p class="small" id="gSum" style="margin:10px 2px 0"></p>
+    <div class="error" id="gErr" role="alert"></div>
+    <div class="actions"><button type="button" class="btn btn-ghost" id="gCancel">Cancel</button><button type="submit" class="btn btn-primary">Start</button></div>
+  </form>
+</dialog>
+
+<!-- Meditation buddies -->
+<dialog class="sheet" id="buddyDlg" aria-labelledby="bdHead">
+  <div class="sheet-body">
+    <h2 class="sheet-title" id="bdHead" tabindex="-1" autofocus style="outline:none">Meditation buddies</h2>
+    <div id="bdList"></div>
+    <form id="bdForm" style="margin-top:14px">
+      <label class="field" for="bdEmail">Invite a buddy by email</label>
+      <div class="msg-form"><input type="email" id="bdEmail" class="text-input" placeholder="their sign-in email" autocomplete="off"><button class="btn btn-soft btn-sm" type="submit">Invite</button></div>
+      <p class="small muted" style="margin:6px 2px 0">Use the Google or Microsoft email they sign in with. They’ll see the invitation when they open the app. Buddies see only each other’s name and whether they’re on the app or meditating.</p>
+    </form>
+    <div class="error" id="bdErr" role="alert"></div>
+    <div class="actions"><button type="button" class="btn btn-ghost" id="bdClose">Close</button></div>
+  </div>
+</dialog>
+
 <!-- Admin: featured video on the Today screen -->
 <dialog class="sheet" id="vidDlg" aria-labelledby="vidHead">
   <form class="sheet-body" id="vidForm">
@@ -666,25 +706,27 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js?v=17"></script>
-<script src="js/quotes.js?v=17"></script>
-<script src="js/core.js?v=17"></script>
-<script src="js/diag.js?v=17"></script>
-<script src="js/challenge.js?v=17"></script>
-<script src="js/rewards.js?v=17"></script>
-<script src="js/roadmap.js?v=17"></script>
-<script src="js/sessions-ui.js?v=17"></script>
-<script src="js/timer.js?v=17"></script>
-<script src="js/insights.js?v=17"></script>
-<script src="js/home.js?v=17"></script>
-<script src="js/knowledge.js?v=17"></script>
-<script src="js/learn.js?v=17"></script>
-<script src="js/calendar.js?v=17"></script>
-<script src="js/vendor/qrcode.js?v=17"></script>
-<script src="js/events.js?v=17"></script>
-<script src="js/sync.js?v=17"></script>
-<script src="js/account.js?v=17"></script>
-<script src="js/profile.js?v=17"></script>
-<script src="js/app.js?v=17"></script>
+<script src="js/config.js?v=18"></script>
+<script src="js/quotes.js?v=18"></script>
+<script src="js/core.js?v=18"></script>
+<script src="js/diag.js?v=18"></script>
+<script src="js/challenge.js?v=18"></script>
+<script src="js/rewards.js?v=18"></script>
+<script src="js/roadmap.js?v=18"></script>
+<script src="js/sessions-ui.js?v=18"></script>
+<script src="js/timer.js?v=18"></script>
+<script src="js/insights.js?v=18"></script>
+<script src="js/home.js?v=18"></script>
+<script src="js/knowledge.js?v=18"></script>
+<script src="js/learn.js?v=18"></script>
+<script src="js/calendar.js?v=18"></script>
+<script src="js/vendor/qrcode.js?v=18"></script>
+<script src="js/events.js?v=18"></script>
+<script src="js/social.js?v=18"></script>
+<script src="js/goals.js?v=18"></script>
+<script src="js/sync.js?v=18"></script>
+<script src="js/account.js?v=18"></script>
+<script src="js/profile.js?v=18"></script>
+<script src="js/app.js?v=18"></script>
 </body>
 </html>

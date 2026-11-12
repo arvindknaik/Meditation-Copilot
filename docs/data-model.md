@@ -2,7 +2,7 @@
 
 > Database: Cloudflare D1 (SQLite) named `meditation-copilot`, used only by the events server in `api/`.
 > Full schema: `api/schema.sql`. Changes are applied with the numbered files in `api/migrations/`.
-> Version: v0.12.0 (11 November 2026)
+> Version: v0.13.0 (12 November 2026)
 
 ## What is and isn't in it
 
@@ -30,6 +30,8 @@ centers 1 ──< series 1 ──< events 1 ──< rsvps     >── 1 users
 | `likes` | Person liked an event | `event_id` + `user_id` |
 | `messages` | Short message a person posted on an event (soft-deleted, never removed) | `id` (UUID) |
 | `settings` | Per-center settings such as the featured video (JSON value) | `center_id` + `key` |
+| `presence` | Who is on the app right now (state, last heartbeat, last day seen meditating). Only counts are shown | `user_id` |
+| `buddies` | A buddy invitation and its status (pending, accepted, declined, removed) | `id` (UUID) |
 
 ### `centers`
 | Column | Meaning |
@@ -192,6 +194,11 @@ FROM events e ORDER BY likes DESC, messages DESC LIMIT 20;
 **People by category**
 ```sql
 SELECT category, COUNT(*) AS people FROM users WHERE blocked_at IS NULL GROUP BY category;
+```
+
+**People on the app right now**
+```sql
+SELECT COUNT(*) AS on_now, SUM(state='meditating') AS meditating FROM presence WHERE seen_at > (strftime('%s','now')-180)*1000;
 ```
 
 **How people check in**
