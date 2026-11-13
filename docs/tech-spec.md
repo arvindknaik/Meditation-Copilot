@@ -1,6 +1,6 @@
 # Meditation Copilot — Technical Specification
 
-> **Status:** Prototype (v0.13.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
+> **Status:** Prototype (v0.14.0) · **Last updated:** 10 Nov 2026 · **Repo:** `arvindknaik/Meditation-Copilot` · **Live:** https://arvindknaik.github.io/Meditation-Copilot/
 > Sections are brief by design and will grow as the app expands.
 
 ## 1. Architecture overview
@@ -268,7 +268,14 @@ Requirements: `docs/events-requirements.md` §12 (D22–D28).
 - **Buddies** (`buddies` table): `GET /api/buddies`, `POST /api/buddies/invite {email}`, `POST /api/buddies/:id/accept|decline`, `DELETE /api/buddies/:id`. Invites are keyed by lower-case sign-in email and attach to the person when they first sign in. Up to 10 buddies; declined invites look like "waiting" to the inviter and expire after 30 days. Buddies see name, state (active/meditating/offline) and last seen. UI: Account → Buddies sheet; Today shows "N buddy invites waiting". Blocked people are excluded.
 - **Challenges** (`js/goals.js`, synced collection `challenges`, nothing on the server): kinds `hours`, `amrit`, `weekly` plus the existing 42-day (now open to initiates via the same sheet; rewards `challenge_p1/42` no longer seeker-only). Evaluation is live from sittings and cached check-ins; a reached outcome is frozen on the item (`status`, `earned`, `finalDone`) so later edits don't reopen it. Amrit Vela: ≥ 15 minutes of a sitting between 04:00 and 07:00 local. Weekly: weeks start on Monday (the start date is moved to the next Monday). Allowance `floor(n/10)`. Rewards use a new `total` hook on rules (variable points); the generic reward toast skips those rules because goals.js announces results itself.
 
-## 18. Known limitations
+## 18. Today screen, feedback (v0.14.0)
+- **Greeting by first name:** `MC.firstName()` uses the name the person set in Account (`profile.name`), otherwise the name from their Google/Microsoft sign-in (saved as `meditation-copilot:signin-name` when the app connects to the events server). Guests see no name.
+- **Today layout:** the large progress dial moved to a compact 84 px ring beside "X of Y min today"; the full dial stays on the Timer.
+- **Featured today:** `settings.featuredVideos` (up to 14 items: YouTube links or https pages on sos.org); the app shows `list[dayNumber % length]`, so a different item each day. Admins manage the list from Calendar → SOS events → ▶ Featured. The old single `featuredVideo` is still read as a one-item list.
+- **Feedback:** `feedback` table; `POST /api/feedback {kind: 'suggestion'|'rating', rating, body, contact, version}` (guests allowed; 10 an hour per signed-in person, 30 an hour shared by all guests; no IP addresses stored); `GET /api/admin/feedback[?format=csv]` (average rating, list). The app asks for a rating once the person has sittings on 7 different days; "Later" asks again after 30 days, "No thanks" never. Manual entry points: Learn → Help card ("Send a suggestion") and Account → "Suggest an idea" / "Rate the app". Admin screen `#feedback`.
+- **Contact:** the center phone is shown as WhatsApp (`https://wa.me/16122164444`) everywhere.
+
+## 19. Known limitations
 - iOS doesn't play the bells while the screen is locked (mitigated by keeping the screen awake).
 - No reminders or notifications yet (Phase B/C).
 - Data is per-device until sync ships; guest data can be lost (warning and backup reminders in place).

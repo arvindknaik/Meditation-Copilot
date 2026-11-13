@@ -434,7 +434,41 @@ async function handle(request, env) {
     return J(await buddyLists(db, s.uid, u.email));
   }
 
-  /* ---- center settings (featured video on Today) ---- */
+  /* ---- feedback: suggestions and ratings (guests allowed) ---- */
+  if (path === '/api/feedback' && request.method === 'POST') {
+    const sess = await readSession(request, env);
+    const b = await body(request);
+    const kind = b.kind === 'rating' ? 'rating' : 'suggestion';
+    const rating = kind === 'rating' ? Number(b.rating) : null;
+    if (kind === 'rating' && !(rating >= 1 && rating <= 5)) throw bad('Rating must be 1 to 5');
+    const text = esc(b.body).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, 1000);
+    if (kind === 'suggestion' && !text) throw bad('Please write your suggestion first.');
+    const contact = str(b.contact, 120);
+    const ua = request.headers.get('User-Agent') || '';
+    const platform = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : 'other';
+    // Light limits: 10 an hour per signed-in person; guests share a pool of 30 an hour (no IP addresses are stored)
+    const recent = sess
+      ? (await db.prepare('SELECT COUNT(*) AS n FROM feedback WHERE user_id = ?1 AND created_at > ?2').bind(sess.uid, now() - 3600000).first()).n
+      : (await db.prepare('SELECT COUNT(*) AS n FROM feedback WHERE user_id IS NULL AND created_at > ?1').bind(now() - 3600000).first()).n;
+    if (recent >= (sess ? 10 : 30)) throw bad('Thank you! Please wait a little before sending more.');
+    await db.prepare('INSERT INTO feedback (id, user_id, kind, rating, body, contact, version, platform, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)')
+      .bind(crypto.randomUUID(), sess ? sess.uid : null, kind, rating, text || null, contact || null, str(b.version, 20) || null, platform, now()).run();
+    return J({ ok: true }, 201);
+  }
+  if (path === '/api/admin/feedback' && request.method === 'GET') {
+    await requireAdmin(request, env);
+    const rows = (await db.prepare(`SELECT f.id, f.kind, f.rating, f.body, f.contact, f.version, f.platform, f.created_at AS createdAt, u.name, u.email
+      FROM feedback f LEFT JOIN users u ON u.id = f.user_id ORDER BY f.created_at DESC LIMIT 500`).all()).results;
+    const avg = await db.prepare(`SELECT AVG(rating) AS avg, COUNT(*) AS n FROM feedback WHERE kind = 'rating'`).first();
+    if (url.searchParams.get('format') === 'csv') {
+      const lines = [['date', 'kind', 'rating', 'comment', 'name', 'email', 'contact', 'version', 'platform']].concat(rows.map((r) =>
+        [new Date(r.createdAt).toISOString(), r.kind, r.rating || '', r.body || '', r.name || '', r.email || '', r.contact || '', r.version || '', r.platform || '']));
+      return new Response(lines.map((l) => l.map(csvCell).join(',')).join('\r\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="feedback.csv"', ...cors(request, env) } });
+    }
+    return J({ feedback: rows, averageRating: avg.avg ? Math.round(avg.avg * 10) / 10 : null, ratings: avg.n });
+  }
+
+  /* ---- center settings (featured content on Today) ---- */
   if ((m = /^\/api\/centers\/([\w-]+)\/settings$/.exec(path)) && request.method === 'GET') {
     const rows = (await db.prepare('SELECT key, value FROM settings WHERE center_id = ?1').bind(m[1]).all()).results;
     const out = {}; rows.forEach((r) => { try { out[r.key] = JSON.parse(r.value); } catch { out[r.key] = null; } });
@@ -444,15 +478,21 @@ async function handle(request, env) {
     const s = await requireAdmin(request, env);
     const b = await body(request);
     const stmts = [];
-    if (b.featuredVideo !== undefined) {
-      let v = null;
-      if (b.featuredVideo) {
-        const id = youtubeId(b.featuredVideo.url);
-        if (!id) throw bad('Please paste a YouTube link (youtube.com/watch?v=… or youtu.be/…).');
-        v = { url: 'https://www.youtube.com/watch?v=' + id, videoId: id, title: str(b.featuredVideo.title, 120) || 'Featured video', caption: str(b.featuredVideo.caption, 200) };
-      }
+    // Featured content: a short list; the app shows a different item each day. YouTube links get a thumbnail; sos.org pages are allowed too.
+    if (b.featuredVideos !== undefined) {
+      if (!Array.isArray(b.featuredVideos) || b.featuredVideos.length > 14) throw bad('Up to 14 featured items');
+      const list = b.featuredVideos.map((x) => {
+        const raw = esc(x.url).trim(), id = youtubeId(raw);
+        let url, host = null;
+        if (id) url = 'https://www.youtube.com/watch?v=' + id;
+        else {
+          try { const u = new URL(raw); host = u.hostname.toLowerCase(); if (u.protocol !== 'https:' || !(host === 'sos.org' || host.endsWith('.sos.org'))) throw 0; url = u.toString(); }
+          catch { throw bad('Use a YouTube link or a page on sos.org.'); }
+        }
+        return { url, videoId: id || null, title: str(x.title, 120) || 'Featured today', caption: str(x.caption, 200) };
+      });
       stmts.push(db.prepare('INSERT INTO settings (center_id, key, value, updated_at, updated_by) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(center_id, key) DO UPDATE SET value = ?3, updated_at = ?4, updated_by = ?5')
-        .bind(m[1], 'featuredVideo', JSON.stringify(v), now(), s.uid));
+        .bind(m[1], 'featuredVideos', JSON.stringify(list), now(), s.uid));
     }
     if (stmts.length) await db.batch(stmts);
     const rows = (await db.prepare('SELECT key, value FROM settings WHERE center_id = ?1').bind(m[1]).all()).results;

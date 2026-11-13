@@ -2,7 +2,7 @@
 
 > Database: Cloudflare D1 (SQLite) named `meditation-copilot`, used only by the events server in `api/`.
 > Full schema: `api/schema.sql`. Changes are applied with the numbered files in `api/migrations/`.
-> Version: v0.13.0 (12 November 2026)
+> Version: v0.14.0 (13 November 2026)
 
 ## What is and isn't in it
 
@@ -32,6 +32,7 @@ centers 1 ──< series 1 ──< events 1 ──< rsvps     >── 1 users
 | `settings` | Per-center settings such as the featured video (JSON value) | `center_id` + `key` |
 | `presence` | Who is on the app right now (state, last heartbeat, last day seen meditating). Only counts are shown | `user_id` |
 | `buddies` | A buddy invitation and its status (pending, accepted, declined, removed) | `id` (UUID) |
+| `feedback` | A suggestion or a 1–5 rating with optional comment; linked to the person if signed in | `id` (UUID) |
 
 ### `centers`
 | Column | Meaning |
@@ -199,6 +200,12 @@ SELECT category, COUNT(*) AS people FROM users WHERE blocked_at IS NULL GROUP BY
 **People on the app right now**
 ```sql
 SELECT COUNT(*) AS on_now, SUM(state='meditating') AS meditating FROM presence WHERE seen_at > (strftime('%s','now')-180)*1000;
+```
+
+**Feedback: average rating and latest suggestions**
+```sql
+SELECT ROUND(AVG(rating),1) AS avg_rating, COUNT(*) AS ratings FROM feedback WHERE kind='rating';
+SELECT datetime(created_at/1000,'unixepoch','-6 hours') AS at_ct, kind, rating, body FROM feedback ORDER BY created_at DESC LIMIT 50;
 ```
 
 **How people check in**

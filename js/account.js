@@ -169,6 +169,7 @@
         '<div class="stack" style="margin-top:0" id="sheetProviders">' + providerButtons() + '</div>';
     }
 
+    html += MC.nameSheetHTML ? MC.nameSheetHTML() : '';
     html += MC.profileSheetHTML();
     if (MC.events && MC.events.accountHTML) html += MC.events.accountHTML();
     if (MC.buddiesAccountHTML) html += MC.buddiesAccountHTML();
@@ -188,15 +189,19 @@
     html += '<div class="section-title" style="margin-top:20px">Privacy &amp; support</div>' +
       '<div class="toggle" style="border-top:0;margin-top:0;padding-top:0"><div><b>Share anonymous usage statistics</b><div class="small muted">Counts like "sitting saved". No personal data. Helps improve the app.</div></div>' +
       '<label class="switch"><input type="checkbox" id="acStats"' + (MC.settings.analyticsOptOut ? '' : ' checked') + ' aria-label="Share anonymous usage statistics"><span></span></label></div>' +
+      (MC.openFeedback ? '<div class="tool-row two" style="margin:0 0 10px"><button class="btn btn-soft btn-sm" id="acSuggest">💡 Suggest an idea</button><button class="btn btn-soft btn-sm" id="acRate">⭐ Rate the app</button></div>' : '') +
       '<button class="btn btn-soft btn-sm btn-block" id="acDiag">🩺 Send diagnostics to support</button>' +
       '<p class="small muted" style="margin:8px 0 0">Shares a technical log (' + MC.diag.all().length + ' events, no reflections or personal details) only when you tap this.</p>' +
       '<p class="small" style="margin:14px 0 0"><a href="' + MC.esc(CFG.privacyPolicyUrl || 'privacy.html') + '" target="_blank" rel="noopener">Privacy notice</a> · ' +
-      '<a href="tel:+16122164444">612-216-4444</a> · <a href="mailto:' + MC.esc(CFG.support.email) + '">' + MC.esc(CFG.support.email) + '</a></p>' +
+      '<a href="https://wa.me/16122164444" target="_blank" rel="noopener">WhatsApp 612-216-4444</a> · <a href="mailto:' + MC.esc(CFG.support.email) + '">' + MC.esc(CFG.support.email) + '</a></p>' +
       '<p class="small muted" style="margin:10px 0 0">Version ' + MC.esc(MC.VERSION) + ' · Prototype only. Not an official or approved Science of Spirituality app.</p>';
     $('accountBody').innerHTML = html;
 
     if ($('sheetProviders')) $('sheetProviders').addEventListener('click', onProvider);
     $('acProfile').addEventListener('click', function () { close($('accountDlg')); MC.askUserType(true); });
+    if ($('acSuggest')) $('acSuggest').addEventListener('click', function () { close($('accountDlg')); MC.openFeedback('suggestion'); });
+    if ($('acRate')) $('acRate').addEventListener('click', function () { close($('accountDlg')); MC.openFeedback('rating'); });
+    if ($('acName')) $('acName').addEventListener('click', function () { var n = window.prompt('What should we call you?', MC.displayName() || ''); if (n === null) return; MC.profile.name = n.trim().slice(0, 40); MC.saveProfile(); close($('accountDlg')); MC.toast(n.trim() ? 'Nice to meet you, ' + MC.firstName() + ' 🙏' : 'Name cleared.'); });
     if (MC.events && MC.events.bindAccount) MC.events.bindAccount(function () { close($('accountDlg')); });
     if (MC.bindBuddiesAccount) MC.bindBuddiesAccount(function () { close($('accountDlg')); });
     if ($('acSync')) $('acSync').addEventListener('click', function () { MC.sync.run(); });

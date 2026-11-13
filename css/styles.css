@@ -214,6 +214,22 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border-radius
 /* Ring */
 .ring-wrap { display: grid; place-items: center; margin: 8px 0 18px; position: relative; }
 .ring { width: 190px; height: 190px; transform: rotate(-90deg); }
+/* Today: compact progress ring (the large dial lives on the Timer) */
+.ring.xs { width: 84px; height: 84px; }
+.ring-wrap.xs { margin: 0; flex: 0 0 auto; }
+.ring-center.xs b { font-size: 1.35rem; }
+.today-row { display: flex; align-items: center; gap: 16px; }
+.today-text { flex: 1 1 auto; }
+.today-big { font-family: var(--serif); font-size: 1.15rem; color: var(--text); line-height: 1.3; }
+.today-big b { font-size: 1.6rem; color: var(--purple); }
+.today-text .target-link { margin-top: 4px; display: inline-block; }
+.stars { display: flex; gap: 6px; justify-content: center; margin: 4px 0 12px; }
+.stars button { font: inherit; font-size: 2rem; line-height: 1; background: none; border: 0; color: var(--line); cursor: pointer; padding: 4px; }
+.stars button.on { color: var(--gold-bright); }
+.vid-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.vid-row:first-child { border-top: 0; }
+.vid-row img { width: 64px; height: 36px; object-fit: cover; border-radius: 6px; background: #000; flex: 0 0 auto; }
+.vid-row .ag-main { flex: 1 1 auto; }
 .ring.lg { width: 260px; height: 260px; }
 .ring.sm { width: 150px; height: 150px; }
 .ring-bg { stroke: var(--purple-soft); }
@@ -587,6 +603,7 @@ details.ch-rules li { margin-bottom: 6px; }
 .flyer-prev img { display: block; max-width: 160px; max-height: 200px; border-radius: 10px; border: 1px solid var(--line); margin-bottom: 4px; }
 .featured { display: flex; gap: 12px; align-items: center; text-decoration: none; color: inherit; margin-bottom: 16px; }
 .featured img { width: 128px; height: 72px; object-fit: cover; border-radius: 10px; flex: 0 0 auto; background: #000; }
+.featured .ft-site { display: flex; width: 128px; height: 72px; align-items: center; justify-content: center; font-size: 2rem; background: var(--purple-soft); border-radius: 10px; }
 .featured .ft-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.6rem; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
 .featured .ft-img { position: relative; flex: 0 0 auto; }
 .featured b { display: block; line-height: 1.25; }
@@ -628,3 +645,10 @@ details.ch-rules li { margin-bottom: 6px; }
 .gtype button { text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card-2); font: inherit; color: inherit; cursor: pointer; }
 .gtype button.on { border-color: var(--purple); background: transparent; box-shadow: inset 0 0 0 1px var(--purple); }
 .gtype small { display: block; color: var(--muted); margin-top: 2px; }
+
+/* v0.14: Featured today as the visual centrepiece of Today */
+#featured .featured { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; }
+#featured .featured .ft-img { width: 100%; }
+#featured .featured img, #featured .featured .ft-site { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 14px; }
+#featured .featured .ft-play { font-size: 2.6rem; }
+#featured .featured b { font-family: var(--serif); font-size: 1.15rem; }

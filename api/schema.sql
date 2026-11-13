@@ -142,5 +142,18 @@ CREATE INDEX IF NOT EXISTS idx_buddies_inviter ON buddies(inviter_id, status);
 CREATE INDEX IF NOT EXISTS idx_buddies_invitee ON buddies(invitee_email, status);
 CREATE INDEX IF NOT EXISTS idx_buddies_invitee_id ON buddies(invitee_id, status);
 
+CREATE TABLE IF NOT EXISTS feedback (   -- suggestions and ratings (guests allowed; user_id NULL)
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT REFERENCES users(id),
+  kind        TEXT NOT NULL CHECK (kind IN ('suggestion', 'rating')),
+  rating      INTEGER,                     -- 1–5 for ratings
+  body        TEXT,                        -- up to 1000 characters
+  contact     TEXT,                        -- optional email a guest typed
+  version     TEXT,
+  platform    TEXT,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at);
+
 INSERT OR IGNORE INTO centers (id, name, timezone, address)
 VALUES ('mpls', 'Minneapolis Center', 'America/Chicago', NULL);

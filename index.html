@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://arvindknaik.github.io/Meditation-Copilot/">
 <meta property="og:type" content="website">
 
-<link rel="stylesheet" href="css/styles.css?v=19">
+<link rel="stylesheet" href="css/styles.css?v=20">
 </head>
 <body>
 <!-- Shared gradient for progress rings -->
@@ -58,14 +58,19 @@
       <div id="pointsLine"></div>
 
       <div class="card today-card">
-        <div class="ring-wrap">
-          <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
-            <circle class="ring-bg" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>
-            <circle class="ring-fg" id="todayRing" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="326.73" stroke-dashoffset="326.73"/>
-          </svg>
-          <div class="ring-center"><b id="todayMin">0</b><span id="todayOf">of 60 min today</span></div>
+        <div class="today-row">
+          <div class="ring-wrap xs">
+            <svg class="ring xs" viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="ring-bg" cx="60" cy="60" r="52" fill="none" stroke-width="12"/>
+              <circle class="ring-fg" id="todayRing" cx="60" cy="60" r="52" fill="none" stroke-width="12" stroke-linecap="round" stroke-dasharray="326.73" stroke-dashoffset="326.73"/>
+            </svg>
+            <div class="ring-center xs"><b id="todayMin">0</b></div>
+          </div>
+          <div class="today-text">
+            <div class="today-big"><span id="todayOf">of 60 min today</span></div>
+            <button class="target-link" id="targetBtn">Daily target: <b id="targetVal">60 min</b> ✎</button>
+          </div>
         </div>
-        <button class="target-link" id="targetBtn">Daily target: <b id="targetVal">60 min</b> ✎</button>
         <div class="stack" style="margin-top:12px">
           <a class="btn btn-primary btn-xl btn-block" href="#timer">🪷 Start Meditation</a>
         </div>
@@ -168,6 +173,7 @@
 
     <!-- ================= PEOPLE (admin: categories, block) ================= -->
     <section class="view" id="v-people" aria-label="People"></section>
+    <section class="view" id="v-feedback" aria-label="Feedback"></section>
 
     <!-- ================= INSIGHTS ================= -->
     <section class="view" id="v-insights" aria-label="Insights">
@@ -370,18 +376,19 @@
         <div class="section-title" style="margin-bottom:6px">Need help?</div>
         <p class="small" style="margin:0 0 12px">For help with meditation or this app, contact the Minneapolis Center.</p>
         <div class="tool-row two" style="margin-top:0">
-          <a class="btn btn-soft btn-sm" href="tel:+16122164444" style="white-space:nowrap;padding:10px 8px">📞 612-216-4444</a>
+          <a class="btn btn-soft btn-sm" href="https://wa.me/16122164444" target="_blank" rel="noopener" style="white-space:nowrap;padding:10px 8px">💬 WhatsApp 612-216-4444</a>
           <a class="btn btn-soft btn-sm" href="mailto:MinneapolisCenter@sos.org">✉️ Email us</a>
         </div>
         <p class="small muted center" style="margin:8px 0 0">MinneapolisCenter@sos.org</p>
+        <button class="btn btn-ghost btn-sm btn-block" id="fbSuggest" style="margin-top:12px">💡 Send a suggestion</button>
       </div>
     </section>
   </main>
 
   <footer>
     <p class="disclaimer"><b>Prototype only.</b> This is not an official or approved Science of Spirituality app.</p>
-    <p>Need help? <a href="tel:+16122164444">612-216-4444</a> · <a href="mailto:MinneapolisCenter@sos.org">MinneapolisCenter@sos.org</a></p>
-    <p>Your data stays on this device.</p>
+    <p>Need help? <a href="https://wa.me/16122164444" target="_blank" rel="noopener">WhatsApp 612-216-4444</a> · <a href="mailto:MinneapolisCenter@sos.org">MinneapolisCenter@sos.org</a></p>
+    <p>Your sittings and reflections stay on your device and in your own cloud drive. Event sign-ups stay with the Minneapolis Center. We never sell or share your data. <a href="privacy.html" target="_blank" rel="noopener">Privacy notice</a></p>
   </footer>
 </div>
 
@@ -565,6 +572,22 @@
   </form>
 </dialog>
 
+<!-- Suggestions and ratings -->
+<dialog class="sheet" id="fbDlg" aria-labelledby="fbHead">
+  <form class="sheet-body" id="fbForm">
+    <h2 class="sheet-title" id="fbHead" tabindex="-1" autofocus style="outline:none">Send a suggestion</h2>
+    <p class="small" id="fbLead" style="margin:-4px 0 12px">What would make this app better for your practice? Every note is read by the center team.</p>
+    <div id="fbStars" class="stars" role="radiogroup" aria-label="Rating" hidden>
+      <button type="button" data-star="1" aria-label="1 star">★</button><button type="button" data-star="2" aria-label="2 stars">★</button><button type="button" data-star="3" aria-label="3 stars">★</button><button type="button" data-star="4" aria-label="4 stars">★</button><button type="button" data-star="5" aria-label="5 stars">★</button>
+    </div>
+    <label class="field" for="fbText" id="fbTextLabel">Your suggestion</label>
+    <textarea id="fbText" rows="4" maxlength="1000" placeholder="Tell us what you'd change or add…"></textarea>
+    <div id="fbContactBox" hidden><label class="field" for="fbContact">Email <span class="muted">(optional, if you'd like a reply)</span></label><input type="email" id="fbContact" class="text-input" autocomplete="email"></div>
+    <div class="error" id="fbErr" role="alert"></div>
+    <div class="actions"><button type="button" class="btn btn-ghost" id="fbLater">Later</button><button type="button" class="btn btn-ghost" id="fbNever" hidden>No thanks</button><button type="submit" class="btn btn-primary" id="fbSend">Send</button></div>
+  </form>
+</dialog>
+
 <!-- Meditation buddies -->
 <dialog class="sheet" id="buddyDlg" aria-labelledby="bdHead">
   <div class="sheet-body">
@@ -583,16 +606,18 @@
 <!-- Admin: featured video on the Today screen -->
 <dialog class="sheet" id="vidDlg" aria-labelledby="vidHead">
   <form class="sheet-body" id="vidForm">
-    <h2 class="sheet-title" id="vidHead" tabindex="-1" autofocus style="outline:none">Featured video</h2>
-    <p class="small" style="margin:-4px 0 12px">Shown on everyone's Today screen and opens in YouTube. Use official Science of Spirituality videos only.</p>
-    <label class="field" for="vidUrl">YouTube link</label>
+    <h2 class="sheet-title" id="vidHead" tabindex="-1" autofocus style="outline:none">Featured today</h2>
+    <p class="small" style="margin:-4px 0 10px">Everyone's Today screen shows one of these, a different one each day. Use official Science of Spirituality videos or sos.org pages only. Up to 14.</p>
+    <div id="vidList"></div>
+    <div class="section-title" style="margin-top:12px">Add</div>
+    <label class="field" for="vidUrl">YouTube link or sos.org page</label>
     <input type="url" id="vidUrl" class="text-input" placeholder="https://www.youtube.com/watch?v=…" maxlength="300">
     <label class="field" for="vidTitle">Title</label>
     <input type="text" id="vidTitle" class="text-input" maxlength="120" placeholder="e.g. Meditation as Medication for the Soul">
     <label class="field" for="vidCaption">One-line caption <span class="muted">(optional)</span></label>
     <input type="text" id="vidCaption" class="text-input" maxlength="200">
     <div class="error" id="vidErr" role="alert"></div>
-    <div class="actions"><button type="button" class="btn btn-ghost" id="vidCancel">Cancel</button><button type="button" class="btn btn-danger" id="vidClear">Remove</button><button type="submit" class="btn btn-primary">Save</button></div>
+    <div class="actions"><button type="button" class="btn btn-ghost" id="vidCancel">Close</button><button type="submit" class="btn btn-primary">Add</button></div>
   </form>
 </dialog>
 
@@ -706,27 +731,27 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js?v=19"></script>
-<script src="js/quotes.js?v=19"></script>
-<script src="js/core.js?v=19"></script>
-<script src="js/diag.js?v=19"></script>
-<script src="js/challenge.js?v=19"></script>
-<script src="js/rewards.js?v=19"></script>
-<script src="js/roadmap.js?v=19"></script>
-<script src="js/sessions-ui.js?v=19"></script>
-<script src="js/timer.js?v=19"></script>
-<script src="js/insights.js?v=19"></script>
-<script src="js/home.js?v=19"></script>
-<script src="js/knowledge.js?v=19"></script>
-<script src="js/learn.js?v=19"></script>
-<script src="js/calendar.js?v=19"></script>
-<script src="js/vendor/qrcode.js?v=19"></script>
-<script src="js/events.js?v=19"></script>
-<script src="js/social.js?v=19"></script>
-<script src="js/goals.js?v=19"></script>
-<script src="js/sync.js?v=19"></script>
-<script src="js/account.js?v=19"></script>
-<script src="js/profile.js?v=19"></script>
-<script src="js/app.js?v=19"></script>
+<script src="js/config.js?v=20"></script>
+<script src="js/quotes.js?v=20"></script>
+<script src="js/core.js?v=20"></script>
+<script src="js/diag.js?v=20"></script>
+<script src="js/challenge.js?v=20"></script>
+<script src="js/rewards.js?v=20"></script>
+<script src="js/roadmap.js?v=20"></script>
+<script src="js/sessions-ui.js?v=20"></script>
+<script src="js/timer.js?v=20"></script>
+<script src="js/insights.js?v=20"></script>
+<script src="js/home.js?v=20"></script>
+<script src="js/knowledge.js?v=20"></script>
+<script src="js/learn.js?v=20"></script>
+<script src="js/calendar.js?v=20"></script>
+<script src="js/vendor/qrcode.js?v=20"></script>
+<script src="js/events.js?v=20"></script>
+<script src="js/social.js?v=20"></script>
+<script src="js/goals.js?v=20"></script>
+<script src="js/sync.js?v=20"></script>
+<script src="js/account.js?v=20"></script>
+<script src="js/profile.js?v=20"></script>
+<script src="js/app.js?v=20"></script>
 </body>
 </html>

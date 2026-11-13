@@ -63,6 +63,7 @@
       return r.json().then(function (j) { if (!r.ok) throw err(j.error || 'Could not sign in to events'); return j; });
     }).then(function (j) {
       session = { token: j.token, user: j.user, contact: j.contact || null, exp: Date.now() + 29 * 86400000 };
+      if (j.user && j.user.name) MC.store.set('meditation-copilot:signin-name', j.user.name);
       MC.store.set(SESSION_KEY, session);
       refreshMe();
       return session;
@@ -232,8 +233,9 @@
       return;
     }
     var html = '<div class="section-title">SOS events' + (MC.events.isAdmin() ? ' <button class="btn btn-soft btn-sm" id="evNew" style="flex:0 0 auto">+ New event</button>' : '') + '</div>';
-    if (MC.events.isAdmin()) html += '<div class="tool-row" style="grid-template-columns:1fr 1fr 1fr;margin:-4px 0 10px">' +
-      '<button class="btn btn-ghost btn-sm" id="evPoster">🖨 QR poster</button><a class="btn btn-ghost btn-sm" href="#people">👥 People</a><button class="btn btn-ghost btn-sm" id="evVideo">▶ Video</button></div>';
+    if (MC.events.isAdmin()) html += '<div class="tool-row two" style="margin:-4px 0 10px">' +
+      '<button class="btn btn-ghost btn-sm" id="evPoster">🖨 QR poster</button><a class="btn btn-ghost btn-sm" href="#people">👥 People</a>' +
+      '<button class="btn btn-ghost btn-sm" id="evVideo">▶ Featured</button><a class="btn btn-ghost btn-sm" href="#feedback">💬 Feedback</a></div>';
     if (cache.blocked) { el.innerHTML = html + '<p class="small">' + MC.esc(cache.blockedMessage || '') + '</p>'; return; }
     var list = (cache.events || []).filter(function (e) { return e.endsAt > Date.now() - 3600000; });
     html += list.length ? list.slice(0, 12).map(eventRow).join('') : '<p class="small muted" style="margin:0">No upcoming events yet.</p>';
@@ -451,9 +453,11 @@
   MC.renderFeatured = function () {
     var el = $('featured'); if (!el || !MC.events.enabled()) return;
     var paint = function (st) {
-      var v = st && st.featuredVideo;
-      el.innerHTML = v ? '<a class="card featured" href="' + MC.esc(v.url) + '" target="_blank" rel="noopener" id="featuredLink"><span class="ft-img"><img src="https://i.ytimg.com/vi/' + MC.esc(v.videoId) + '/mqdefault.jpg" alt=""><span class="ft-play">▶</span></span>' +
-        '<span><b>' + MC.esc(v.title) + '</b>' + (v.caption ? '<small>' + MC.esc(v.caption) + '</small>' : '') + '<small>Watch on YouTube ↗</small></span></a>' : '';
+      var list = (st && st.featuredVideos) || (st && st.featuredVideo ? [st.featuredVideo] : []);
+      var v = list.length ? list[Math.floor((MC.today().getTime() / 86400000)) % list.length] : null;   // a different one each day
+      el.innerHTML = v ? '<div class="section-title" style="margin-bottom:8px">Featured today</div><a class="card featured" href="' + MC.esc(v.url) + '" target="_blank" rel="noopener" id="featuredLink"><span class="ft-img">' +
+        (v.videoId ? '<img src="https://i.ytimg.com/vi/' + MC.esc(v.videoId) + '/hqdefault.jpg" alt=""><span class="ft-play">▶</span>' : '<span class="ft-site">🪷</span>') + '</span>' +
+        '<span><b>' + MC.esc(v.title) + '</b>' + (v.caption ? '<small>' + MC.esc(v.caption) + '</small>' : '') + '<small>' + (v.videoId ? 'Watch on YouTube ↗' : 'Open on sos.org ↗') + '</small></span></a>' : '';
       if ($('featuredLink')) $('featuredLink').addEventListener('click', function () { MC.track('featured_video'); });
     };
     var cached = MC.store.get(SETTINGS_KEY, null);
@@ -465,26 +469,111 @@
       .catch(function () { settingsAt = 0; });
   };
   var vidDlg = $('vidDlg');
+  function featuredList() { var st = (MC.store.get(SETTINGS_KEY, null) || {}).settings || {}; return st.featuredVideos || (st.featuredVideo ? [st.featuredVideo] : []); }
+  function renderVidList() {
+    var list = featuredList();
+    $('vidList').innerHTML = list.length ? list.map(function (v, i) {
+      return '<div class="vid-row">' + (v.videoId ? '<img src="https://i.ytimg.com/vi/' + MC.esc(v.videoId) + '/default.jpg" alt="">' : '<span style="width:64px;text-align:center">🪷</span>') +
+        '<span class="ag-main"><b>' + MC.esc(v.title) + '</b><small>' + MC.esc(v.caption || v.url) + '</small></span><button type="button" class="link small" data-vrm="' + i + '">Remove</button></div>';
+    }).join('') : '<p class="small muted">Nothing featured yet.</p>';
+  }
   function openVideoForm() {
-    var cur = (MC.store.get(SETTINGS_KEY, null) || {}).settings; cur = cur && cur.featuredVideo;
-    $('vidUrl').value = cur ? cur.url : ''; $('vidTitle').value = cur ? cur.title : ''; $('vidCaption').value = cur ? (cur.caption || '') : ''; $('vidErr').textContent = '';
-    $('vidClear').hidden = !cur;
+    $('vidUrl').value = ''; $('vidTitle').value = ''; $('vidCaption').value = ''; $('vidErr').textContent = '';
+    renderVidList();
     if (vidDlg.showModal) vidDlg.showModal(); else vidDlg.setAttribute('open', '');
   }
-  function saveVideo(v) {
-    return api('PUT', '/api/admin/centers/' + CENTER + '/settings', { featuredVideo: v }).then(function (j) {
+  function saveFeatured(list, msg) {
+    return api('PUT', '/api/admin/centers/' + CENTER + '/settings', { featuredVideos: list }).then(function (j) {
       MC.store.set(SETTINGS_KEY, { settings: j.settings || {}, at: Date.now() }); settingsAt = 0;
-      vidDlg.close(); MC.toast(v ? 'Featured video updated.' : 'Featured video removed.');
+      renderVidList(); MC.toast(msg); if (MC.renderFeatured) MC.renderFeatured();
     }).catch(function (x) { $('vidErr').textContent = x.message; });
   }
   $('vidCancel').addEventListener('click', function () { vidDlg.close(); });
-  $('vidClear').addEventListener('click', function () { if (window.confirm('Remove the featured video from the Today screen?')) saveVideo(null); });
+  $('vidList').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-vrm]'); if (!b) return;
+    var list = featuredList().slice(); list.splice(Number(b.dataset.vrm), 1); saveFeatured(list, 'Removed.');
+  });
   $('vidForm').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var url = $('vidUrl').value.trim();
-    if (!url) { $('vidErr').textContent = 'Paste a YouTube link.'; return; }
-    saveVideo({ url: url, title: $('vidTitle').value.trim() || 'Featured video', caption: $('vidCaption').value.trim() });
+    if (!url) { $('vidErr').textContent = 'Paste a YouTube link or a sos.org page.'; return; }
+    var list = featuredList().slice(); list.push({ url: url, title: $('vidTitle').value.trim() || 'Featured today', caption: $('vidCaption').value.trim() });
+    saveFeatured(list, 'Added.').then(function () { $('vidUrl').value = ''; $('vidTitle').value = ''; $('vidCaption').value = ''; });
   });
+
+  /* ---------- Feedback: suggestions and ratings ---------- */
+  var fbDlg = $('fbDlg'), fbKind = 'suggestion', fbStar = 0, FB_KEY = 'meditation-copilot:feedback-ask';
+  function openFeedback(kind) {
+    fbKind = kind; fbStar = 0;
+    $('fbHead').textContent = kind === 'rating' ? 'How is the app working for you?' : 'Send a suggestion';
+    $('fbLead').textContent = kind === 'rating' ? 'A quick rating helps the center improve this app. A comment is welcome but optional.' : 'What would make this app better for your practice? Every note is read by the center team.';
+    $('fbStars').hidden = kind !== 'rating'; $('fbStars').querySelectorAll('button').forEach(function (b) { b.classList.remove('on'); });
+    $('fbTextLabel').textContent = kind === 'rating' ? 'Comment (optional)' : 'Your suggestion';
+    $('fbText').value = ''; $('fbErr').textContent = '';
+    $('fbContactBox').hidden = signedInMode(); $('fbContact').value = '';
+    $('fbNever').hidden = kind !== 'rating'; $('fbLater').textContent = kind === 'rating' ? 'Later' : 'Cancel';
+    if (fbDlg.showModal) fbDlg.showModal(); else fbDlg.setAttribute('open', '');
+    MC.track('feedback_open', { kind: kind });
+  }
+  $('fbStars').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-star]'); if (!b) return;
+    fbStar = Number(b.dataset.star);
+    $('fbStars').querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', Number(x.dataset.star) <= fbStar); });
+  });
+  $('fbLater').addEventListener('click', function () { if (fbKind === 'rating') MC.store.set(FB_KEY, { at: Date.now(), state: 'later' }); fbDlg.close(); });
+  $('fbNever').addEventListener('click', function () { MC.store.set(FB_KEY, { at: Date.now(), state: 'never' }); fbDlg.close(); });
+  fbDlg.addEventListener('cancel', function () { if (fbKind === 'rating') MC.store.set(FB_KEY, { at: Date.now(), state: 'later' }); });
+  $('fbForm').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var text = $('fbText').value.trim();
+    if (fbKind === 'rating' && !fbStar) { $('fbErr').textContent = 'Tap a star to rate.'; return; }
+    if (fbKind === 'suggestion' && !text) { $('fbErr').textContent = 'Please write your suggestion first.'; return; }
+    $('fbErr').textContent = ''; $('fbSend').disabled = true;
+    api('POST', '/api/feedback', { kind: fbKind, rating: fbStar || undefined, body: text, contact: $('fbContact').value.trim(), version: MC.VERSION }).then(function () {
+      $('fbSend').disabled = false; fbDlg.close();
+      if (fbKind === 'rating') MC.store.set(FB_KEY, { at: Date.now(), state: 'done' });
+      MC.toast('Thank you 🙏 Your ' + (fbKind === 'rating' ? 'rating' : 'suggestion') + ' has been sent.');
+      MC.track('feedback_sent', { kind: fbKind, rating: fbStar || 0 });
+    }).catch(function (x) { $('fbSend').disabled = false; $('fbErr').textContent = x.message || 'Could not send. Please try again.'; });
+  });
+  if ($('fbSuggest')) $('fbSuggest').addEventListener('click', function () { openFeedback('suggestion'); });
+  MC.openFeedback = openFeedback;
+  // Ask for a rating once, after about a week of real use; "Later" asks again in 30 days
+  function maybeAskRating() {
+    if (!MC.events.enabled() || MC.current !== 'home') return;
+    var st = MC.store.get(FB_KEY, null);
+    if (st && (st.state === 'never' || st.state === 'done')) return;
+    if (st && st.state === 'later' && Date.now() - st.at < 30 * 86400000) return;
+    var days = {}; MC.sessions.all().forEach(function (s) { days[MC.dayKey(s.start)] = 1; });
+    if (Object.keys(days).length < 7) return;
+    if (document.querySelector('dialog[open]')) return;
+    setTimeout(function () { if (!document.querySelector('dialog[open]')) openFeedback('rating'); }, 1500);
+  }
+  MC.on('view', function (n) { if (n === 'home') maybeAskRating(); });
+
+  /* ---------- Feedback (admin) ---------- */
+  function showFeedbackAdmin() {
+    var view = $('v-feedback');
+    if (!MC.events.isAdmin()) { view.innerHTML = '<div class="card">Admins only.</div>'; return; }
+    view.innerHTML = '<a class="link" href="#calendar" style="padding:4px 0;display:inline-block">‹ Calendar</a><div class="card"><div class="section-title">Feedback <span class="small muted">admin</span></div><div id="fbaList" class="small muted">Loading…</div></div>';
+    api('GET', '/api/admin/feedback').then(function (j) {
+      var rows = j.feedback || [];
+      $('fbaList').className = '';
+      $('fbaList').innerHTML = '<p class="small" style="margin:-6px 0 10px">' + (j.ratings ? '<b>' + j.averageRating + ' ★</b> average from ' + j.ratings + ' rating' + (j.ratings === 1 ? '' : 's') + ' · ' : '') + rows.length + ' item' + (rows.length === 1 ? '' : 's') +
+        ' · <button class="link small" id="fbaCsv" style="padding:0">⬇ CSV</button></p>' +
+        (rows.length ? rows.map(function (r) {
+          return '<div class="msg"><div class="msg-head"><span>' + (r.kind === 'rating' ? '<b>' + '★'.repeat(r.rating || 0) + '</b> ' : '💡 ') + MC.esc(r.name || 'Guest') + (r.email ? ' · ' + MC.esc(r.email) : r.contact ? ' · ' + MC.esc(r.contact) : '') + '</span><span>' +
+            MC.esc(MC.fmtDate(new Date(r.createdAt), { month: 'short', day: 'numeric' })) + ' · v' + MC.esc(r.version || '?') + ' · ' + MC.esc(r.platform || '') + '</span></div>' + (r.body ? '<p class="msg-body">' + MC.esc(r.body) + '</p>' : '') + '</div>';
+        }).join('') : '<p class="small muted">Nothing yet.</p>');
+      $('fbaCsv').addEventListener('click', function () {
+        raw('GET', '/api/admin/feedback?format=csv').then(function (r) { if (!r.ok) throw err('Could not download'); return r.blob(); }).then(function (b) {
+          var url = URL.createObjectURL(b), a = document.createElement('a'); a.href = url; a.download = 'feedback.csv'; document.body.appendChild(a); a.click();
+          setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1000);
+        }).catch(function (x) { MC.toast(x.message); });
+      });
+    }).catch(function (x) { $('fbaList').textContent = x.message; });
+  }
+  MC.views.feedback = { show: showFeedbackAdmin };
 
   /* ---------- People (admin): categories and blocking ---------- */
   function showPeople() {

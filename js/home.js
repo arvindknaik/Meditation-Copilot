@@ -34,14 +34,15 @@
     var today = MC.sumRange(t, tomorrow), week = MC.sumRange(MC.weekStart(t), tomorrow);
     var st = MC.streaks(), target = MC.dailyTarget();
 
-    $('greet').textContent = greeting() + ' 🙏';
+    var fn = MC.firstName ? MC.firstName() : '';
+    $('greet').textContent = greeting() + (fn ? ', ' + fn : '') + ' 🙏';
     var sub = MC.fmtDate(new Date(), { weekday: 'long', month: 'long', day: 'numeric' });
     if (st.current > 1 && !st.practicedToday) sub += ' · Sit today to keep your ' + st.current + '-day streak';
     else if (today.minutes >= target) sub += ' · Today’s target complete ✨';
     $('greetSub').textContent = sub;
 
     $('todayMin').textContent = MC.fmtMin(today.minutes);
-    $('todayOf').textContent = 'of ' + MC.fmtMin(target) + ' min today';
+    $('todayOf').innerHTML = '<b>' + MC.esc(MC.fmtMin(today.minutes)) + '</b> of ' + MC.esc(MC.fmtMin(target)) + ' min today';
     $('targetVal').textContent = MC.fmtMin(target) + ' min' + (MC.targetLocked() ? ' · set by your challenge' : '');
     var ring = $('todayRing');
     MC.setRing(ring, 0);

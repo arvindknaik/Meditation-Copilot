@@ -3,7 +3,7 @@
   'use strict';
   var MC = window.MC = {};
 
-  MC.VERSION = '0.13.1';          // shown in Account and diagnostics
+  MC.VERSION = '0.14.0';          // shown in Account and diagnostics
   MC.SCHEMA = 2;                 // data snapshot format used for cloud sync
   MC.GOAL_HOURS = 10000;           // fixed spiritual goal — not user-editable
   MC.MAX_AGE = 90;
@@ -44,6 +44,13 @@
   MC.profile = Object.assign({}, DEFAULT_PROFILE, MC.store.get(KEYS.profile, {}));
   var meta = Object.assign({ profileUpdatedAt: 0, settingsUpdatedAt: 0 }, MC.store.get(KEYS.meta, {}));
   function saveMeta() { MC.store.set(KEYS.meta, meta); }
+  // Name for greetings: what they typed in Account, else the name from their Google/Microsoft sign-in (kept by events.js)
+  MC.displayName = function () { return (MC.profile.name || MC.store.get('meditation-copilot:signin-name', '') || '').trim(); };
+  MC.firstName = function () { var n = MC.displayName(); return n ? n.split(/\s+/)[0] : ''; };
+  MC.nameSheetHTML = function () {
+    var n = MC.displayName();
+    return '<div class="section-title" style="margin-top:4px">Your name</div><div class="profile-row"><div class="small">' + (n ? 'We call you <b>' + MC.esc(MC.firstName()) + '</b>' : 'Add your name for a personal greeting') + '</div><button class="btn btn-ghost btn-sm" id="acName" style="flex:0 0 auto">' + (n ? 'Change' : 'Add') + '</button></div>';
+  };
   MC.saveProfile = function () { MC.store.set(KEYS.profile, MC.profile); meta.profileUpdatedAt = Date.now(); saveMeta(); MC.emit('changed'); };
   MC.resetProfile = function () {
     MC.profile = Object.assign({}, DEFAULT_PROFILE); MC.store.del(KEYS.profile);
@@ -609,7 +616,7 @@
   /* ---------- Router (hash-based: #home, #timer, #insights, #roadmap) ---------- */
   MC.views = {};
   MC.current = null;
-  var VIEWS = ['home', 'timer', 'calendar', 'insights', 'roadmap', 'learn', 'event', 'checkin', 'people'];
+  var VIEWS = ['home', 'timer', 'calendar', 'insights', 'roadmap', 'learn', 'event', 'checkin', 'people', 'feedback'];
   MC.route = function () {
     var name = (location.hash || '#home').slice(1).split('?')[0];
     if (VIEWS.indexOf(name) < 0) name = 'home';
