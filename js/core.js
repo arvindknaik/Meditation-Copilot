@@ -3,7 +3,7 @@
   'use strict';
   var MC = window.MC = {};
 
-  MC.VERSION = '0.14.0';          // shown in Account and diagnostics
+  MC.VERSION = '0.14.2';          // shown in Account and diagnostics
   MC.SCHEMA = 2;                 // data snapshot format used for cloud sync
   MC.GOAL_HOURS = 10000;           // fixed spiritual goal — not user-editable
   MC.MAX_AGE = 90;
@@ -567,20 +567,31 @@
 
   /* ---------- Bells (synthesised singing bowl — works offline, no audio files) ---------- */
   var actx = null;
+  function audioCtx() {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!actx || actx.state === 'closed') actx = new AC();
+    // Safari 17+: play bells even when the phone's ring/silent switch is on silent
+    try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {}
+    return actx;
+  }
   MC.audioUnlock = function () {
     try {
-      var AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return;
-      if (!actx) actx = new AC();
-      if (actx.state === 'suspended') actx.resume();
-      var b = actx.createBuffer(1, 1, 22050), src = actx.createBufferSource();   // silent unlock (iOS)
-      src.buffer = b; src.connect(actx.destination); src.start(0);
+      var c = audioCtx(); if (!c) return;
+      if (c.state !== 'running') c.resume();
+      var b = c.createBuffer(1, 1, 22050), src = c.createBufferSource();   // silent unlock (iOS)
+      src.buffer = b; src.connect(c.destination); src.start(0);
     } catch (e) {}
   };
+  MC.audioReady = function () { return !!(actx && actx.state === 'running'); };
+  // Returns true when the bell was actually sent to the speaker; false if sound isn't available yet
+  // (the phone was locked, the app was in the background, or the page reloaded without a tap).
   MC.bell = function (kind) {
-    if (!actx) return;
+    var c;
+    try { c = audioCtx(); } catch (e) { return false; }
+    if (!c) return false;
+    if (c.state !== 'running') { try { c.resume(); } catch (e) {} return false; }   // the caller tries again shortly
     try {
-      if (actx.state === 'suspended') actx.resume();
       var strikes = kind === 'end' ? 3 : 1;
       var base = kind === 'interval' ? 528 : 396;
       var dur = kind === 'interval' ? 4.5 : 7;
@@ -601,7 +612,8 @@
           o.start(t0); o.stop(t0 + dur + 0.1);
         });
       }
-    } catch (e) {}
+      return true;
+    } catch (e) { return false; }
   };
 
   /* ---------- Theme (Automatic / Light / Dark — set in the Account sheet) ---------- */

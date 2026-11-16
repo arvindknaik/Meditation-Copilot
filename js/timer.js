@@ -54,11 +54,29 @@
     prep = null;
     active = { startedAt: Date.now(), pausedAt: null, pausedMs: 0, target: target, endRung: false };
     save();
+    endTipShown = false;
     if (MC.settings.startBell !== false) MC.bell('start');
     MC.track('timer_start', { open: !target });
     setModeText();
     tick();
   }
+  // End bell: keep trying until sound is available (it isn't while the screen is locked, the app is in
+  // the background, or after a reload until the next tap). Give up quietly if the sitting ended long ago.
+  var END_BELL_GRACE_SEC = 15 * 60, endTipShown = false;
+  function ringEnd(overSec) {
+    var wantBell = MC.settings.endBell !== false;
+    if (!wantBell || overSec > END_BELL_GRACE_SEC) { active.endRung = true; save(); return; }
+    if (document.visibilityState === 'hidden') return;           // try again when the app is back in view
+    if (!MC.bell('end')) {
+      if (!endTipShown) { endTipShown = true; $('runNote').textContent = 'Your time is complete. Tap anywhere to hear the bell. 🙏'; }
+      return;
+    }
+    active.endRung = true; save();
+    try { if (navigator.vibrate) navigator.vibrate([200, 120, 200]); } catch (e) {}
+  }
+  // Any tap while the timer is open re-enables sound, so a waiting bell can ring
+  document.addEventListener('pointerdown', function () { if (active || prep) MC.audioUnlock(); }, true);
+
   function setModeText() {
     var t = prep ? prep.target : active.target;
     $('runMode').textContent = t ? t + '-minute sitting' : 'Open sitting';
@@ -116,12 +134,8 @@
         timeEl.classList.add('over');
         $('runLabel').textContent = paused ? 'paused' : 'beyond your ' + active.target + ' min';
         MC.setRing(ring, 1);
-        $('runNote').textContent = 'Your time is complete. Sit as long as you like. 🙏';
-        if (!active.endRung && !paused) {
-          active.endRung = true; save();
-          if (MC.settings.endBell !== false) MC.bell('end');
-          try { if (navigator.vibrate) navigator.vibrate([200, 120, 200]); } catch (e) {}
-        }
+        if (active.endRung || !endTipShown) $('runNote').textContent = 'Your time is complete. Sit as long as you like. 🙏';
+        if (!active.endRung && !paused) ringEnd(sec - targetSec);
       }
     } else {
       timeEl.textContent = MC.fmtClock(sec);

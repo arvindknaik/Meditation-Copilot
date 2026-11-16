@@ -87,16 +87,18 @@
         '<span class="small" style="color:var(--gold-ink);font-weight:600;white-space:nowrap">' + Math.round(last.quality) + '% ' + MC.qualityLabel(last.quality) + '</span>';
     }
 
-    // Thought for today: approved quotes from js/quotes.js, otherwise the app's own reflections
+    // Thought for today: approved quotes (js/quotes.js) mixed with the app's own reflections (author unknown).
+    // A fixed step that shares no factor with the list length visits every quote once per cycle, with authors mixed.
     var doy = MC.daysBetween(new Date(2000, 0, 1), t);
-    var mq = window.MC_QUOTES || {}, qs = (mq.quotes || []).filter(function (q) { return q && q.text; });
-    if (qs.length) {
-      var q = qs[doy % qs.length];
-      $('thought').innerHTML = '<span class="small muted" style="font-style:normal;font-family:var(--sans);display:block;margin-bottom:6px">Thought for today</span>' +
-        '\u201C' + MC.esc(q.text) + '\u201D<cite>\u2014 ' + MC.esc(mq.author || '') + (q.source ? ', <i>' + MC.esc(q.source) + '</i>' : '') + '</cite>';
-    } else {
-      $('thought').innerHTML = MC.esc(THOUGHTS[doy % THOUGHTS.length]) + '<cite>Thought for today</cite>';
-    }
+    var mq = window.MC_QUOTES || {};
+    var all = (mq.quotes || []).filter(function (q) { return q && q.text; })
+      .concat(THOUGHTS.map(function (x) { return { text: x }; }));
+    var n = all.length, step = 1;
+    [37, 31, 29, 23, 19, 17, 13, 11, 7].some(function (k) { if (n % k) { step = k; return true; } return false; });
+    var q = all[(doy * step) % n];
+    var who = q.author || mq.author || 'Unknown';
+    $('thought').innerHTML = '<span class="small muted" style="font-style:normal;font-family:var(--sans);display:block;margin-bottom:6px">Thought for today</span>' +
+      '\u201C' + MC.esc(q.text) + '\u201D<cite>\u2014 ' + MC.esc(who) + (q.source ? ', <i>' + MC.esc(q.source) + '</i>' : '') + '</cite>';
   }
 
   /* Daily target sheet */
