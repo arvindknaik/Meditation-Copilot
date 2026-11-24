@@ -160,6 +160,19 @@
     el.innerHTML = html;
   };
 
+  // Points in the header, on every screen. Tapping opens Rewards in Insights.
+  MC.renderPointsPill = function () {
+    if (!$('pointsVal')) return;
+    var r = compute();
+    $('pointsVal').textContent = r.total.toLocaleString();
+    $('pointsLvl').textContent = r.level;
+    $('pointsPill').setAttribute('aria-label', r.total.toLocaleString() + ' reward points, level ' + r.level + '. Open rewards.');
+  };
+  MC.pointsSummary = function () { var r = compute(); return { points: r.total, level: r.level }; };
+  MC.on('data', function () { MC.renderPointsPill(); });
+  MC.on('profile', function () { MC.renderPointsPill(); });
+  MC.on('view', function () { MC.renderPointsPill(); });
+
   // Initialise the "seen" list silently so existing data doesn't trigger a flood of toasts
   if (!MC.store.get(SEEN_KEY, null)) { try { checkNew(); } catch (e) {} }
 })();

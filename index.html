@@ -3,6 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+/* Desktop / mobile layout: chosen before the page draws, so there is no flash.
+   Auto: phones get the mobile layout; computers and wide tablets get the desktop layout.
+   A choice made with the switch (or ?view=desktop|mobile|auto in the address) is remembered on this device. */
+(function () {
+  var KEY = 'mc.layout', pref = null, q = null;
+  try { q = new URLSearchParams(location.search).get('view'); } catch (e) {}
+  try {
+    if (q === 'desktop' || q === 'mobile') localStorage.setItem(KEY, q);
+    if (q === 'auto') localStorage.removeItem(KEY);
+    pref = localStorage.getItem(KEY);
+  } catch (e) {}
+  var ua = navigator.userAgent || '';
+  var phone = (navigator.userAgentData && navigator.userAgentData.mobile) || /iPhone|iPod|Android.+Mobile|Windows Phone|Mobi/i.test(ua);
+  var auto = (!phone && window.matchMedia('(min-width: 900px)').matches) ? 'desktop' : 'mobile';
+  var mode = pref === 'desktop' || pref === 'mobile' ? pref : auto;
+  var root = document.documentElement;
+  root.setAttribute('data-layout', mode);
+  root.setAttribute('data-layout-pref', pref || 'auto');
+  if (mode === 'desktop') {
+    root.classList.add('mc-desktop');
+    // A phone asked for the desktop layout: lay the page out at desktop width, like "Request desktop site".
+    if (Math.min(screen.width, window.innerWidth || screen.width) < 900) {
+      var vp = document.querySelector('meta[name="viewport"]');
+      if (vp) vp.setAttribute('content', 'width=1280');
+      root.classList.add('mc-forced-desktop');
+    }
+  }
+})();
+</script>
 <title>Meditation Copilot</title>
 <meta name="description" content="Small moments. Daily practice. Inner transformation. Time your sittings, see your progress, and plan your path to 10,000 effective meditation hours.">
 <meta name="theme-color" content="#043a5b" media="(prefers-color-scheme: light)">
@@ -17,13 +47,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Meditation Copilot">
 
-<meta property="og:title" content="🙏 Meditation Copilot">
+<meta property="og:title" content="Meditation Copilot">
 <meta property="og:description" content="Small moments. Daily practice. Inner transformation. Find your path to 10,000 meditation hours.">
 <meta property="og:image" content="https://arvindknaik.github.io/Meditation-Copilot/icons/icon-512.png">
 <meta property="og:url" content="https://arvindknaik.github.io/Meditation-Copilot/">
 <meta property="og:type" content="website">
 
-<link rel="stylesheet" href="css/styles.css?v=22">
+<link rel="stylesheet" href="css/styles.css?v=25">
+<link rel="stylesheet" href="css/desktop.css?v=25">
 </head>
 <body>
 <!-- Shared gradient for progress rings -->
@@ -38,8 +69,12 @@
 
 <div class="wrap">
   <header class="top">
-    <div class="brand"><span class="logo" aria-hidden="true">🙏</span><span class="brand-text"><span class="brand-name">Meditation Copilot</span><span class="proto-pill" title="Prototype only. Not an approved Science of Spirituality app.">Prototype</span></span></div>
-    <button class="account-btn" id="accountBtn" aria-label="Account, data and settings">👤 Account</button>
+    <div class="brand"><span class="brand-text"><span class="brand-name">Meditation Copilot</span><span class="proto-pill" title="Prototype only. Not an approved Science of Spirituality app.">Prototype</span></span></div>
+    <div class="top-actions">
+      <a class="points-pill" id="pointsPill" href="#insights?rewards" aria-label="Reward points"><span aria-hidden="true">🏆</span> <b id="pointsVal">0</b><span class="pp-lvl" id="pointsLvl"></span></a>
+      <button class="icon-btn view-btn" id="viewBtn" type="button" aria-label="Switch layout"></button>
+      <button class="account-btn" id="accountBtn" aria-label="Account, data and settings">👤 Account</button>
+    </div>
   </header>
 
   <main>
@@ -54,8 +89,6 @@
 
       <div id="featured"></div>
       <div id="presence"></div>
-
-      <div id="pointsLine"></div>
 
       <div class="card today-card">
         <div class="today-row">
@@ -75,6 +108,7 @@
           <a class="btn btn-primary btn-xl btn-block" href="#timer">🪷 Start Meditation</a>
         </div>
         <div id="nextSitting"></div>
+        <div id="todayAgenda"></div>
       </div>
 
       <div class="stats three" style="margin-bottom:16px">
@@ -82,6 +116,9 @@
         <div class="stat"><div class="k">This week</div><div class="v" id="hWeek">0m</div></div>
         <div class="stat"><div class="k">Sessions</div><div class="v" id="hWeekCount">0</div></div>
       </div>
+
+      <div id="homeEvents"></div>
+      <div id="heroArticle"></div>
 
       <div class="card" id="journeyCard"></div>
 
@@ -134,6 +171,7 @@
 
       <!-- Running -->
       <div id="timerRun" hidden>
+        <h1 class="mip" id="mipTitle">Meditation in Progress</h1>
         <div class="card run-card center">
           <p class="muted small" id="runMode" style="margin:0 0 6px"></p>
           <div class="ring-wrap">
@@ -158,10 +196,9 @@
     </section>
 
     <!-- ================= CALENDAR ================= -->
-    <section class="view" id="v-calendar" aria-label="Calendar">
+    <section class="view" id="v-calendar" aria-label="My calendar">
       <div class="card" id="calMonth"></div>
-      <div class="card" id="calAgenda"></div>
-      <div class="card" id="calSchedule"></div>
+      <div class="card" id="calAgenda" hidden></div>
       <div class="card" id="calEvents"></div>
     </section>
 
@@ -174,9 +211,12 @@
     <!-- ================= PEOPLE (admin: categories, block) ================= -->
     <section class="view" id="v-people" aria-label="People"></section>
     <section class="view" id="v-feedback" aria-label="Feedback"></section>
+    <section class="view" id="v-admin" aria-label="Admin"></section>
 
     <!-- ================= INSIGHTS ================= -->
     <section class="view" id="v-insights" aria-label="Insights">
+      <div class="card" id="calSchedule"></div>
+      <div class="card" id="rewardsCard"></div>
       <div class="stats" style="margin-bottom:16px" id="sumTiles"></div>
 
       <div class="card">
@@ -191,8 +231,6 @@
         <div class="chart-wrap" id="chartWrap"></div>
         <p class="small muted" style="margin:8px 2px 0">Tap a bar for details. The dashed line is your target.</p>
       </div>
-
-      <div class="card" id="rewardsCard"></div>
 
       <div class="card">
         <div class="section-title">Your patterns <span class="small muted">last 30 days</span></div>
@@ -376,7 +414,7 @@
         <div class="section-title" style="margin-bottom:6px">Need help?</div>
         <p class="small" style="margin:0 0 12px">For help with meditation or this app, contact the Minneapolis Center.</p>
         <div class="tool-row two" style="margin-top:0">
-          <a class="btn btn-soft btn-sm" href="https://wa.me/16122164444" target="_blank" rel="noopener" style="white-space:nowrap;padding:10px 8px">💬 WhatsApp 612-216-4444</a>
+          <a class="btn btn-soft btn-sm" href="https://wa.me/16122164444" target="_blank" rel="noopener" style="white-space:nowrap;padding:10px 8px">💬 WhatsApp</a>
           <a class="btn btn-soft btn-sm" href="mailto:MinneapolisCenter@sos.org">✉️ Email us</a>
         </div>
         <p class="small muted center" style="margin:8px 0 0">MinneapolisCenter@sos.org</p>
@@ -387,7 +425,7 @@
 
   <footer>
     <p class="disclaimer"><b>Prototype only.</b> This is not an official or approved Science of Spirituality app.</p>
-    <p>Need help? <a href="https://wa.me/16122164444" target="_blank" rel="noopener">WhatsApp 612-216-4444</a> · <a href="mailto:MinneapolisCenter@sos.org">MinneapolisCenter@sos.org</a></p>
+    <p>Need help? <a href="https://wa.me/16122164444" target="_blank" rel="noopener">WhatsApp</a> · <a href="mailto:MinneapolisCenter@sos.org">MinneapolisCenter@sos.org</a></p>
     <p>Your sittings and reflections stay on your device and in your own cloud drive. Event sign-ups stay with the Minneapolis Center. We never sell or share your data. <a href="privacy.html" target="_blank" rel="noopener">Privacy notice</a></p>
   </footer>
 </div>
@@ -402,7 +440,7 @@
       <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9.5 2.5h5"/></svg></span>Timer
     </a>
     <a class="tab" href="#calendar" data-tab="calendar">
-      <span class="ic"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg></span>Calendar
+      <span class="ic"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg></span>My Calendar
     </a>
     <a class="tab" href="#insights" data-tab="insights">
       <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M21 20H3"/></svg></span>Insights
@@ -412,6 +450,12 @@
     </a>
     <a class="tab" href="#learn" data-tab="learn">
       <span class="ic"><svg viewBox="0 0 24 24"><path d="M3 5.5c3-1 6-1 9 1 3-2 6-2 9-1V19c-3-1-6-1-9 1-3-2-6-2-9-1z"/><path d="M12 6.5V20"/></svg></span>Learn
+    </a>
+    <a class="tab tab-extra" data-site="/news/" href="https://sosmn.org/news/" data-ext="news">
+      <span class="ic"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7 9h10"/><path d="M7 12.5h10"/><path d="M7 16h6"/></svg></span>Center News
+    </a>
+    <a class="tab tab-extra" data-site="/about/" href="https://sosmn.org/about/" data-ext="about">
+      <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 7.6v.4"/></svg></span>About the Center
     </a>
   </div>
 </nav>
@@ -470,6 +514,8 @@
     <button class="btn btn-ghost btn-block" id="guestBtn" style="min-height:52px">Continue as guest</button>
     <p class="small muted" style="margin:18px 0 0">Prototype only. Not an official or approved Science of Spirituality app.<br>
       <a href="privacy.html" target="_blank" rel="noopener">Privacy notice</a></p>
+    <p class="small welcome-links" style="margin:14px 0 0"><a data-site="/news/" href="https://sosmn.org/news/">📰 Center news &amp; archive</a> · <a data-site="/about/" href="https://sosmn.org/about/">About the center</a></p>
+    <p class="view-switch" role="group" aria-label="Choose layout" style="margin:14px 0 0"></p>
   </div>
 </div>
 
@@ -731,27 +777,28 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js?v=22"></script>
-<script src="js/quotes.js?v=22"></script>
-<script src="js/core.js?v=22"></script>
-<script src="js/diag.js?v=22"></script>
-<script src="js/challenge.js?v=22"></script>
-<script src="js/rewards.js?v=22"></script>
-<script src="js/roadmap.js?v=22"></script>
-<script src="js/sessions-ui.js?v=22"></script>
-<script src="js/timer.js?v=22"></script>
-<script src="js/insights.js?v=22"></script>
-<script src="js/home.js?v=22"></script>
-<script src="js/knowledge.js?v=22"></script>
-<script src="js/learn.js?v=22"></script>
-<script src="js/calendar.js?v=22"></script>
-<script src="js/vendor/qrcode.js?v=22"></script>
-<script src="js/events.js?v=22"></script>
-<script src="js/social.js?v=22"></script>
-<script src="js/goals.js?v=22"></script>
-<script src="js/sync.js?v=22"></script>
-<script src="js/account.js?v=22"></script>
-<script src="js/profile.js?v=22"></script>
-<script src="js/app.js?v=22"></script>
+<script src="js/config.js?v=25"></script>
+<script src="js/quotes.js?v=25"></script>
+<script src="js/core.js?v=25"></script>
+<script src="js/diag.js?v=25"></script>
+<script src="js/challenge.js?v=25"></script>
+<script src="js/rewards.js?v=25"></script>
+<script src="js/roadmap.js?v=25"></script>
+<script src="js/sessions-ui.js?v=25"></script>
+<script src="js/timer.js?v=25"></script>
+<script src="js/insights.js?v=25"></script>
+<script src="js/home.js?v=25"></script>
+<script src="js/knowledge.js?v=25"></script>
+<script src="js/learn.js?v=25"></script>
+<script src="js/calendar.js?v=25"></script>
+<script src="js/vendor/qrcode.js?v=25"></script>
+<script src="js/events.js?v=25"></script>
+<script src="js/social.js?v=25"></script>
+<script src="js/goals.js?v=25"></script>
+<script src="js/sync.js?v=25"></script>
+<script src="js/account.js?v=25"></script>
+<script src="js/profile.js?v=25"></script>
+<script src="js/app.js?v=25"></script>
+<script src="js/layout.js?v=25" defer></script>
 </body>
 </html>

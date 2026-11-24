@@ -3,11 +3,11 @@
   'use strict';
   var MC = window.MC = {};
 
-  MC.VERSION = '0.14.2';          // shown in Account and diagnostics
+  MC.VERSION = '0.16.0';          // shown in Account and diagnostics
   MC.SCHEMA = 2;                 // data snapshot format used for cloud sync
   MC.GOAL_HOURS = 10000;           // fixed spiritual goal — not user-editable
   MC.MAX_AGE = 90;
-  MC.APP_LINK = 'https://arvindknaik.github.io/Meditation-Copilot/';
+  MC.APP_LINK = 'https://sosmn.org/copilot/';
   MC.MILESTONES = [100, 500, 1000, 2500, 5000, 7500, 10000];
   var DAY_MS = 86400000;
   var KEYS = {
@@ -628,7 +628,7 @@
   /* ---------- Router (hash-based: #home, #timer, #insights, #roadmap) ---------- */
   MC.views = {};
   MC.current = null;
-  var VIEWS = ['home', 'timer', 'calendar', 'insights', 'roadmap', 'learn', 'event', 'checkin', 'people', 'feedback'];
+  var VIEWS = ['home', 'timer', 'calendar', 'insights', 'roadmap', 'learn', 'event', 'checkin', 'people', 'feedback', 'admin'];
   MC.route = function () {
     var name = (location.hash || '#home').slice(1).split('?')[0];
     if (VIEWS.indexOf(name) < 0) name = 'home';
@@ -643,5 +643,14 @@
     MC.emit('view', name);
     window.scrollTo(0, 0);
   };
+  /* ---------- Links to the center website (News, About) ----------
+   * On sosmn.org, or a local preview of the whole site, they stay on the same site; elsewhere (GitHub Pages) they go to sosmn.org. */
+  MC.siteUrl = function (path) {
+    var h = location.hostname, cfg = (window.MC_CONFIG || {}).siteUrl || 'https://sosmn.org';
+    var same = /(^|\.)sosmn\.org$/.test(h) || ((h === 'localhost' || h === '127.0.0.1') && location.pathname.indexOf('/copilot/') === 0);
+    return same ? path : cfg.replace(/\/+$/, '') + path;
+  };
+  document.querySelectorAll('[data-site]').forEach(function (a) { a.href = MC.siteUrl(a.getAttribute('data-site')); });
+
   MC.go = function (name) { if (location.hash === '#' + name) MC.route(); else location.hash = name; };
 })();

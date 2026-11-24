@@ -263,10 +263,13 @@
     reader.readAsText(f);
   });
 
-  function renderAll() { renderSummary(); renderChart(); MC.renderRewardsCard(); renderPatterns(); renderLog(); }
+  function renderAll() { if (MC.renderSchedule) MC.renderSchedule(); MC.renderRewardsCard(); renderSummary(); renderChart(); renderPatterns(); renderLog(); }
   MC.views.insights = { show: function () {
     shown = pageSize; renderAll();
-    if (/rewards/.test(location.hash)) setTimeout(function () { $('rewardsCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+    if (/rewards/.test(location.hash)) setTimeout(function () {
+      var c = $('rewardsCard'); c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      c.classList.add('flash'); setTimeout(function () { c.classList.remove('flash'); }, 1600);
+    }, 50);
   } };
   MC.on('data', function () { if (MC.current === 'insights') renderAll(); });
 })();

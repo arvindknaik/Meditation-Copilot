@@ -52,10 +52,15 @@
     $('hWeek').textContent = MC.fmtDur(week.minutes);
     $('hWeekCount').textContent = week.count;
 
-    // Points and next scheduled sitting
-    $('pointsLine').innerHTML = MC.rewardsHomeLine();
+    // Next scheduled sitting and today's plan (sittings + events); points are in the header
+    if (MC.renderPointsPill) MC.renderPointsPill();
     if (MC.renderFeatured) MC.renderFeatured();
     $('nextSitting').innerHTML = MC.nextSittingHTML ? MC.nextSittingHTML() : '';
+    $('todayAgenda').innerHTML = MC.todayAgendaHTML ? MC.todayAgendaHTML() : '';
+
+    // Upcoming SOS events (hero + next two) and the hero article
+    if (MC.renderHomeEvents) MC.renderHomeEvents();
+    if (MC.renderHeroArticle) MC.renderHeroArticle();
 
     // Seekers: 42-day challenge · Initiates: 10,000-hour journey
     var jc = $('journeyCard');

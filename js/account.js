@@ -193,7 +193,7 @@
       '<button class="btn btn-soft btn-sm btn-block" id="acDiag">🩺 Send diagnostics to support</button>' +
       '<p class="small muted" style="margin:8px 0 0">Shares a technical log (' + MC.diag.all().length + ' events, no reflections or personal details) only when you tap this.</p>' +
       '<p class="small" style="margin:14px 0 0"><a href="' + MC.esc(CFG.privacyPolicyUrl || 'privacy.html') + '" target="_blank" rel="noopener">Privacy notice</a> · ' +
-      '<a href="https://wa.me/16122164444" target="_blank" rel="noopener">WhatsApp 612-216-4444</a> · <a href="mailto:' + MC.esc(CFG.support.email) + '">' + MC.esc(CFG.support.email) + '</a></p>' +
+      '<a href="https://wa.me/16122164444" target="_blank" rel="noopener">WhatsApp</a> · <a href="mailto:' + MC.esc(CFG.support.email) + '">' + MC.esc(CFG.support.email) + '</a></p>' +
       '<p class="small muted" style="margin:10px 0 0">Version ' + MC.esc(MC.VERSION) + ' · Prototype only. Not an official or approved Science of Spirituality app.</p>';
     $('accountBody').innerHTML = html;
 

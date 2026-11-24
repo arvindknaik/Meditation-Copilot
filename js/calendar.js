@@ -96,11 +96,10 @@
   });
 
   /* ---------- Calendar view ---------- */
-  var viewMonth = null, selected = null;
+  var viewMonth = null, selected = null;   // the day agenda shows once a day is tapped (Today's plan is on the Today screen)
   function render() {
     var t = MC.today();
     if (!viewMonth) viewMonth = new Date(t.getFullYear(), t.getMonth(), 1);
-    if (!selected) selected = t;
     renderMonth(); renderAgenda(); renderSchedule();
     if (MC.renderEventsCard) MC.renderEventsCard();
   }
@@ -118,11 +117,11 @@
       var tgt = (MC.challenge && MC.challenge.targetOn(k)) || target;
       var dayEvs = MC.eventsOn ? MC.eventsOn(k) : [];
       var hasEv = dayEvs.some(function (e) { return e.status !== 'cancelled'; }), hasCx = !hasEv && dayEvs.length > 0;
-      var cls = 'cal-day' + (v ? (v.minutes >= tgt ? ' met' : ' some') : '') + (k === MC.toISO(t) ? ' today' : '') + (k === MC.toISO(selected) ? ' sel' : '') + (d > t ? ' future' : '') + (hasEv ? ' ev' : hasCx ? ' evx' : '');
+      var cls = 'cal-day' + (v ? (v.minutes >= tgt ? ' met' : ' some') : '') + (k === MC.toISO(t) ? ' today' : '') + (selected && k === MC.toISO(selected) ? ' sel' : '') + (d > t ? ' future' : '') + (hasEv ? ' ev' : hasCx ? ' evx' : '');
       html += '<button class="' + cls + '" data-day="' + k + '" aria-label="' + MC.esc(MC.fmtDate(d)) + (v ? ', ' + Math.round(v.minutes) + ' minutes' : '') + '">' + dnum + '</button>';
     }
     html += '</div><div class="cal-legend small muted"><span><i class="lg met"></i>Target met</span><span><i class="lg some"></i>Some practice</span>' +
-      (MC.events && MC.events.enabled() ? '<span><i class="lg ev"></i>SOS event</span><span><i class="lg evx"></i>Cancelled</span>' : '') + '</div>';
+      '</div>';
     $('calMonth').innerHTML = html;
   }
   $('calMonth').addEventListener('click', function (e) {
@@ -134,11 +133,20 @@
 
   var STATUS = { kept: ['✓ Kept', 'ok'], missed: ['Missed', 'miss'], now: ['Now', 'now'], upcoming: ['Upcoming', 'up'] };
   function renderAgenda() {
+    var box = $('calAgenda');
+    if (!selected) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = agendaHTML(selected, true);
+  }
+  // Sittings planned or logged on a day, plus SOS events. `full` adds the day heading and empty-day text.
+  function agendaHTML(day, full) {
+    var selected = day;
     var occs = MC.dayAgenda(selected), key = MC.toISO(selected);
     var sess = MC.sessions.all().filter(function (s) { return MC.dayKey(s.start) === key; }).sort(function (a, b) { return a.start - b.start; });
     var used = occs.used || {};
-    var html = '<div class="section-title">' + MC.esc(MC.relDay(selected.getTime())) + (MC.relDay(selected.getTime()) === 'Today' ? ' · ' + MC.esc(MC.fmtDate(selected, { weekday: 'long', month: 'short', day: 'numeric' })) : '') + '</div>';
-    if (!occs.length && !sess.length) {
+    var html = full ? '<div class="section-title">' + MC.esc(MC.relDay(selected.getTime())) + ' · ' + MC.esc(MC.fmtDate(selected, { weekday: 'long', month: 'short', day: 'numeric' })) +
+      ' <button class="link small" id="calAgClose" style="padding:0">Close</button></div>' : '';
+    if (full && !occs.length && !sess.length) {
       html += '<p class="small muted" style="margin:0">' + (selected > MC.today() ? 'Nothing scheduled.' : 'No sittings this day.') + '</p>';
     }
     occs.forEach(function (o) {
@@ -166,8 +174,15 @@
           Math.round(s.quality) + '% quality' + (s.note ? ' · ' + MC.esc(s.note.slice(0, 40)) : '') + '</small></span></div>';
       });
     }
-    $('calAgenda').innerHTML = html;
+    return html;
   }
+  // Today screen: today's sittings and events (nothing when the day is empty)
+  MC.todayAgendaHTML = function () {
+    var h = agendaHTML(MC.today(), false);
+    return h ? '<div class="today-plan"><div class="log-day">Today\u2019s plan</div>' + h + '</div>' : '';
+  };
+  $('calAgenda').addEventListener('click', function (e) { if (e.target.id === 'calAgClose') { selected = null; renderMonth(); renderAgenda(); } });
+  MC.renderSchedule = function () { renderSchedule(); };
 
   function renderSchedule() {
     var list = schedule.all().sort(function (a, b) { return a.time < b.time ? -1 : 1; });

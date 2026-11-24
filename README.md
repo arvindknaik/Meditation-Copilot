@@ -97,3 +97,11 @@ The share links and WhatsApp preview image (`og:image`) already point to that UR
 | Behind schedule | additional effective min/day = required − current (also shown as actual sitting minutes at your quality) |
 
 Goal age must be a whole number, greater than your current age, and no more than 90. A projected completion past 90 is shown as "Beyond 90 at current pace" so the message stays encouraging.
+
+## v0.16 (November 2026) — events moved to sosmn.org
+- The app now lives at **https://sosmn.org/copilot/**. Center events (RSVP, calendar, check-in) are on **sosmn.org**; the app shows a "Center events → sosmn.org" link instead of its own event screens.
+- Old app links still work: `#event?e=…` opens the event on sosmn.org and `#checkin` opens sosmn.org/checkin/ (so printed posters keep working).
+- Check-in points stay: the app reads your check-ins from the events server.
+- **Challenges from the center:** set up and ordered in the admin site (admin.sosmn.org → Challenges). The top one is shown as Recommended. Kinds: daily sitting (minutes a day for N days) and center check-ins (N check-ins within N days). A 42-day daily-sitting challenge uses the app's guided 42-day plan.
+- The app's own Admin screen keeps only Featured videos, Feedback and the check-in QR poster; everything else is in the admin site.
+- Server: migration `0007_site.sql` (guests on RSVPs and check-ins, "who opened it", challenges). Deploy: `npm run db:remote`, then `npx wrangler deploy` in `api`. Full go-live steps: `SOSMN.org\DEPLOY.md`.

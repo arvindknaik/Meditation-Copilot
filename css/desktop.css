@@ -1,0 +1,119 @@
+/* Meditation Copilot — layout switch + desktop layout.
+ * html.mc-desktop is set by the script in <head>; without it the app keeps its phone layout. */
+
+/* ---------- Shared (both layouts) ---------- */
+.top-actions { display: flex; align-items: center; gap: 8px; }
+.view-btn { width: 40px; height: 40px; font-size: 1.05rem; flex: 0 0 auto; }
+@media (max-width: 359px) { html:not(.mc-desktop) .view-btn { display: none; } }
+.view-switch { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin: 0 0 12px; }
+.view-switch .vs-label { font-size: .76rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-right: 2px; }
+.view-switch button {
+  font: inherit; font-size: .8rem; font-weight: 600; padding: 6px 12px; border-radius: 99px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card); color: var(--text);
+}
+.view-switch button[aria-pressed="true"] { background: var(--purple); border-color: var(--purple); color: var(--card); }
+.view-switch .vs-auto { color: var(--muted); }
+.site-links { margin-top: 10px !important; }
+.tab-extra, .side-foot { display: none; }
+
+/* ---------- Desktop layout ---------- */
+html.mc-desktop { --side-w: 248px; --content-w: 1160px; }
+
+/* Left sidebar navigation (the phone's bottom tab bar, turned on its side) */
+html.mc-desktop .tabbar {
+  top: 0; bottom: 0; right: auto; width: var(--side-w);
+  border-top: 0; border-right: 1px solid var(--line); padding: 0; overflow-y: auto;
+  background: color-mix(in srgb, var(--card) 96%, transparent);
+}
+html.mc-desktop .tabbar .inner {
+  max-width: none; min-height: 100%; display: flex; flex-direction: column; gap: 4px; padding: 20px 14px 18px;
+}
+html.mc-desktop .tabbar .inner::before {
+  content: "Meditation Copilot"; display: block;
+  font-family: var(--serif); font-weight: 600; font-size: 1.15rem; color: var(--text);
+  padding: 4px 10px 18px; margin-bottom: 6px; border-bottom: 1px solid var(--line);
+}
+html.mc-desktop .tab {
+  flex-direction: row; justify-content: flex-start; gap: 10px; height: 46px; padding: 0 10px;
+  font-size: .95rem; letter-spacing: 0; border-radius: 12px; transition: background .15s;
+}
+html.mc-desktop .tab .ic { width: 36px; height: 32px; }
+html.mc-desktop .tab:hover { background: var(--card-2); color: var(--text); }
+html.mc-desktop .tab.on { background: var(--purple-soft); }
+html.mc-desktop .tab.on .ic { background: transparent; }
+html.mc-desktop .tab-extra { display: flex; }
+html.mc-desktop .tab-extra[data-ext="news"] { margin-top: 14px; position: relative; }
+html.mc-desktop .tab-extra[data-ext="news"]::before {
+  content: ""; position: absolute; left: 10px; right: 10px; top: -8px; border-top: 1px solid var(--line);
+}
+html.mc-desktop .side-foot { display: block; margin-top: auto; padding: 14px 4px 0; border-top: 1px solid var(--line); }
+html.mc-desktop .side-foot .view-switch { justify-content: flex-start; margin: 0; }
+html.mc-desktop .side-note { margin: 10px 6px 0; font-size: .74rem; line-height: 1.4; color: var(--muted); }
+
+/* Main column */
+html.mc-desktop .wrap { max-width: none; margin: 0 0 0 var(--side-w); padding: 22px 40px 40px; }
+html.mc-desktop .wrap > header.top,
+html.mc-desktop .wrap > main,
+html.mc-desktop .wrap > footer { max-width: var(--content-w); margin-left: auto; margin-right: auto; }
+html.mc-desktop header.top { margin-bottom: 18px; }
+html.mc-desktop header.top .brand .logo,
+html.mc-desktop header.top .brand-name { display: none; }
+html.mc-desktop .wrap > footer { margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--line); }
+html.mc-desktop .wrap > footer .view-switch { display: none; } /* the sidebar has it */
+html.mc-desktop .card { padding: 24px 24px; }
+html.mc-desktop .greet { font-size: 2.1rem; }
+
+/* Today: two columns */
+html.mc-desktop #v-home.active {
+  display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); column-gap: 24px; align-items: start; grid-auto-flow: row dense;
+}
+html.mc-desktop #v-home > * { grid-column: 1 / -1; }
+html.mc-desktop #v-home > .today-card { grid-column: 1; grid-row: span 2; }
+html.mc-desktop #v-home > .stats { grid-column: 2; }
+html.mc-desktop #v-home > #journeyCard { grid-column: 2; }
+html.mc-desktop #v-home > #lastCard { grid-column: 1; }
+
+/* Timer: centred, roomy */
+html.mc-desktop #v-timer { max-width: 760px; margin: 0 auto; }
+
+/* Calendar & Insights: cards flow into two columns */
+html.mc-desktop #v-calendar.active,
+html.mc-desktop #v-insights.active { column-count: 2; column-gap: 24px; }
+html.mc-desktop #v-calendar > *,
+html.mc-desktop #v-insights > * { break-inside: avoid; }
+html.mc-desktop #v-insights > #sumTiles { column-span: all; }
+
+/* Roadmap questions, event pages and admin screens: a comfortable reading width */
+html.mc-desktop #v-roadmap,
+html.mc-desktop #v-event,
+html.mc-desktop #v-checkin,
+html.mc-desktop #v-people,
+html.mc-desktop #v-feedback { max-width: 860px; margin: 0 auto; }
+
+/* Learn: wider topic grid, readable articles */
+html.mc-desktop #v-learn .topic-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+html.mc-desktop #learnArticle { max-width: 820px; margin: 0 auto; }
+html.mc-desktop #v-learn .help-card { max-width: 820px; margin-left: auto; margin-right: auto; }
+
+/* A phone showing the desktop layout: keep text a readable size once zoomed in */
+html.mc-forced-desktop body { -webkit-text-size-adjust: 100%; }
+
+/* Admin link only for admins and hosts (the server still checks every admin request) */
+html:not(.is-staff) .staff-only { display: none !important; }
+
+/* Focus mode while sitting is for phones; on a computer the menus stay */
+html.mc-desktop body.focus header.top { display: flex; }
+html.mc-desktop body.focus .tabbar { display: block; }
+
+/* Today: events and article */
+html.mc-desktop #v-home > #homeEvents { grid-column: 1; }
+html.mc-desktop #v-home > #heroArticle { grid-column: 2; }
+html.mc-desktop #v-home > #presence { grid-column: 1 / -1; }
+html.mc-desktop .hero-ev { flex-direction: row; }
+html.mc-desktop .hero-ev .he-img { flex: 0 0 42%; aspect-ratio: auto; min-height: 220px; }
+
+/* Insights: sitting times and rewards first */
+html.mc-desktop #v-insights > #calSchedule, html.mc-desktop #v-insights > #rewardsCard { break-inside: avoid; }
+
+/* Admin: wider */
+html.mc-desktop #v-admin .adm-grid { grid-template-columns: 1fr 1fr; }

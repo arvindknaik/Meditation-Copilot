@@ -6,7 +6,7 @@
   var SETTLE_SEC = 10;
   var active = MC.store.get(MC.KEYS.active, null);   // { startedAt, pausedAt, pausedMs, target, endRung }
   var prep = null;                                     // { until, target } during the settling moment (not persisted)
-  var tickId = null, wakeLock = null;
+  var tickId = null, wakeLock = null, baseTitle = null;
 
   /* ---------- Setup screen ---------- */
   function selectedPreset() {
@@ -85,7 +85,8 @@
   function enterRun() {
     $('timerSetup').hidden = true;
     $('timerRun').hidden = false;
-    document.body.classList.add('focus');
+    document.body.classList.add('focus');   // focus mode: phones hide the menus while sitting (desktop keeps them)
+    if (!/^Meditation in Progress/.test(document.title)) { baseTitle = document.title; document.title = 'Meditation in Progress · Meditation Copilot'; }
     setModeText();
     requestWake();
     if (!tickId) tickId = setInterval(tick, 250);
@@ -96,6 +97,7 @@
     prep = null;
     releaseWake();
     document.body.classList.remove('focus');
+    if (baseTitle) { document.title = baseTitle; baseTitle = null; }
     $('timerRun').hidden = true;
     $('timerSetup').hidden = false;
     syncSetup();

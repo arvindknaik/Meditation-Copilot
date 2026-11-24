@@ -53,7 +53,7 @@
       });
     }, function () { throw err('Can\u2019t reach the events server. Check your connection.', { offline: true }); });
   }
-  function signedInMode() { var m = MC.account.mode(); return m === 'google' || m === 'microsoft'; }
+  function signedInMode() { var m = MC.account && MC.account.mode(); return m === 'google' || m === 'microsoft'; }
   function ensureSession() {
     if (valid()) return Promise.resolve(session);
     if (!signedInMode()) return Promise.reject(err('Please sign in with Google or Microsoft first.', { needsSignIn: true }));
@@ -62,7 +62,9 @@
     }).then(function (r) {
       return r.json().then(function (j) { if (!r.ok) throw err(j.error || 'Could not sign in to events'); return j; });
     }).then(function (j) {
-      session = { token: j.token, user: j.user, contact: j.contact || null, exp: Date.now() + 29 * 86400000 };
+      // Admins and hosts get a shorter session (12 hours) from the server; others about 30 days
+      session = { token: j.token, user: j.user, contact: j.contact || null, exp: j.exp ? j.exp - 60000 : Date.now() + 29 * 86400000 };
+      markRole();
       if (j.user && j.user.name) MC.store.set('meditation-copilot:signin-name', j.user.name);
       MC.store.set(SESSION_KEY, session);
       refreshMe();
@@ -125,12 +127,17 @@
     MC.toast('Sign in with Google or Microsoft to RSVP and check in.', 4500);
     $('accountBtn').click();
   }
+  function markRole() {
+    var r = document.documentElement;
+    r.classList.toggle('is-staff', !!MC.events.isStaff());
+    r.classList.toggle('is-admin', !!MC.events.isAdmin());
+  }
   var meAt = 0;
   function refreshMe() {
     if (!valid()) return Promise.resolve();
     meAt = Date.now();
     return api('GET', '/api/me').then(function (j) {
-      session.user = j.user; if (j.contact) session.contact = j.contact; MC.store.set(SESSION_KEY, session);
+      session.user = j.user; if (j.contact) session.contact = j.contact; MC.store.set(SESSION_KEY, session); markRole();
       MC.store.set(CK_KEY, j.checkins || []);
       MC.store.set(MSG_KEY, j.messageEvents || []);
       MC.emit('data');                          // re-evaluate rewards
@@ -152,12 +159,15 @@
     api: api, withSession: withSession, valid: valid, signedInMode: signedInMode, ensureSession: ensureSession,   // shared with social.js
     enabled: function () { return !!base(); },
     isAdmin: function () { return valid() && session.user && session.user.isAdmin; },
+    isStaff: function () { return valid() && session.user && (session.user.isStaff || session.user.isAdmin); },
+    role: function () { return valid() && session.user ? session.user.role || (session.user.isAdmin ? 'admin' : null) : null; },
     hostedCheckins: function () { return MC.store.get(CK_KEY, []) || []; },
     // Account & settings: event contact details
     accountHTML: function () {
       if (!MC.events.enabled() || !valid()) return '';
       var cat = session.user && session.user.category;
       return '<div class="section-title" style="margin-top:20px">SOS events</div>' +
+        (MC.events.isStaff() ? '<a class="btn btn-primary btn-sm btn-block" href="#admin" id="acAdmin" style="margin:0 0 10px">🛡 Open Admin</a>' : '') +
         (cat ? '<p class="small" style="margin:-6px 0 6px">Events status: <b>' + MC.esc(CATEGORY[cat] || cat) + '</b>' +
           (cat === 'seeker' ? ' <span class="muted">· the center can mark you a Seeker Friend after a few visits</span>' : '') + '</p>' : '') +
         (session.user && session.user.blocked ? '<p class="small" style="margin:0 0 6px;color:var(--danger,#b00)">Your account can\u2019t take part in center events. Contact MinneapolisCenter@sos.org.</p>' : '') +
@@ -165,6 +175,7 @@
         '<button class="btn btn-ghost btn-sm btn-block" id="acContact">✎ Edit contact details</button>';
     },
     bindAccount: function (close) {
+      if ($('acAdmin')) $('acAdmin').addEventListener('click', function () { close(); });
       if (!$('acContact')) return;
       $('acContact').addEventListener('click', function () { close(); askContact().then(function () { MC.toast('Contact details saved.'); }, function () {}); });
     }
@@ -208,10 +219,7 @@
       return cache.events;
     });
   }
-  MC.eventsOn = function (isoDay) {      // for the Calendar month dots and day agenda
-    // Cancelled events stay visible (marked Cancelled) so people aren't left wondering
-    return (cache.events || []).filter(function (e) { return MC.toISO(new Date(e.startsAt)) === isoDay; });
-  };
+  MC.eventsOn = function () { return []; };   // v0.16: no event dots in the app calendar (events are on sosmn.org)
 
   function eventRow(e) {
     var tag = e.status === 'cancelled' ? '<span class="ag-st miss">Cancelled</span>'
@@ -224,43 +232,76 @@
       '<span class="ag-main"><b>' + MC.esc(e.title) + '</b> ' + badge(e) + '<small>' +
       MC.esc(fmtWhen(e).split(' · ')[1]) + ' · ' + MC.esc(FORMAT[e.format] || '') + (e.going ? ' · ' + e.going + ' going' : '') + '</small></span>' + tag + '</a>';
   }
+  /* v0.16: events live on sosmn.org (RSVP, calendar, check-in). The app only links there and keeps the
+   * person's check-ins in step with the server, so check-in points and attendance challenges still count. */
+  function siteHref(path) { return MC.siteUrl(path); }
+  function centerLinkHTML(compact) {
+    return '<a class="card center-link" href="' + MC.esc(siteHref('/')) + '">' +
+      '<span class="cl-ic" aria-hidden="true">📅</span><span class="cl-body"><b>Center events</b>' +
+      '<small>' + (compact ? 'RSVP, calendar and check-in on sosmn.org' : 'Group meditations and programs at the Minneapolis Meditation Center. RSVP, calendar and check-in are on sosmn.org.') + '</small></span>' +
+      '<span class="cl-go">sosmn.org ›</span></a>';
+  }
+  function syncMe() {
+    if (!MC.events.enabled() || !signedInMode()) return;
+    var pre = valid() ? Promise.resolve() : ensureSession();
+    pre.then(function () { if (valid() && Date.now() - meAt > 60000) return refreshMe(); }).catch(function () {});
+  }
   function renderCard() {
     var el = $('calEvents'); if (!el) return;
-    if (!MC.events.enabled()) {
-      el.innerHTML = '<div class="section-title">SOS events <span class="small muted">coming soon</span></div>' +
-        '<p class="small" style="margin:-4px 0 12px">Group meditations, programs and retreats, in person and online, with RSVP, check-in and reminders.</p>' +
-        '<a class="btn btn-soft btn-sm btn-block" href="https://sos.org/find-local-programs/" target="_blank" rel="noopener">Find programs on sos.org ↗</a>';
-      return;
-    }
-    var html = '<div class="section-title">SOS events' + (MC.events.isAdmin() ? ' <button class="btn btn-soft btn-sm" id="evNew" style="flex:0 0 auto">+ New event</button>' : '') + '</div>';
-    if (MC.events.isAdmin()) html += '<div class="tool-row two" style="margin:-4px 0 10px">' +
-      '<button class="btn btn-ghost btn-sm" id="evPoster">🖨 QR poster</button><a class="btn btn-ghost btn-sm" href="#people">👥 People</a>' +
-      '<button class="btn btn-ghost btn-sm" id="evVideo">▶ Featured</button><a class="btn btn-ghost btn-sm" href="#feedback">💬 Feedback</a></div>';
-    if (cache.blocked) { el.innerHTML = html + '<p class="small">' + MC.esc(cache.blockedMessage || '') + '</p>'; return; }
-    var list = (cache.events || []).filter(function (e) { return e.endsAt > Date.now() - 3600000; });
-    html += list.length ? list.slice(0, 12).map(eventRow).join('') : '<p class="small muted" style="margin:0">No upcoming events yet.</p>';
-    if (!signedInMode()) html += '<p class="small muted" style="margin:12px 0 0">Sign in with Google or Microsoft to RSVP and check in.</p>';
-    else if (!valid()) html += '<button class="btn btn-soft btn-sm btn-block" id="evConnect" style="margin-top:12px">Connect to SOS events</button>';
-    el.innerHTML = html;
-    if ($('evNew')) $('evNew').addEventListener('click', function () { openForm(null); });
-    if ($('evPoster')) $('evPoster').addEventListener('click', printPoster);
-    if ($('evVideo')) $('evVideo').addEventListener('click', openVideoForm);
-    if ($('evConnect')) $('evConnect').addEventListener('click', function () {
-      withSession(function () { MC.renderEventsCard(); }).catch(function () {});
-    });
+    el.classList.remove('card');
+    el.innerHTML = centerLinkHTML(false);
   }
-  MC.renderEventsCard = function () {
-    renderCard();
-    // Signed in but not yet connected to the events server: connect quietly (no pop-up) so admin tools and RSVPs show
-    var pre = (signedInMode() && !valid() && MC.events.enabled()) ? ensureSession().catch(function () {}) : Promise.resolve();
-    pre.then(function () { if (valid() && Date.now() - meAt > 60000) refreshMe(); }).then(loadUpcoming).then(function () { renderCard(); if (MC.current === 'calendar' && MC.views.calendar.refreshMonth) MC.views.calendar.refreshMonth(); })
-      .catch(function (e) { if ($('calEvents') && !(cache.events || []).length) $('calEvents').insertAdjacentHTML('beforeend', '<p class="small muted">' + MC.esc(e.message) + '</p>'); });
+  MC.renderEventsCard = function () { renderCard(); syncMe(); };
+
+  /* ---------- Today screen: upcoming events (hero + next two) ---------- */
+  var homeLoadAt = 0;
+  // The next three events that are still on (cancelled ones are skipped). The hero is the one an admin starred, else the soonest.
+  MC.topEvents = function () {
+    var up = (cache.events || []).filter(function (e) { return e.status !== 'cancelled' && e.endsAt > Date.now(); })
+      .sort(function (a, b) { return a.startsAt - b.startsAt; }).slice(0, 3);
+    var hero = up.filter(function (e) { return e.hero; })[0] || up[0] || null;
+    return { hero: hero, rest: up.filter(function (e) { return e !== hero; }), all: up };
   };
+  function heroEventHTML(e) {
+    var tag = e.myCheckin ? '<span class="ag-st ok">✓ Checked in</span>' : e.myRsvp === 'going' ? '<span class="ag-st now">You’re going</span>' : e.myRsvp === 'maybe' ? '<span class="ag-st up">Maybe</span>' : '';
+    return '<a class="card hero-ev" href="#event?e=' + encodeURIComponent(e.id) + '">' +
+      (e.flyerId ? '<span class="he-img"><img src="' + MC.esc(flyerUrl(e.flyerId, false)) + '" alt="" loading="lazy"></span>' : '<span class="he-img he-ph" aria-hidden="true">🪷</span>') +
+      '<span class="he-body"><span class="he-kicker">' + (e.hero ? '★ Featured event' : 'Next event') + '</span>' +
+      '<b class="he-title">' + MC.esc(e.title) + '</b>' +
+      '<span class="he-when">' + MC.esc(fmtWhen(e)) + '</span>' +
+      '<span class="he-meta">' + MC.esc(FORMAT[e.format] || '') + (e.venue && e.format !== 'online' ? ' · ' + MC.esc(e.venue) : '') + (e.going ? ' · ' + e.going + ' going' : '') + ' ' + badge(e) + '</span>' +
+      (e.description ? '<span class="he-desc">' + MC.esc(e.description.slice(0, 180)) + (e.description.length > 180 ? '…' : '') + '</span>' : '') +
+      '<span class="he-cta">' + (tag || '<span class="btn btn-primary btn-sm">View &amp; RSVP</span>') + '</span></span></a>';
+  }
+  MC.renderHomeEvents = function () {
+    var el = $('homeEvents'); if (!el) return;
+    el.innerHTML = MC.events.enabled() ? centerLinkHTML(true) : '';
+    syncMe();
+  };
+
+  /* ---------- Today screen: hero article (chosen by an admin in Admin → Today screen) ---------- */
+  var DEFAULT_ARTICLE = {
+    url: '/news/ten-year-anniversary-2025/', title: 'Meditation Center Celebrates 10 Years of Peace and Harmony',
+    image: '/news/media/2025/05/invitation.jpg', date: 'May 25, 2025',
+    summary: 'Ten years of free meditation programs in Columbia Heights, marked with a Meditation Symposium in June 2025.'
+  };
+  function siteLink(u) { return u && u.charAt(0) === '/' ? MC.siteUrl(u) : u; }
+  MC.heroArticle = function () {
+    var st = (MC.store.get(SETTINGS_KEY, null) || {}).settings || {};
+    return st.heroArticle === null ? null : (st.heroArticle || DEFAULT_ARTICLE);
+  };
+  MC.renderHeroArticle = function () { var el = $('heroArticle'); if (el) el.innerHTML = ''; };   // v0.16: removed (News lives on sosmn.org)
 
   /* ---------- Event page ---------- */
   var current = null, adminTimer = null;
   function showEvent() {
     var id = param('e'), view = $('v-event');
+    // v0.16: event pages moved to sosmn.org. Old links (shares, reminders) open the same event there.
+    if (!MC.store.get('meditation-copilot:legacy-events', false)) {
+      view.innerHTML = '<div class="card center muted">Opening the event on sosmn.org…</div>';
+      location.replace(siteHref(id ? '/event/?id=' + encodeURIComponent(id) : '/'));
+      return;
+    }
     clearInterval(adminTimer);
     if (!id) { MC.go('calendar'); return; }
     if (!MC.events.enabled()) { view.innerHTML = '<div class="card">Events are not set up yet.</div>'; return; }
@@ -450,6 +491,20 @@
 
   /* ---------- Featured video on Today (everyone) ---------- */
   var settingsAt = 0;
+  // Shared with the Admin area (js/admin.js)
+  MC.events.helpers = {
+    raw: raw, fmtWhen: fmtWhen, flyerUrl: flyerUrl, fmtPhone: fmtPhone, FORMAT: FORMAT, ACCESS: ACCESS, CATEGORY: CATEGORY, CENTER: CENTER,
+    loadUpcoming: loadUpcoming, cached: function () { return cache; }, openForm: function (e) { openForm(e || null); },
+    settings: function () { return (MC.store.get(SETTINGS_KEY, null) || {}).settings || {}; },
+    saveSettings: function (patch) {
+      return api('PUT', '/api/admin/centers/' + CENTER + '/settings', patch).then(function (j) {
+        MC.store.set(SETTINGS_KEY, { settings: j.settings || {}, at: Date.now() }); settingsAt = Date.now(); return j.settings;
+      });
+    },
+    refreshHome: function () { homeLoadAt = 0; }
+  };
+  markRole();
+
   MC.renderFeatured = function () {
     var el = $('featured'); if (!el || !MC.events.enabled()) return;
     var paint = function (st) {
@@ -465,7 +520,7 @@
     if (Date.now() - settingsAt < 5 * 60000) return;
     settingsAt = Date.now();
     // The browser may cache this for 5 minutes; the ?v= changes after an admin saves, so the new value shows at once
-    api('GET', '/api/centers/' + CENTER + '/settings?v=' + ((cached && cached.at) || 0)).then(function (j) { MC.store.set(SETTINGS_KEY, { settings: j.settings || {}, at: Date.now() }); paint(j.settings); })
+    api('GET', '/api/centers/' + CENTER + '/settings?v=' + ((cached && cached.at) || 0)).then(function (j) { MC.store.set(SETTINGS_KEY, { settings: j.settings || {}, at: Date.now() }); paint(j.settings); if (MC.renderHeroArticle) MC.renderHeroArticle(); })
       .catch(function () { settingsAt = 0; });
   };
   var vidDlg = $('vidDlg');
@@ -654,8 +709,16 @@
     var door = e.format !== 'online' ? '<div class="door"><div class="small muted">Check-in code</div><div class="door-code">' + MC.esc(e.checkinCode || '----') + '</div>' +
       '<div class="door-qr">' + qrSvg(linkFor(e) + '&c=' + (e.checkinCode || '')) + '</div><div class="small muted">Show this at the door: people scan the QR code or type the code.</div>' +
       '<button class="link" id="adNewCode">Generate a new code</button></div>' : '';
-    el.innerHTML = '<div class="section-title">Host tools <span class="small muted">admin</span></div>' + door +
-      '<div class="section-title" style="margin-top:16px">Attendees <button class="link" id="adRefresh" style="padding:0">Refresh</button></div><div id="adList" class="small muted">Loading…</div>' +
+    var top = MC.topEvents ? MC.topEvents().all : [], inTop = top.some(function (x) { return x.id === e.id; });
+    var adminOnly = MC.events.isAdmin();
+    var heroBox = adminOnly ? '<div class="hero-toggle">' + (e.hero
+        ? '<span>★ Featured on Today' + (inTop ? '' : ' <small class="muted">(shows once it is among the next 3 events)</small>') + '</span><button class="btn btn-ghost btn-sm" id="adHero" data-on="1">Remove</button>'
+        : '<span class="small">Feature this event large on Today' + (inTop ? '' : ' <small class="muted">(appears once it is among the next 3)</small>') + '</span><button class="btn btn-soft btn-sm" id="adHero">★ Feature</button>') + '</div>' : '';
+    var remind = adminOnly ? '<div class="tool-row two" style="margin:8px 0 0"><button class="btn btn-soft btn-sm" id="adEmail">✉️ Email RSVPs</button><button class="btn btn-ghost btn-sm" id="adWa">💬 WhatsApp (demo)</button></div>' : '';
+    el.innerHTML = '<div class="section-title">Host tools <span class="small muted">' + (adminOnly ? 'admin' : 'host') + '</span></div>' + heroBox + door +
+      '<div class="section-title" style="margin-top:16px">Attendees <button class="link" id="adRefresh" style="padding:0">Refresh</button></div>' +
+      '<div class="seg ad-filter" role="tablist" aria-label="Show"><button class="on" data-f="all">All</button><button data-f="waiting">Not yet in</button><button data-f="in">Checked in</button></div>' +
+      '<div id="adList" class="small muted">Loading…</div>' + remind +
       '<label class="field" for="adFind">Check in someone who registered on the spot</label>' +
       '<input type="search" id="adFind" class="text-input" placeholder="Search name or email" autocomplete="off"><div id="adFound"></div>' +
       '<div class="tool-row" style="grid-template-columns:1fr 1fr 1fr;margin-top:14px">' +
@@ -665,6 +728,19 @@
         (e.status === 'cancelled' ? 'Restore this & following' : 'Cancel this & following') + '</button> · <button class="link small" id="adCancelSeries">' +
         (e.status === 'cancelled' ? 'Restore whole series' : 'Cancel whole series') + '</button></div>' : '');
     $('adRefresh').addEventListener('click', loadAttendees);
+    el.querySelectorAll('.ad-filter button').forEach(function (b) {
+      b.addEventListener('click', function () { adFilter = b.dataset.f; el.querySelectorAll('.ad-filter button').forEach(function (x) { x.classList.toggle('on', x === b); }); paintAttendees(); });
+    });
+    if ($('adHero')) $('adHero').addEventListener('click', function () {
+      var off = $('adHero').dataset.on === '1';
+      api(off ? 'DELETE' : 'POST', '/api/admin/events/' + encodeURIComponent(current.id) + '/hero').then(function () {
+        MC.toast(off ? 'No longer featured.' : '★ Featured on Today.'); homeLoadAt = 0;
+        loadUpcoming().then(function () { showEvent(); }).catch(function () {});
+      }).catch(function (x) { MC.toast(x.message); });
+    });
+    if ($('adEmail')) $('adEmail').addEventListener('click', function () { MC.adminTools.emailRsvps(current); });
+    if ($('adWa')) $('adWa').addEventListener('click', function () { MC.adminTools.whatsappDemo(current); });
+    if (!adminOnly) { $('adEdit').hidden = true; $('adCsv').hidden = true; $('adCancel').hidden = true; if ($('adNewCode')) $('adNewCode').hidden = true; }
     $('adEdit').addEventListener('click', function () { openForm(current); });
     $('adCsv').addEventListener('click', downloadCsv);
     function cancelOrRestore(scope) {
@@ -707,19 +783,27 @@
     });
     loadAttendees();
   }
+  var adFilter = 'all', adRows = [];
+  function whenShort(ms) { return new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+  function paintAttendees() {
+    if (!$('adList')) return;
+    var a = adRows, inN = a.filter(function (x) { return x.checkedInAt; }).length;
+    var going = a.filter(function (x) { return x.rsvp === 'going'; }).length, maybe = a.filter(function (x) { return x.rsvp === 'maybe'; }).length;
+    var list = a.filter(function (x) { return adFilter === 'all' || (adFilter === 'in' ? x.checkedInAt : !x.checkedInAt && x.rsvp !== 'no'); });
+    $('adList').innerHTML = '<p class="small" style="margin:0 0 8px"><b>' + inN + '</b> checked in · <b>' + going + '</b> going · ' + maybe + ' maybe · ' + a.length + ' responded</p>' +
+      (list.length ? list.map(function (x) {
+        return '<div class="ad-row"><span class="ag-main"><b>' + MC.esc(x.name || '') + '</b> <span class="badge">' + MC.esc(CATEGORY[x.category] || 'Seeker') + '</span><small>' +
+          (x.rsvp ? { going: 'Going', maybe: 'Maybe', no: 'Can\u2019t go' }[x.rsvp] + (x.rsvpAt ? ' · RSVP\u2019d ' + MC.esc(whenShort(x.rsvpAt)) : '') : 'No RSVP') +
+          (x.checkedInAt ? ' · ✓ in at ' + MC.esc(MC.fmtTime(x.checkedInAt)) + ' (' + ({ qr: 'QR', code: 'code', host: 'by host', online: 'online' }[x.method] || x.method) + ')' : '') +
+          (x.email ? '<br>' + MC.esc(x.email) + (x.phone ? ' · ' + MC.esc(fmtPhone(x.phone)) : '') : '') + '</small></span>' +
+          (x.checkedInAt ? '<button class="btn btn-ghost btn-sm" data-unck="' + MC.esc(x.userId) + '">Undo</button>'
+            : '<button class="btn btn-soft btn-sm" data-ck="' + MC.esc(x.userId) + '">Check in</button>') + '</div>';
+      }).join('') : '<p class="small muted">' + (a.length ? 'Nobody in this list.' : 'No responses yet.') + '</p>');
+  }
   function loadAttendees() {
     if (!$('adList')) return;
     api('GET', '/api/admin/events/' + encodeURIComponent(current.id) + '/attendees').then(function (j) {
-      var a = j.attendees || [], inN = a.filter(function (x) { return x.checkedInAt; }).length;
-      var going = a.filter(function (x) { return x.rsvp === 'going'; }).length;
-      $('adList').innerHTML = '<p class="small" style="margin:0 0 8px"><b>' + inN + '</b> checked in · <b>' + going + '</b> going · ' + a.length + ' responded</p>' +
-        (a.length ? a.map(function (x) {
-          return '<div class="ad-row"><span class="ag-main"><b>' + MC.esc(x.name || '') + '</b> <span class="badge">' + MC.esc(CATEGORY[x.category] || 'Seeker') + '</span><small>' + MC.esc(x.email || '') + (x.phone ? ' · ' + MC.esc(fmtPhone(x.phone)) : '') + ' · ' +
-            (x.rsvp ? { going: 'Going', maybe: 'Maybe', no: 'Can\u2019t go' }[x.rsvp] : 'No RSVP') +
-            (x.checkedInAt ? ' · ✓ ' + MC.esc(MC.fmtTime(x.checkedInAt)) + ' (' + x.method + ')' : '') + '</small></span>' +
-            (x.checkedInAt ? '<button class="btn btn-ghost btn-sm" data-unck="' + MC.esc(x.userId) + '">Undo</button>'
-              : '<button class="btn btn-soft btn-sm" data-ck="' + MC.esc(x.userId) + '">Check in</button>') + '</div>';
-        }).join('') : '<p class="small muted">No responses yet.</p>');
+      adRows = j.attendees || []; paintAttendees();
     }).catch(function (x) { $('adList').textContent = x.message; });
   }
   function downloadCsv() {
@@ -881,6 +965,13 @@
   var ckBusy = false;
   function showCheckin() {
     var view = $('v-checkin');
+    // v0.16: center check-in moved to sosmn.org/checkin/. Posters printed with the app link keep working.
+    if (!MC.store.get('meditation-copilot:legacy-events', false)) {
+      MC.store.del(PENDING_KEY);
+      view.innerHTML = '<div class="card center muted">Opening check-in on sosmn.org…</div>';
+      location.replace(siteHref('/checkin/'));
+      return;
+    }
     if (!MC.events.enabled()) { view.innerHTML = '<div class="card">Check-in is not set up yet.</div>'; return; }
     if (!signedInMode()) {
       MC.store.set(PENDING_KEY, Date.now());           // finish the check-in after sign-in (even after a redirect)
@@ -944,7 +1035,7 @@
     if (MC.current === 'checkin') showCheckin(); else location.hash = 'checkin';
   }
   function printPoster() {
-    var url = MC.APP_LINK + '#checkin', w = window.open('', '_blank');
+    var url = siteHref('/checkin/').replace(/^\//, location.origin + '/'), w = window.open('', '_blank');
     if (!w) { MC.toast('Please allow pop-ups to print the poster.'); return; }
     w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Check in · Minneapolis Center</title><style>' +
       'body{font-family:Georgia,serif;text-align:center;color:#3b2466;margin:0;padding:40px 24px}h1{font-size:44px;margin:10px 0 6px}' +
@@ -958,6 +1049,21 @@
     w.document.close();
     MC.track('event_poster');
   }
+
+  /* ---------- App admin (v0.16): events, people, invitations and challenges moved to the center admin site ---------- */
+  function showAppAdmin() {
+    var view = $('v-admin');
+    if (!MC.events.isStaff()) { view.innerHTML = '<div class="card"><p>Admins only.</p><a class="link" href="#home">‹ Home</a></div>'; return; }
+    view.innerHTML = '<div class="card"><h1 style="margin-top:0">App admin</h1>' +
+      '<p class="small">Events, RSVPs, check-ins, people, invitations and Copilot challenges are managed on the center admin site (the address you were given).</p></div>' +
+      '<div class="card"><div class="section-title">In the app</div><div class="tool-row two">' +
+      (MC.events.isAdmin() ? '<button class="btn btn-soft btn-sm" id="aaVideo">▶ Featured videos</button>' : '') +
+      '<a class="btn btn-soft btn-sm" href="#feedback">💬 Feedback</a>' +
+      '<button class="btn btn-ghost btn-sm" id="aaPoster">🖨 Check-in QR poster</button></div></div>';
+    if ($('aaVideo')) $('aaVideo').addEventListener('click', openVideoForm);
+    $('aaPoster').addEventListener('click', printPoster);
+  }
+  MC.views.admin = { show: showAppAdmin };
 
   /* ---------- Wiring ---------- */
   MC.views.checkin = { show: showCheckin };

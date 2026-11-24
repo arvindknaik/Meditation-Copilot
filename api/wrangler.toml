@@ -5,7 +5,7 @@ main = "src/index.js"
 compatibility_date = "2026-10-01"
 
 [vars]
-ALLOWED_ORIGINS = "https://arvindknaik.github.io,http://localhost:8000"
+ALLOWED_ORIGINS = "https://sosmn.org,https://www.sosmn.org,https://admin.sosmn.org,https://arvindknaik.github.io,http://localhost:8000,http://localhost:8001,https://sosmn-site.aknaik.workers.dev"
 GOOGLE_CLIENT_ID = "108186102394-sv306m8272h9p5eo4r5fvtolfgut3b09.apps.googleusercontent.com"
 MS_CLIENT_ID = "cc706be3-4021-4460-9705-95d4cd0c00d0"
 # Secrets (NOT in this file):  npx wrangler secret put SESSION_SECRET

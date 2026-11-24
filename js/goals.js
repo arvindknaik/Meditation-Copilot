@@ -14,13 +14,15 @@
   var KINDS = {
     hours:  { icon: '⏳', name: 'Hours Challenge', unit: 'hours' },
     amrit:  { icon: '🌅', name: 'Amrit Vela Challenge', unit: 'days' },
-    weekly: { icon: '🗓', name: 'Weekly Attendance Challenge', unit: 'weeks' }
+    weekly: { icon: '🗓', name: 'Weekly Attendance Challenge', unit: 'weeks' },
+    center: { icon: '🪷', name: 'Center challenge', unit: 'days' }    // v0.16: defined by the center in the admin site
   };
   var AMRIT_FROM = 4 * 60, AMRIT_TO = 7 * 60, AMRIT_MIN = 15;
   function allowance(n) { return Math.floor(n / 10); }
   function pointsFor(c) {
     if (c.type === 'hours') return Math.min(500, 5 * c.target);
     if (c.type === 'amrit') return 5 * c.days;
+    if (c.type === 'center') return Math.max(0, Number(c.points) || 0);
     return 15 * c.weeks;
   }
   function dayStart(key) { return MC.parseDate(key).getTime(); }
@@ -34,9 +36,9 @@
   /* ---------- evaluation ---------- */
   function evaluate(c) {
     var today = MC.today(), todayKey = MC.toISO(today), start = MC.parseDate(c.startOn), end = MC.parseDate(c.endOn);
-    var out = { c: c, kind: KINDS[c.type], points: pointsFor(c), status: c.status, done: 0, total: 0, misses: 0, allow: 0, note: '', pct: 0, earned: 0 };
+    var out = { c: c, kind: c.type === 'center' ? { icon: '🪷', name: c.title || 'Center challenge', unit: 'days' } : KINDS[c.type], points: pointsFor(c), status: c.status, done: 0, total: 0, misses: 0, allow: 0, note: '', pct: 0, earned: 0 };
     if (c.status === 'dropped') { out.earned = 0; return finish(out); }
-    if (today < start) { out.upcoming = true; out.total = c.type === 'hours' ? c.target : c.type === 'amrit' ? c.days : c.weeks; return finish(out); }
+    if (today < start) { out.upcoming = true; out.total = c.type === 'hours' ? c.target : c.type === 'amrit' ? c.days : c.type === 'center' ? (c.kind === 'checkins' ? c.target : c.days) : c.weeks; return finish(out); }
     var sessions = MC.sessions.all();
     if (c.type === 'hours') {
       var from = start.getTime(), to = MC.addDays(end, 1).getTime(), min = 0;
@@ -59,6 +61,29 @@
       if (misses > out.allow) out.status = 'failed';
       else if (today > end) out.status = 'done';
       out.note = kept + ' of ' + c.days + ' mornings · ' + misses + ' of ' + out.allow + ' misses used';
+    } else if (c.type === 'center' && c.kind === 'checkins') {
+      // Check in at center events N times between the start and end dates (check-ins come from the server)
+      var from2 = start.getTime(), to2 = MC.addDays(end, 1).getTime();
+      var n = (MC.events && MC.events.hostedCheckins ? MC.events.hostedCheckins() : []).filter(function (x) { var t = x.checkedInAt || x.checked_in_at; return t >= from2 && t < to2; }).length;
+      out.total = c.target; out.done = Math.min(n, c.target);
+      if (n >= c.target) out.status = 'done';
+      else if (today > end) out.status = 'failed';
+      out.note = n + ' of ' + c.target + ' check-ins' + (out.status === 'active' ? ' · ' + Math.max(0, MC.daysBetween(today, end) + 1) + ' days left' : '');
+    } else if (c.type === 'center') {
+      // Sit at least c.minutes on each of c.days days (all sittings that day count)
+      out.total = c.days; out.allow = allowance(c.days);
+      var perDay = {};
+      sessions.forEach(function (s) { var k = MC.dayKey(s.start); perDay[k] = (perDay[k] || 0) + s.minutes; });
+      var keptD = 0, missD = 0, lastD = today < end ? today : end;
+      for (var dd = new Date(start); dd <= lastD; dd = MC.addDays(dd, 1)) {
+        var kd = MC.toISO(dd);
+        if ((perDay[kd] || 0) >= c.minutes) keptD++;
+        else if (kd !== todayKey) missD++;
+      }
+      out.done = keptD; out.misses = missD;
+      if (missD > out.allow) out.status = 'failed';
+      else if (today > end || keptD >= c.days) out.status = 'done';
+      out.note = keptD + ' of ' + c.days + ' days · ' + missD + ' of ' + out.allow + ' misses used';
     } else {
       out.total = c.weeks; out.allow = allowance(c.weeks);
       var cks = (MC.events && MC.events.hostedCheckins ? MC.events.hostedCheckins() : []).map(function (x) { return x.checkedInAt || x.checked_in_at; }).filter(Boolean);
@@ -105,6 +130,55 @@
       count: function () { return countFor('amrit'); }, total: function () { return earnedFor('amrit'); } });
     MC.rewards.addRule({ id: 'ch_weekly', category: 'goals', icon: '🗓', name: 'Weekly Attendance Challenge', desc: '15 points per week; half of prorated if it fails', points: 0, repeat: true,
       count: function () { return countFor('weekly'); }, total: function () { return earnedFor('weekly'); } });
+    MC.rewards.addRule({ id: 'ch_center', category: 'goals', icon: '🪷', name: 'Center Challenges', desc: 'Points set by the center for each challenge; half of prorated if it fails', points: 0, repeat: true,
+      count: function () { return countFor('center'); }, total: function () { return earnedFor('center'); } });
+  }
+
+  /* ---------- Center challenges (v0.16): set up in the admin site, shown in priority order; the first is recommended ---------- */
+  var CC_KEY = 'meditation-copilot:center-challenges', ccAt = 0;
+  function centerList() {
+    var list = (MC.store.get(CC_KEY, null) || {}).list || [];
+    var seeker = MC.isSeeker && MC.isSeeker(), init = MC.isInitiated && MC.isInitiated();
+    return list.filter(function (x) { return x.active !== false && (x.audience === 'all' || (x.audience === 'seeker' && seeker) || (x.audience === 'initiate' && init)); });
+  }
+  function loadCenter() {
+    if (!(MC.events && MC.events.enabled()) || Date.now() - ccAt < 10 * 60000) return;
+    ccAt = Date.now();
+    MC.events.api('GET', '/api/challenges').then(function (j) {
+      MC.store.set(CC_KEY, { list: j.challenges || [], at: Date.now() });
+      if (MC.current === 'roadmap') render();
+    }).catch(function () { ccAt = 0; });
+  }
+  // A 42-day daily-sitting challenge is the app's guided 42-day plan (15 min, building to 30)
+  function is42(x) { return x.kind === 'daily_sitting' && Number(x.days) === 42; }
+  function ccMeta(x) {
+    return (x.kind === 'checkins' ? 'Check in at ' + x.target + ' center events within ' + x.days + ' days' : is42(x) ? 'The guided 42-day plan: 15 min a day, building to 30' : 'Sit ' + x.minutes + ' min a day for ' + x.days + ' days') +
+      (is42(x) ? '' : ' · ' + x.points + ' points');
+  }
+  function centerHTML() {
+    var list = centerList(); if (!list.length) return '';
+    var running = {}; active('center').forEach(function (c) { running[c.centerId] = true; });
+    var c42 = MC.challenge && MC.challenge.current(), on42 = !!(c42 && !c42.ended);
+    return '<div class="small" style="font-weight:700;margin:4px 0 6px">From the Minneapolis Center</div>' + list.map(function (x, i) {
+      var on = is42(x) ? on42 : running[x.id];
+      return '<div class="goal"><div class="goal-head"><b>🪷 ' + MC.esc(x.title) + (i === 0 ? ' <span class="badge" style="margin-left:4px">Recommended</span>' : '') + '</b>' +
+        (on ? '<span class="small">In progress</span>' : '<button class="btn btn-soft btn-sm" data-cc="' + MC.esc(x.id) + '">Start</button>') + '</div>' +
+        '<div class="goal-meta">' + MC.esc(ccMeta(x)) + '</div>' + (x.description ? '<div class="small muted" style="margin-top:4px">' + MC.esc(x.description) + '</div>' : '') + '</div>';
+    }).join('') + '<div class="small" style="font-weight:700;margin:14px 0 6px">Your challenges</div>';
+  }
+  function startCenter(id) {
+    var x = centerList().filter(function (y) { return y.id === id; })[0]; if (!x) return;
+    if (is42(x)) {
+      if (!window.confirm('Start the 42-day challenge today?')) return;
+      MC.challenge.start(); MC.toast('Day 1 of your 42-day challenge begins today 🌱'); MC.emit('data'); render(); return;
+    }
+    if (x.kind === 'checkins' && !(MC.events && MC.events.signedInMode && MC.events.signedInMode())) { MC.toast('Sign in with Google or Microsoft first: this challenge counts your center check-ins.'); return; }
+    var t = MC.today();
+    var c = { type: 'center', centerId: x.id, title: x.title, kind: x.kind, days: Number(x.days), minutes: Number(x.minutes) || 0, target: Number(x.target) || 0,
+      points: Number(x.points) || 0, startOn: MC.toISO(t), endOn: MC.toISO(MC.addDays(t, Number(x.days) - 1)), status: 'active' };
+    if (!window.confirm('Start “' + x.title + '” today? ' + ccMeta(x) + '. Once started it can’t be changed.')) return;
+    col.add(c); MC.track('challenge_start2', { type: 'center' });
+    MC.toast('🪷 Challenge started. You’ve got this!'); MC.emit('data'); render();
   }
 
   /* ---------- Roadmap card ---------- */
@@ -129,11 +203,13 @@
     var html = '<div class="section-title">Challenges <button class="btn btn-soft btn-sm" id="goalNew" style="flex:0 0 auto">+ Start a challenge</button></div>' +
       '<p class="small" style="margin:-6px 0 10px">Set yourself a goal with a start and an end. One of each kind at a time; drop out any time (no points), or earn half of the prorated points if it doesn’t work out.</p>';
     if (!seeker && c42 && !c42.ended) html += '<div class="goal"><div class="goal-head"><b>🌱 42-Day Challenge</b><span class="small">Day ' + c42.count + ' of 42</span></div><div class="goal-meta">Today’s target ' + c42.todayTarget + ' min</div><div class="bar"><div class="fill" style="width:' + Math.round(c42.count / 42 * 100) + '%"></div></div></div>';
+    html += centerHTML();
     html += act.map(goalHTML).join('');
     if (!act.length && !(c42 && !c42.ended)) html += '<p class="small muted">No active challenge. Tap <b>Start a challenge</b> to begin.</p>';
     if (past.length) html += '<details style="margin-top:10px"><summary class="small">Past challenges (' + past.length + ')</summary>' + past.slice(0, 20).map(goalHTML).join('') + '</details>';
     card.innerHTML = html;
     $('goalNew').addEventListener('click', openNew);
+    card.querySelectorAll('[data-cc]').forEach(function (b) { b.addEventListener('click', function () { startCenter(b.dataset.cc); }); });
     card.querySelectorAll('[data-drop]').forEach(function (b) {
       b.addEventListener('click', function () {
         var c = col.get(b.dataset.drop); if (!c) return;
@@ -200,7 +276,7 @@
   });
 
   MC.goals = { all: all, evaluate: evaluate, pointsFor: pointsFor, allowance: allowance, minutesInAmrit: minutesInAmrit, render: render };
-  MC.on('view', function (n) { if (n === 'roadmap') setTimeout(render, 0); });
+  MC.on('view', function (n) { if (n === 'roadmap') { setTimeout(render, 0); loadCenter(); } });
   MC.on('data', function () { if (MC.current === 'roadmap') setTimeout(render, 0); });
   MC.on('profile', function () { if (MC.current === 'roadmap') setTimeout(render, 0); });
 })();

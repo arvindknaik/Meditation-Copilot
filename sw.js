@@ -1,6 +1,6 @@
 /* Meditation Copilot service worker
  * Release checklist: bump CACHE_VERSION here AND the ?v= number on the css/js links in index.html. */
-const CACHE_VERSION = 'v22';
+const CACHE_VERSION = 'v25';
 const CACHE = 'meditation-copilot-' + CACHE_VERSION;
 const ASSETS = [
   './',
@@ -8,6 +8,7 @@ const ASSETS = [
   './privacy.html',
   './manifest.json',
   './css/styles.css',
+  './css/desktop.css',
   './js/config.js',
   './js/quotes.js',
   './js/core.js',
@@ -30,6 +31,7 @@ const ASSETS = [
   './js/account.js',
   './js/profile.js',
   './js/app.js',
+  './js/layout.js',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -56,7 +58,11 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return; // WhatsApp etc. go straight to the network
 
   // Pages: network first (so updates arrive), fall back to the cached app shell offline.
+  // Only the app's own page is handled here; other pages on the same site (News, About) load normally.
   if (req.mode === 'navigate') {
+    const scope = new URL(self.registration.scope);
+    const appPage = url.pathname === scope.pathname || url.pathname === scope.pathname + 'index.html';
+    if (!appPage) return;
     event.respondWith(
       fetch(req, { cache: 'no-cache' })
         .then((res) => {

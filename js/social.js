@@ -22,7 +22,7 @@
       // Quietly connect to the events server if needed (no pop-up); fall back to public counts if that fails
       var pre = ev().valid() ? Promise.resolve() : ev().ensureSession();
       return pre.then(function () {
-        return ev().api('POST', '/api/presence', { state: meditatingNow() ? 'meditating' : 'active' }).then(function (j) {
+        return ev().api('POST', '/api/presence', Object.assign({ state: meditatingNow() ? 'meditating' : 'active' }, MC.pointsSummary ? MC.pointsSummary() : {})).then(function (j) {
           counts = j; MC.store.set(COUNTS_KEY, j); inviteCount = j.invitesIn || 0; paint();
         });
       }).catch(function () { return ev().api('GET', '/api/presence/counts').then(function (j) { counts = j; MC.store.set(COUNTS_KEY, j); paint(); }).catch(function () {}); });
@@ -44,10 +44,12 @@
     if (!fresh()) return '';
     var me = ev().signedInMode() && ev().valid() ? 1 : 0;
     var others = Math.max(0, (counts.active || 0) - me), med = Math.max(0, (counts.meditating || 0) - (me && meditatingNow() ? 1 : 0));
-    var parts = ['🟢 ' + (others ? others + (others === 1 ? ' other' : ' others') + ' on the app now' : 'You’re the first one here right now')];
-    if (med) parts.push('🧘 ' + med + ' meditating');
-    if (counts.meditatedToday) parts.push('🌅 ' + counts.meditatedToday + ' meditated today');
-    return parts.join(' · ');
+    var today = Math.max(counts.activeToday || 0, counts.active || 0);
+    var parts = ['<span class="pr-item"><b>' + today + '</b> in the app today</span>',
+      '<span class="pr-item"><b>' + (counts.active || 0) + '</b> here now</span>',
+      '<span class="pr-item">🧘 <b>' + (counts.meditating || 0) + '</b> meditating now</span>'];
+    if (counts.meditatedToday) parts.push('<span class="pr-item">🌅 <b>' + counts.meditatedToday + '</b> meditated today</span>');
+    return parts.join('') + (!others ? '<span class="pr-note">You\u2019re the first one here right now</span>' : '');
   }
   function paint() {
     var el = $('presence');
@@ -55,7 +57,7 @@
       var html = '';
       if (enabled()) {
         var c = countsHTML();
-        html = '<div class="card presence">' + (c ? '<p class="small" style="margin:0">' + c + '</p>' : '<p class="small muted" style="margin:0">Connecting to the sangat…</p>') +
+        html = '<div class="card presence">' + (c ? '<div class="pr-row" aria-label="People using Meditation Copilot">' + c + '</div>' : '<p class="small muted" style="margin:0">Connecting to the sangat…</p>') +
           (inviteCount ? '<button class="btn btn-soft btn-sm btn-block" id="prInvites" style="margin-top:10px">🤝 ' + inviteCount + (inviteCount === 1 ? ' buddy invite waiting' : ' buddy invites waiting') + '</button>' : '') + '</div>';
       }
       el.innerHTML = html;

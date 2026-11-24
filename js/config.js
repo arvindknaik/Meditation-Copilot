@@ -17,6 +17,9 @@ window.MC_CONFIG = {
   // e.g. 'https://meditation-copilot-api.YOUR-SUBDOMAIN.workers.dev'
   apiBase: 'https://meditation-copilot-api.aknaik.workers.dev',
 
+  // The center website (News & Archive, About). The app lives at its home page.
+  siteUrl: 'https://sosmn.org',
+
   support: {
     email: 'MinneapolisCenter@sos.org',
     phone: '612-216-4444'
