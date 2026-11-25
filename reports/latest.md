@@ -1,12 +1,12 @@
-# Test report — v0.19-b0 — ✅ passed
+# Test report — v0.19-b1 — ✅ passed
 
-Nov 25, 2026, 9:20 PM · commit 618f3f3 · suites: unit, api, e2e
+Nov 25, 2026, 6:47 PM · commit 00a0e54 · suites: unit, api, e2e
 
 | Suite | Passed | Failed | Time |
 |---|---|---|---|
-| unit | 15 | 0 | 1 s |
-| api | 8 | 0 | 10 s |
-| e2e | 4 | 0 | 24 s |
+| unit | 15 | 0 | 2 s |
+| api | 8 | 0 | 24 s |
+| e2e | 4 | 0 | 39 s |
 
 | Feature | Passed | Failed |
 |---|---|---|
