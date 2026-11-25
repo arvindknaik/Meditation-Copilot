@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+dist/
+backups/
+.dev.vars
+reports/artifacts/
+*.log
+.DS_Store
+Thumbs.db

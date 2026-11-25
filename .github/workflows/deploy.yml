@@ -1,0 +1,25 @@
+# Deploy the current build from GitHub (optional; Arvind can also run release.bat on his computer).
+# Each target waits for Arvind's approval: Settings → Environments → "test" and "production" → Required reviewers.
+# Each environment holds the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. For prod, commit releases/v<version>.md first.
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      target: { description: 'Where to deploy', type: choice, options: [test, prod], required: true }
+permissions: { contents: write }
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target == 'prod' && 'production' || 'test' }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: git config user.name "github-actions[bot]" && git config user.email "github-actions[bot]@users.noreply.github.com"
+      - run: node tools/release.mjs ${{ inputs.target }} --yes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}

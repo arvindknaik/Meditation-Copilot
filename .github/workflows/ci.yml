@@ -1,0 +1,18 @@
+# Runs every test on each push and pull request. The report is attached to the run (Actions → this run → Artifacts).
+name: Tests
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node tools/test.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: test-report, path: reports/ }

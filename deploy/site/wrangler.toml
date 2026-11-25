@@ -1,0 +1,31 @@
+# sosmn.org: events site, News, About, What's new and Meditation Copilot (/copilot/), served by Cloudflare Workers static assets.
+# Built into dist/site by `node tools/build.mjs <env>`; deployed by the release script (tools/release.mjs).
+# Local preview: `npm run dev` (port 8000).
+name = "sosmn-site"
+main = "index.js"
+compatibility_date = "2026-11-01"
+workers_dev = false
+preview_urls = false
+routes = [
+  { pattern = "sosmn.org", custom_domain = true },
+  { pattern = "www.sosmn.org", custom_domain = true }
+]
+
+[assets]
+directory = "../../dist/site"
+binding = "ASSETS"
+not_found_handling = "404-page"
+html_handling = "auto-trailing-slash"
+# Only the home page and calendar go through the Minnesota check; everything else is served directly.
+run_worker_first = ["/", "/index.html", "/calendar", "/calendar/*"]
+
+[vars]
+GEO_TEST = "false"
+
+# ---------- TEST: https://test.sosmn.org ----------
+[env.test]
+name = "sosmn-site-test"
+workers_dev = false
+routes = [ { pattern = "test.sosmn.org", custom_domain = true } ]
+[env.test.vars]
+GEO_TEST = "true"          # testers can add ?geo=US-CA to try the out-of-Minnesota page

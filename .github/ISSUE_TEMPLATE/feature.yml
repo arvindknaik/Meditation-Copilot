@@ -1,0 +1,24 @@
+name: Feature
+description: Something people can use; released on its own once tested
+labels: [feature]
+body:
+  - type: textarea
+    attributes: { label: What and why }
+    validations: { required: true }
+  - type: dropdown
+    attributes: { label: Who sees it, options: [Everyone (user-facing), Admins only], description: Decides where the release note appears }
+    validations: { required: true }
+  - type: textarea
+    attributes:
+      label: Test cases
+      description: One per line, Given / When / Then. Automated tests are named with this feature's tag, e.g. [challenges].
+      placeholder: "Given a new Copilot user, when they finish sign-up, then they must choose a first challenge."
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: Sub-features, description: Smaller parts that ship with this feature (create as sub-issues labelled sub-feature) }
+  - type: checkboxes
+    attributes:
+      label: Checks
+      options:
+        - label: Needs a database change (only adds tables/columns)
+        - label: Privacy notice or SRM principles affected

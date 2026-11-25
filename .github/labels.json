@@ -1,0 +1,9 @@
+[
+  { "name": "epic", "color": "5319e7", "description": "A large goal made of several features" },
+  { "name": "feature", "color": "0e8a16", "description": "Something people can use; released when tested" },
+  { "name": "sub-feature", "color": "c2e0c6", "description": "Part of a feature; ships with it" },
+  { "name": "bug", "color": "d73a4a", "description": "Something is broken" },
+  { "name": "user-facing", "color": "1d76db", "description": "Release note shown in the apps" },
+  { "name": "admin-only", "color": "fbca04", "description": "Release note on the admin site and GitHub only" },
+  { "name": "needs-migration", "color": "b60205", "description": "Changes the database" }
+]

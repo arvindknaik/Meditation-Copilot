@@ -1,0 +1,9 @@
+{
+  "name": "prod",
+  "label": "",
+  "siteUrl": "https://sosmn.org",
+  "adminUrl": "https://admin.sosmn.org",
+  "apiBase": "https://meditation-copilot-api.aknaik.workers.dev",
+  "analytics": true,
+  "robots": true
+}

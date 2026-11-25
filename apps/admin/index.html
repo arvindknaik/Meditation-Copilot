@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#043a5b">
+<title>Admin · SOS Minneapolis Meditation Center</title>
+<link rel="icon" href="/img/favicon-64.png" type="image/png">
+<link rel="stylesheet" href="/css/site.css?v={{v}}">
+<link rel="stylesheet" href="/css/admin.css?v={{v}}">
+<script>
+/* Admin layout: computer layout on wide screens, phone layout otherwise (switch at the bottom) */
+(function () { var p = null; try { p = localStorage.getItem('mc.layout'); } catch (e) {}
+  var m = p === 'desktop' || p === 'mobile' ? p : (window.matchMedia('(min-width: 900px)').matches ? 'desktop' : 'mobile');
+  document.documentElement.setAttribute('data-layout', m); if (m === 'desktop') document.documentElement.classList.add('mc-desktop'); })();
+</script>
+</head>
+<body>
+<header class="site adm-top">
+  <div class="site-inner">
+    <a class="org" href="#events"><span class="org-mark"><img src="/img/sos-logo.png" srcset="/img/sos-logo.png 1x, /img/sos-logo-192.png 2x" alt="Science of Spirituality logo" width="54" height="34"></span>
+      <span><b>SOSMN Admin</b><small>Minneapolis Meditation Center</small></span></a>
+    <nav class="main-nav" id="admNav" aria-label="Admin" hidden></nav>
+    <div class="acct" id="admAcct"></div>
+  </div>
+</header>
+<main id="main" class="site-inner">
+  <div id="app" aria-live="polite"><div class="card skeleton"></div></div>
+</main>
+<footer class="site"><div class="site-inner">
+  <p class="fine">Admin for <a href="https://sosmn.org/" target="_blank" rel="noopener">sosmn.org</a> · sessions last 12 hours · every action is recorded in Activity.</p>
+  <p class="view-switch" role="group" aria-label="Choose layout"></p>
+  <p class="fine version"><a href="/whats-new.html">What’s new</a> · <span>{{version_label}}</span></p>
+</div></footer>
+<dialog class="sheet" id="sheet"><div class="sheet-body" id="sheetBody"></div></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script src="/js/auth.js?v={{v}}"></script>
+<script src="/js/qrcode.js?v={{v}}"></script>
+<script src="/js/admin.js?v={{v}}"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+name: Bug
+description: Something is broken
+labels: [bug]
+body:
+  - type: textarea
+    attributes: { label: What happened, description: "Steps, what you expected, what you saw. Which app (sosmn.org, Copilot, admin) and device." }
+    validations: { required: true }
+  - type: input
+    attributes: { label: Version, description: "Shown in the footer or Copilot → Account, e.g. v0.19 · Nov 25, 2026" }
+  - type: dropdown
+    attributes: { label: Who is affected, options: [Everyone, Admins only] }

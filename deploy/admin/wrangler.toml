@@ -1,0 +1,16 @@
+# admin.sosmn.org: admin site (static files only), behind Cloudflare Access (Zero Trust → Access → Applications).
+# Built into dist/admin by `node tools/build.mjs <env>`; deployed by the release script. Local preview: `npm run dev` (port 8001).
+name = "sosmn-admin"
+compatibility_date = "2026-11-01"
+workers_dev = false
+preview_urls = false
+routes = [ { pattern = "admin.sosmn.org", custom_domain = true } ]
+
+[assets]
+directory = "../../dist/admin"
+not_found_handling = "single-page-application"
+
+# ---------- TEST: https://test-admin.sosmn.org (add this hostname to the Cloudflare Access application too) ----------
+[env.test]
+name = "sosmn-admin-test"
+routes = [ { pattern = "test-admin.sosmn.org", custom_domain = true } ]

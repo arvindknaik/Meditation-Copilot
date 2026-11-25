@@ -1,0 +1,11 @@
+name: Epic
+description: A large goal made of several features (e.g. Challenge Program)
+labels: [epic]
+body:
+  - type: textarea
+    attributes: { label: Goal, description: What changes for seekers, initiates or volunteers when this is done? }
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: Features, description: "List the features; create each as a Feature issue and add it here as a sub-issue." }
+  - type: input
+    attributes: { label: Spec, description: "Link to the doc in docs/ (e.g. docs/SOSMN-SRM.md section 10)" }

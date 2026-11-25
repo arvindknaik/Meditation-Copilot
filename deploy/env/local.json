@@ -1,0 +1,9 @@
+{
+  "name": "local",
+  "label": "LOCAL",
+  "siteUrl": "http://localhost:8000",
+  "adminUrl": "http://localhost:8001",
+  "apiBase": "http://localhost:8787",
+  "analytics": false,
+  "robots": false
+}

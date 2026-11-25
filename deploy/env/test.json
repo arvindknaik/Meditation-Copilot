@@ -1,0 +1,9 @@
+{
+  "name": "test",
+  "label": "TEST",
+  "siteUrl": "https://test.sosmn.org",
+  "adminUrl": "https://test-admin.sosmn.org",
+  "apiBase": "https://meditation-copilot-api-test.aknaik.workers.dev",
+  "analytics": false,
+  "robots": false
+}

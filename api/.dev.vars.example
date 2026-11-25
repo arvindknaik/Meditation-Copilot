@@ -1,0 +1,6 @@
+# Local development settings for the events server. Copy to api/.dev.vars (never committed).
+# `npm run setup` does this for you.
+SESSION_SECRET=local-dev-only-not-a-secret-0123456789abcdef
+ADMIN_EMAILS=owner@example.com
+DEV_LOGIN=true
+ALLOWED_ORIGINS=http://localhost:8000,http://localhost:8001,http://127.0.0.1:8000,http://127.0.0.1:8001

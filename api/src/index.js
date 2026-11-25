@@ -461,7 +461,7 @@ async function handle(request, env) {
   const J = (b, s) => json(request, env, b, s);
   let m;
 
-  if (path === '/api/health') return J({ ok: true, time: now() });
+  if (path === '/api/health') return J({ ok: true, time: now(), version: env.APP_VERSION || 'dev' });
 
   /* ---- sign in: exchange a Google/Microsoft token for our session ---- */
   if (path === '/api/session' && request.method === 'POST') {
@@ -1379,3 +1379,6 @@ async function handle(request, env) {
 
   throw new HttpError(404, 'Not found');
 }
+
+// For unit tests (tests/unit). Not used by the Worker runtime.
+export { calcJourney, validateChallenge, challengeOut, validateEvent, centerDayStart, windowFor };

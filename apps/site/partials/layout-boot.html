@@ -1,0 +1,30 @@
+<script>
+/* Desktop / mobile layout: chosen before the page draws, so there is no flash.
+   Auto: phones get the mobile layout; computers and wide tablets get the desktop layout.
+   A choice made with the switch (or ?view=desktop|mobile|auto in the address) is remembered on this device. */
+(function () {
+  var KEY = 'mc.layout', pref = null, q = null;
+  try { q = new URLSearchParams(location.search).get('view'); } catch (e) {}
+  try {
+    if (q === 'desktop' || q === 'mobile') localStorage.setItem(KEY, q);
+    if (q === 'auto') localStorage.removeItem(KEY);
+    pref = localStorage.getItem(KEY);
+  } catch (e) {}
+  var ua = navigator.userAgent || '';
+  var phone = (navigator.userAgentData && navigator.userAgentData.mobile) || /iPhone|iPod|Android.+Mobile|Windows Phone|Mobi/i.test(ua);
+  var auto = (!phone && window.matchMedia('(min-width: 900px)').matches) ? 'desktop' : 'mobile';
+  var mode = pref === 'desktop' || pref === 'mobile' ? pref : auto;
+  var root = document.documentElement;
+  root.setAttribute('data-layout', mode);
+  root.setAttribute('data-layout-pref', pref || 'auto');
+  if (mode === 'desktop') {
+    root.classList.add('mc-desktop');
+    // A phone asked for the desktop layout: lay the page out at desktop width, like "Request desktop site".
+    if (Math.min(screen.width, window.innerWidth || screen.width) < 900) {
+      var vp = document.querySelector('meta[name="viewport"]');
+      if (vp) vp.setAttribute('content', 'width=1280');
+      root.classList.add('mc-forced-desktop');
+    }
+  }
+})();
+</script>

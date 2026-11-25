@@ -1,122 +1,63 @@
-# 🙏 Meditation Copilot
+# Minneapolis Meditation Center apps
 
-*Small moments. Daily practice. Inner transformation.*
+Code for the Science of Spirituality Minneapolis Meditation Center:
 
-A mobile-first app that maps your path to a fixed spiritual goal of **10,000 effective meditation hours**.
-Plain HTML, CSS and JavaScript. No frameworks, no build step, no tracking. Answers are stored only in the browser's localStorage.
+| App | Live | Source |
+|---|---|---|
+| Events site, News, About, What's new | [sosmn.org](https://sosmn.org) | `apps/site`, `content/` |
+| Meditation Copilot (prototype) | [sosmn.org/copilot](https://sosmn.org/copilot/) | `apps/copilot` |
+| Admin site | admin.sosmn.org (team only) | `apps/admin` |
+| Events server (Cloudflare Worker + D1) | — | `api/` |
 
-Live: https://arvindknaik.github.io/Meditation-Copilot/
+How we work — work items, environments, tests, versions and releases: **[docs/DEV-PROCESS.md](docs/DEV-PROCESS.md)**.
 
-## Files
+## Run it on your computer (Windows or Mac)
+
+Needs [Node.js 20+](https://nodejs.org) and Git. Google Chrome is used for browser tests.
 
 ```
-index.html            App shell: all screens and dialogs (also works by double-clicking it)
-privacy.html          Privacy notice (draft for review)
-css/styles.css        All styles, light + dark themes
-js/config.js          Public settings: Google/Microsoft Client IDs, analytics endpoint, support contact
-js/quotes.js          Master quote file for "Thought for today" (add approved quotes here)
-js/core.js            Storage, dates, sessions, roadmap math, CSV format, sync snapshot/merge, router
-js/diag.js            Private diagnostic log + anonymous usage events
-js/roadmap.js         Roadmap: 5 questions, results, milestone track, what-if, sharing
-js/sessions-ui.js     Save / add / edit / delete a sitting
-js/timer.js           Timer: 10 s settle, start/end bells, countdown or open, pause, wake lock
-js/insights.js        Totals, chart, patterns, session log, CSV export/import
-js/home.js            Today screen
-js/knowledge.js       Learn articles and sos.org links (draft for SOS review)
-js/learn.js           Learn: search, paginated results, articles
-js/sync.js            Google / Microsoft sign-in and Drive / OneDrive sync
-js/calendar.js        Calendar: personal schedule, month view, reminders, phone-calendar export
-js/events.js          SOS events: list, event page, RSVP, check-in (code/QR/online), admin tools
-js/social.js          Presence counts and meditation buddies
-js/goals.js           Challenges: Hours, Amrit Vela, Weekly attendance
-js/vendor/qrcode.js   QR code generator (qrcode-generator 1.5.2, MIT)
-js/challenge.js       New Seekers' 42-day challenge (rules + screen)
-js/rewards.js         Points, badges and levels (rules list, easy to extend)
-js/account.js         Welcome / sign-in choice, guest mode, Account & settings, backup reminder
-js/profile.js         New Seeker / Initiated Member, initiation date and Master
-js/app.js             Startup and service-worker registration
-manifest.json         PWA manifest (name, colors, icons, shortcuts)
-sw.js                 Service worker: offline support + caching
-icons/                SVG + PNG icons (192, 512, maskable 512, Apple touch 180)
-docs/                 intent.md, tech-spec.md, product-status.md, setup-accounts.md, events-requirements.md, setup-cloudflare.md, data-model.md
-api/                  Events server (Cloudflare Worker + D1): src/index.js, migrations/, schema.sql, wrangler.toml
-push.bat              Windows: add, commit (asks for a message) and push
-server-start.bat      Windows: start a local test server at http://localhost:8000/
-server-stop.bat       Windows: stop the local test server
-.nojekyll             Tells GitHub Pages to serve files as-is
+git clone https://github.com/arvindknaik/mn-meditation-center.git
+cd mn-meditation-center
+npm install
+npm run setup        # local settings + a local database with made-up people and events
+npm run dev          # http://localhost:8000 (site + /copilot/) · http://localhost:8001 (admin) · server on :8787
 ```
 
-## Features
-- **Today, Timer, Insights, Roadmap, Learn:** see `docs/intent.md` and `docs/product-status.md`.
-- **Guest mode:** data stays on this device only, with a warning and backup reminders. Google and Microsoft sign-in are coming next (`docs/setup-accounts.md`).
-- **CSV export/import:** header must be exactly `date,start_time,minutes,quality_pct,effective_minutes,reflection,source`. Export writes dates as YYYY-MM-DD and times as HH:MM. Import also accepts Excel-style values: dates like `11/9/2026` (US month/day; day/month only when the first number is over 12), `9-Nov-2026` or `Nov 9, 2026`; times like `6:00`; quality like `75%`. Invalid files are rejected; rows overlapping existing sittings are skipped and listed.
+Sign in locally with **Local test sign-in** (any email). `owner@example.com` is the owner on the admin site.
+No real data is ever used locally. Files rebuild when you save; refresh the browser.
 
-**Prototype only. Not an official or approved Science of Spirituality app.**
+## Test
 
-## Phase 1: Run locally
-Double-click `index.html`. Everything works except install/offline, which browsers only allow over http(s).
-
-To test the PWA locally:
-```bash
-cd Meditation-Copilot
-python3 -m http.server 8000
-# open http://localhost:8000
+```
+npm test             # unit + API + browser tests → reports/latest.md
+npm run test:unit    # just one suite (also test:api, test:e2e)
 ```
 
-## Phase 2: PWA
-- `manifest.json` uses relative paths (`./`), so it works under the `/Meditation-Copilot/` sub-path.
-- `sw.js` pre-caches the app shell. Pages load network-first (so updates arrive), with a cached fallback when offline. Icons and other assets load cache-first.
-- **When you change any file:** bump `CACHE_VERSION` in `sw.js` (e.g. `v6` → `v7`) **and** the `?v=` number on the css/js links in `index.html` (e.g. `?v=6` → `?v=7`), and `MC.VERSION` in `js/core.js`. Add any new files to the `ASSETS` list in `sw.js`. This makes phones load the new code right away instead of a cached older copy.
-- Android/Chrome shows an **Add to Home Screen** button on the results card. iPhone shows a "Share → Add to Home Screen" hint.
+Name tests with the feature they cover, e.g. `test('[challenges] …')`, so the report groups them by feature.
 
-## Phase 3: Deploy to GitHub Pages
-1. Create a public repo named **`Meditation-Copilot`** under `arvindknaik` (the name is case-sensitive and must match the URL).
-2. Upload the *contents* of this folder to the repo root (`index.html` at the top level):
-   ```bash
-   cd Meditation-Copilot
-   git init -b main
-   git add .
-   git commit -m "Meditation Copilot v1"
-   git remote add origin https://github.com/arvindknaik/Meditation-Copilot.git
-   git push -u origin main
-   ```
-   Or drag the files into the repo with GitHub's **Add file → Upload files**.
-3. Go to **Settings → Pages → Build and deployment**, set *Source* to **Deploy from a branch**, then choose **main** and **/ (root)**, and save.
-4. After a minute or two, open https://arvindknaik.github.io/Meditation-Copilot/
+## Contribute
 
-The share links and WhatsApp preview image (`og:image`) already point to that URL. If you deploy elsewhere, search for `arvindknaik.github.io` in `index.html` and update it.
+1. Pick or create an issue (Epic › Feature › Sub-feature, or Bug).
+2. Branch, change, `npm test`, open a pull request ("Fixes #12"). Tests run automatically on GitHub.
+3. Arvind reviews and merges, then builds, deploys to test.sosmn.org, and releases to production.
 
-## Calculation reference
-| Item | Formula |
-|---|---|
-| Effective daily minutes | minutes/day × quality % |
-| Hours completed | effective min/day × days since journey start ÷ 60 (capped at 10,000) |
-| Hours remaining | 10,000 − completed (never below 0) |
-| Required effective avg | remaining hours × 60 ÷ days until goal-age birthday |
-| Ahead of schedule | current effective ≥ required → projected completion age + time ahead |
-| Behind schedule | additional effective min/day = required − current (also shown as actual sitting minutes at your quality) |
+Never commit passwords, keys, personal data or database backups.
 
-Goal age must be a whole number, greater than your current age, and no more than 90. A projected completion past 90 is shown as "Beyond 90 at current pace" so the message stays encouraging.
+## Release (Arvind)
 
-## v0.16 (November 2026) — events moved to sosmn.org
-- The app now lives at **https://sosmn.org/copilot/**. Center events (RSVP, calendar, check-in) are on **sosmn.org**; the app shows a "Center events → sosmn.org" link instead of its own event screens.
-- Old app links still work: `#event?e=…` opens the event on sosmn.org and `#checkin` opens sosmn.org/checkin/ (so printed posters keep working).
-- Check-in points stay: the app reads your check-ins from the events server.
-- **Challenges from the center:** set up and ordered in the admin site (admin.sosmn.org → Challenges). The top one is shown as Recommended. Kinds: daily sitting (minutes a day for N days) and center check-ins (N check-ins within N days). A 42-day daily-sitting challenge uses the app's guided 42-day plan.
-- The app's own Admin screen keeps only Featured videos, Feedback and the check-in QR poster; everything else is in the admin site.
-- Server: migration `0007_site.sql` (guests on RSVPs and check-ins, "who opened it", challenges). Deploy: `npm run db:remote`, then `npx wrangler deploy` in `api`. Full go-live steps: `SOSMN.org\DEPLOY.md`.
+`release.bat` (Windows) or `release.command` (Mac): **Build → Test → Prod**. See [docs/DEV-PROCESS.md](docs/DEV-PROCESS.md).
 
-## v0.17 (November 2026) — Seeker Relationship Management, phase 1
-Admin site (admin.sosmn.org), admins only — hosts don't see any of it. Plan: `SOSMN.org\SOSMN-SRM.md`.
-- **Events** have a **Type** (Introduction, Workshop, Satsang, Darshan/retreat, Seva, Community, Other) and **Mainly for** (Everyone, New, Seekers, Initiates). Existing events were given a type from their titles; check and correct them.
-- **Journey**: everyone's level (New, Seeker L2–L4, Initiate), worked out from check-ins by event type; levels only move up; long absences show as Drifting. An admin can set a level by hand.
-- **Person page**: journey numbers, next steps for their level, milestones ticked by an admin (21/42-day challenge, no open questions, met Sant Rajinder Singh Ji in person), mentor, notes, and a timeline.
-- **Follow-ups**: first visits to thank, said-Going-but-didn't-come, new level, no mentor yet, drifting. Messages open in your own email or WhatsApp; mark done or skip.
-- **Event → Insight**: opened → said Going → came, first-timers, came back within 30 days, walk-ins, who came by level.
-- Server: migration `0008_srm.sql`. Deploy: `npm run db:remote`, then `npx wrangler deploy` in `api`; then deploy `SOSMN.org\deploy\sosmn-admin`.
+## Folders
 
-## v0.18 (November 2026) — Challenge Program, step 1 (SOSMN-SRM.md section 10)
-- **Meditation path:** the 42-day challenge is replaced by **21-Day Foundation** (same length every day: 10, 15 or 20 min, the seeker chooses) and **21-Day Advance** (grows about a minute a day to 30 min). After a Foundation, Copilot offers "another 21 days at the same time" or Advance. Missed days allowed: 1 per 10 days; one more ends the challenge (start again any time). Anyone already in a 42-day challenge finishes it under the old rules.
-- **Choose your first challenge:** a new Copilot user must pick at least one challenge after choosing seeker/initiate (21-Day Foundation, or Attend 6 sessions in 3 months, which needs Google/Microsoft sign-in). Existing users without a challenge see it once, with "Not now".
-- **Admin → Challenges:** meditation challenges can let people choose minutes, grow to a number of minutes, be offered at sign-up, and be offered as the next step after another challenge. Points are a bonus on completion.
-- Server: migration `0009_challenge_program.sql` (rebuilds the challenges table and adds the starter program). Deploy: `npm run db:remote`, `npx wrangler deploy` in `api`; then rebuild/deploy the site and admin site.
+```
+apps/copilot  apps/site  apps/admin   the three web apps
+api/          events server and database migrations
+content/      News & About content (from the old WordPress site) and old-address redirects
+centers/      settings for each center (mpls.json)
+deploy/       Cloudflare settings: env/*.json (local, test, prod), site/, admin/
+tests/        unit/, api/, e2e/ and acceptance/ checklists
+tools/        build, dev, test, release, seed and GitHub set-up scripts
+docs/         process, specs (SOSMN-SRM.md), backlog, set-up guides
+releases/     release notes per version; releases.json feeds "What's new"
+reports/      latest test report, build log, deployments
+```
