@@ -25,7 +25,7 @@
   if (MC.account.mode() === 'none' && !returningFromSignIn) MC.account.showWelcome();
   // After any Microsoft redirect and the first sync (which may bring the profile from the cloud),
   // ask "Are you an initiate?" if it hasn't been answered yet.
-  MC.sync.init().then(function () { MC.maybeAskUserType(); });
+  MC.sync.init().then(function () { MC.maybeAskUserType(); setTimeout(MC.maybeAskFirstChallenge, 600); });
   MC.track('app_open', {
     installed: (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true,
     mode: MC.account.mode()

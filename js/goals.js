@@ -138,8 +138,9 @@
   var CC_KEY = 'meditation-copilot:center-challenges', ccAt = 0;
   function centerList() {
     var list = (MC.store.get(CC_KEY, null) || {}).list || [];
+    if (!list.length && MC.challenge && MC.challenge.defaults) list = MC.challenge.defaults();   // offline / not loaded yet: the starter program
     var seeker = MC.isSeeker && MC.isSeeker(), init = MC.isInitiated && MC.isInitiated();
-    return list.filter(function (x) { return x.active !== false && (x.audience === 'all' || (x.audience === 'seeker' && seeker) || (x.audience === 'initiate' && init)); });
+    return list.filter(function (x) { return (x.kind === 'daily_sitting' || x.kind === 'checkins') && x.active !== false && (x.audience === 'all' || (x.audience === 'seeker' && seeker) || (x.audience === 'initiate' && init)); });
   }
   function loadCenter() {
     if (!(MC.events && MC.events.enabled()) || Date.now() - ccAt < 10 * 60000) return;
@@ -149,29 +150,31 @@
       if (MC.current === 'roadmap') render();
     }).catch(function () { ccAt = 0; });
   }
-  // A 42-day daily-sitting challenge is the app's guided 42-day plan (15 min, building to 30)
-  function is42(x) { return x.kind === 'daily_sitting' && Number(x.days) === 42; }
+  // Meditation (daily sitting) challenges run in the guided challenge engine (js/challenge.js); attendance ones live here
+  function is42(x) { return x.kind === 'daily_sitting'; }
   function ccMeta(x) {
-    return (x.kind === 'checkins' ? 'Check in at ' + x.target + ' center events within ' + x.days + ' days' : is42(x) ? 'The guided 42-day plan: 15 min a day, building to 30' : 'Sit ' + x.minutes + ' min a day for ' + x.days + ' days') +
-      (is42(x) ? '' : ' · ' + x.points + ' points');
+    if (x.kind === 'checkins') return 'Check in at ' + x.target + ' center events within ' + x.days + ' days · ' + x.points + ' points';
+    var ch = x.minutesChoices && x.minutesChoices.length ? x.minutesChoices.join('/') + ' min (you choose)' : x.minutes + ' min';
+    return (x.rampTo ? 'Grow to ' + x.rampTo + ' min a day over ' + x.days + ' days' : 'Sit ' + ch + ' a day for ' + x.days + ' days') + ' · ' + x.points + ' points';
   }
   function centerHTML() {
     var list = centerList(); if (!list.length) return '';
     var running = {}; active('center').forEach(function (c) { running[c.centerId] = true; });
-    var c42 = MC.challenge && MC.challenge.current(), on42 = !!(c42 && !c42.ended);
+    var c42 = MC.challenge && MC.challenge.current(), on42 = !!(c42 && !c42.ended && !c42.done), seeker = MC.isSeeker && MC.isSeeker();
+    list = list.filter(function (x) { var on = is42(x) && on42 && c42.run && c42.run.cid === x.id;
+      return !(is42(x) && seeker) && !(is42(x) && x.nextOf && !on); });   // seekers pick meditation challenges on their Roadmap screen; next steps appear on completion
+    if (!list.length) return '';
     return '<div class="small" style="font-weight:700;margin:4px 0 6px">From the Minneapolis Center</div>' + list.map(function (x, i) {
-      var on = is42(x) ? on42 : running[x.id];
+      var on = is42(x) ? on42 && (c42.run.cid === x.id) : running[x.id];
+      var later = is42(x) && on42 && !on;              // one meditation challenge at a time
       return '<div class="goal"><div class="goal-head"><b>🪷 ' + MC.esc(x.title) + (i === 0 ? ' <span class="badge" style="margin-left:4px">Recommended</span>' : '') + '</b>' +
-        (on ? '<span class="small">In progress</span>' : '<button class="btn btn-soft btn-sm" data-cc="' + MC.esc(x.id) + '">Start</button>') + '</div>' +
+        (on ? '<span class="small">In progress</span>' : later ? '<span class="small muted">After your current challenge</span>' : '<button class="btn btn-soft btn-sm" data-cc="' + MC.esc(x.id) + '">Start</button>') + '</div>' +
         '<div class="goal-meta">' + MC.esc(ccMeta(x)) + '</div>' + (x.description ? '<div class="small muted" style="margin-top:4px">' + MC.esc(x.description) + '</div>' : '') + '</div>';
     }).join('') + '<div class="small" style="font-weight:700;margin:14px 0 6px">Your challenges</div>';
   }
   function startCenter(id) {
     var x = centerList().filter(function (y) { return y.id === id; })[0]; if (!x) return;
-    if (is42(x)) {
-      if (!window.confirm('Start the 42-day challenge today?')) return;
-      MC.challenge.start(); MC.toast('Day 1 of your 42-day challenge begins today 🌱'); MC.emit('data'); render(); return;
-    }
+    if (is42(x)) { MC.challenge.openOne(x); return; }
     if (x.kind === 'checkins' && !(MC.events && MC.events.signedInMode && MC.events.signedInMode())) { MC.toast('Sign in with Google or Microsoft first: this challenge counts your center check-ins.'); return; }
     var t = MC.today();
     var c = { type: 'center', centerId: x.id, title: x.title, kind: x.kind, days: Number(x.days), minutes: Number(x.minutes) || 0, target: Number(x.target) || 0,
@@ -202,10 +205,10 @@
     var seeker = MC.isSeeker && MC.isSeeker(), c42 = MC.challenge && MC.challenge.current();
     var html = '<div class="section-title">Challenges <button class="btn btn-soft btn-sm" id="goalNew" style="flex:0 0 auto">+ Start a challenge</button></div>' +
       '<p class="small" style="margin:-6px 0 10px">Set yourself a goal with a start and an end. One of each kind at a time; drop out any time (no points), or earn half of the prorated points if it doesn’t work out.</p>';
-    if (!seeker && c42 && !c42.ended) html += '<div class="goal"><div class="goal-head"><b>🌱 42-Day Challenge</b><span class="small">Day ' + c42.count + ' of 42</span></div><div class="goal-meta">Today’s target ' + c42.todayTarget + ' min</div><div class="bar"><div class="fill" style="width:' + Math.round(c42.count / 42 * 100) + '%"></div></div></div>';
+    if (!seeker && c42 && !c42.ended && !c42.done) html += '<div class="goal"><div class="goal-head"><b>🌱 ' + MC.esc(c42.plan ? c42.run.title : '42-Day Challenge') + '</b><span class="small">Day ' + (c42.plan ? c42.dayNum + ' of ' + c42.total : c42.count + ' of 42') + '</span></div><div class="goal-meta">Today’s target ' + c42.todayTarget + ' min' + (c42.plan ? ' · ' + c42.misses + ' of ' + c42.allow + ' misses' : '') + '</div><div class="bar"><div class="fill" style="width:' + Math.round(c42.count / (c42.plan ? c42.total : 42) * 100) + '%"></div></div></div>';
     html += centerHTML();
     html += act.map(goalHTML).join('');
-    if (!act.length && !(c42 && !c42.ended)) html += '<p class="small muted">No active challenge. Tap <b>Start a challenge</b> to begin.</p>';
+    if (!act.length && !(c42 && !c42.ended && !c42.done)) html += '<p class="small muted">No active challenge. Tap <b>Start a challenge</b> to begin.</p>';
     if (past.length) html += '<details style="margin-top:10px"><summary class="small">Past challenges (' + past.length + ')</summary>' + past.slice(0, 20).map(goalHTML).join('') + '</details>';
     card.innerHTML = html;
     $('goalNew').addEventListener('click', openNew);
@@ -222,7 +225,7 @@
   /* ---------- start sheet ---------- */
   var dlg = $('goalDlg'), kind = 'hours';
   function openNew() {
-    var seeker = MC.isSeeker && MC.isSeeker(), c42 = MC.challenge && MC.challenge.current(), can42 = !seeker && !(c42 && !c42.ended);
+    var c42 = MC.challenge && MC.challenge.current(), can42 = false;   // meditation challenges now come from the Challenge Program list
     $('gt42').hidden = !can42;
     kind = 'hours'; selectKind();
     $('gStart').value = MC.toISO(MC.today()); $('gStart').min = MC.toISO(MC.today()); $('gStart').max = MC.toISO(MC.addDays(MC.today(), 30));
@@ -275,7 +278,14 @@
     dlg.close(); MC.toast(KINDS[c.type].icon + ' Challenge started. You’ve got this!'); MC.emit('data'); render();
   });
 
-  MC.goals = { all: all, evaluate: evaluate, pointsFor: pointsFor, allowance: allowance, minutesInAmrit: minutesInAmrit, render: render };
+  // Attendance challenge from the Challenge Program, started without questions (sign-up step and chooser)
+  function addCenter(x) {
+    var t = MC.today();
+    col.add({ type: 'center', centerId: x.id, title: x.title, kind: x.kind, days: Number(x.days), minutes: Number(x.minutes) || 0, target: Number(x.target) || 0,
+      points: Number(x.points) || 0, startOn: MC.toISO(t), endOn: MC.toISO(MC.addDays(t, Number(x.days) - 1)), status: 'active' });
+    MC.track('challenge_start2', { type: 'center', cid: x.id });
+  }
+  MC.goals = { startCenter: addCenter, all: all, evaluate: evaluate, pointsFor: pointsFor, allowance: allowance, minutesInAmrit: minutesInAmrit, render: render };
   MC.on('view', function (n) { if (n === 'roadmap') { setTimeout(render, 0); loadCenter(); } });
   MC.on('data', function () { if (MC.current === 'roadmap') setTimeout(render, 0); });
   MC.on('profile', function () { if (MC.current === 'roadmap') setTimeout(render, 0); });

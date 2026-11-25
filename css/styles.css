@@ -763,3 +763,11 @@ html.mc-desktop .hero-ev .he-ph { aspect-ratio: auto !important; }
 .center-link .cl-body { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
 .center-link .cl-body small { color: var(--muted); font-size: .84rem; line-height: 1.4; margin-top: 2px; }
 .center-link .cl-go { flex: 0 0 auto; font-weight: 700; color: var(--purple, #3b2466); font-size: .9rem; white-space: nowrap; }
+
+/* v0.18 Challenge Program: option cards, missed days */
+.cp-opt { border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 12px; background: var(--card); }
+.cp-opt-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cp-opt-head b { font-size: 1.02rem; }
+.cp-min { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.ch-dot.miss { background: #e8b4ae; border-color: #e8b4ae; }
+#firstDlg .sheet-body { max-height: 88vh; overflow: auto; }

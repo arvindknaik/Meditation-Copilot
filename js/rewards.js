@@ -30,7 +30,9 @@
     { id: 'challenge_p1', category: 'goals', icon: '🪷', name: 'Phase 1 Complete', desc: 'Reach day 21 of the 42-day challenge', points: 50, repeat: true,
       count: function (d) { return d.phase1Runs; } },
     { id: 'challenge_42', category: 'goals', icon: '🏆', name: '42-Day Challenge Complete', desc: 'Complete all 42 days', points: 100, repeat: true,
-      count: function (d) { return d.challengesDone; } }
+      count: function (d) { return d.challengesDone; } },
+    { id: 'challenge_med', category: 'goals', icon: '🌱', name: 'Meditation Challenges', desc: 'Complete a meditation challenge (21-Day Foundation, 21-Day Advance and others); points set by the center', points: 0, repeat: true,
+      count: function (d) { return d.planDone; }, total: function (d) { return d.planPoints; } }
   ].concat(HOURS.map(function (h) {
     return { id: 'hours_' + h[0], category: 'goals', icon: '⏳', name: h[0].toLocaleString() + ' Hours', desc: 'Log ' + h[0].toLocaleString() + ' hours of meditation in the app', points: h[1],
       count: function (d) { return d.loggedHours >= h[0] ? 1 : 0; } };
@@ -45,13 +47,14 @@
     var days = MC.byDay(), t = MC.today(), todayKey = MC.toISO(t);
     var keys = Object.keys(days).sort();
     // Target per day: the challenge target when the day was in a challenge, otherwise the base target
-    var challengeTargets = {}, phase1Runs = 0, challengesDone = 0;
+    var challengeTargets = {}, phase1Runs = 0, challengesDone = 0, planDone = 0, planPoints = 0;
     if (MC.challenge) {
       MC.challenge.all().forEach(function (c) {
         c.history.forEach(function (h) { challengeTargets[h.date] = h.target; });
         if (!c.ended && !c.done) challengeTargets[c.todayKey] = c.todayTarget;
         if (c.phase1On) phase1Runs++;
-        if (c.done) challengesDone++;
+        if (c.done && !c.plan) challengesDone++;
+        if (c.done && c.plan) { planDone++; planPoints += Number(c.run.points) || 0; }
       });
     }
     var base = baseTarget();
@@ -71,7 +74,7 @@
     var loggedMin = 0; MC.sessions.all().forEach(function (s) { loggedMin += s.minutes; });
     return {
       sessions: MC.sessions.count(), metDays: Object.keys(met).length, runs: runs,
-      loggedHours: loggedMin / 60, phase1Runs: phase1Runs, challengesDone: challengesDone, todayKey: todayKey
+      loggedHours: loggedMin / 60, phase1Runs: phase1Runs, challengesDone: challengesDone, planDone: planDone, planPoints: planPoints, todayKey: todayKey
     };
   }
   function baseTarget() {

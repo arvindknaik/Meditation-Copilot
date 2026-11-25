@@ -276,7 +276,8 @@ function publicEvent(ev, opts = {}) {
     venue: ev.venue, address: ev.address, startsAt: ev.starts_at, endsAt: ev.ends_at, timezone: ev.timezone,
     access: ev.access || 'public', status: ev.status, going: ev.going || 0, checkedIn: ev.checked_in || 0,
     seriesId: ev.series_id || null, repeats: ev.series_freq || null, flyerId: ev.flyer_id || null,
-    likes: ev.likes || 0, messages: ev.message_count || 0, hero: !!ev.is_hero
+    likes: ev.likes || 0, messages: ev.message_count || 0, hero: !!ev.is_hero,
+    kind: ev.kind || 'other', level: ev.level || 'all'
   };
   if (opts.signedIn) out.onlineUrl = ev.online_url || null;
   if (opts.admin) out.checkinCode = ev.checkin_code;
@@ -364,17 +365,70 @@ function validateEvent(b, partial) {
   if (o.starts_at && o.ends_at && o.ends_at <= o.starts_at) throw bad('End time must be after the start time');
   if (b.timezone !== undefined) o.timezone = str(b.timezone, 60) || 'America/Chicago';
   if (b.access !== undefined) { if (!ACCESS_LEVELS.includes(b.access)) throw bad('Access must be public, satsang or initiates'); o.access = b.access; }
+  if (b.kind !== undefined) { if (!EVENT_KINDS.includes(b.kind)) throw bad('Type must be one of: ' + EVENT_KINDS.join(', ')); o.kind = b.kind; }
+  if (b.level !== undefined) { if (!EVENT_AUDIENCE.includes(b.level)) throw bad('Mainly for must be one of: ' + EVENT_AUDIENCE.join(', ')); o.level = b.level; }
   return o;
+}
+/* ---------- v0.17 SRM: event types, journey levels (see SOSMN-SRM.md) ---------- */
+const EVENT_KINDS = ['intro', 'workshop', 'satsang', 'darshan', 'seva', 'community', 'other'];
+const EVENT_AUDIENCE = ['all', 'new', 'seeker', 'initiate'];
+const JOURNEY = ['new', 'l2', 'l3', 'l4', 'initiate'];
+const MILESTONES = ['challenge_done', 'questions_clear', 'met_master'];
+const DAY_MS = 86400000;
+// Levels move up only (a long absence shows as "drifting", never as a lower level).
+//   New: no check-in yet · L2 Seeker: came at least once · L3: 6+ workshops or 2+ satsangs
+//   L4: 6+ satsangs, a Darshan/retreat, or "met Sant Rajinder Singh Ji in person" · Initiate: category initiate
+function calcJourney(r) {
+  if (r.category === 'initiate') return 'initiate';
+  const ms = new Set(String(r.milestones || '').split(',').filter(Boolean));
+  if (!r.visits) return 'new';
+  if ((r.satsangs || 0) >= 6 || (r.darshans || 0) > 0 || ms.has('met_master')) return 'l4';
+  if ((r.workshops || 0) >= 6 || (r.satsangs || 0) >= 2) return 'l3';
+  return 'l2';
+}
+async function journeyRows(db, t, userId) {
+  const res = await db.prepare(`SELECT u.id AS userId, u.name, u.email, u.phone, u.category, u.created_at AS createdAt, u.last_seen_at AS lastSeenAt,
+      u.blocked_at AS blockedAt, u.journey_level AS override, u.mentor_id AS mentorId, (SELECT m.name FROM users m WHERE m.id = u.mentor_id) AS mentorName,
+      COUNT(c.event_id) AS visits, MIN(c.checked_in_at) AS firstVisitAt, MAX(c.checked_in_at) AS lastVisitAt,
+      COALESCE(SUM(c.guests), 0) AS guestsBrought,
+      COALESCE(SUM(e.kind = 'intro'), 0) AS intros, COALESCE(SUM(e.kind = 'workshop'), 0) AS workshops,
+      COALESCE(SUM(e.kind = 'workshop' AND c.checked_in_at >= ?1), 0) AS workshops90,
+      COALESCE(SUM(e.kind = 'satsang'), 0) AS satsangs, COALESCE(SUM(e.kind = 'satsang' AND c.checked_in_at >= ?1), 0) AS satsangs90,
+      COALESCE(SUM(e.kind = 'darshan'), 0) AS darshans, COALESCE(SUM(e.kind = 'seva'), 0) AS seva,
+      (SELECT group_concat(ms.kind) FROM milestones ms WHERE ms.user_id = u.id) AS milestones,
+      (SELECT COUNT(*) FROM rsvps r WHERE r.user_id = u.id AND r.status IN ('going', 'maybe')) AS rsvps,
+      (SELECT COUNT(*) FROM event_views v WHERE v.user_id = u.id) AS viewed
+    FROM users u LEFT JOIN checkins c ON c.user_id = u.id LEFT JOIN events e ON e.id = c.event_id
+    ${userId ? 'WHERE u.id = ?2' : ''} GROUP BY u.id`).bind(...(userId ? [t - 90 * DAY_MS, userId] : [t - 90 * DAY_MS])).all();
+  return res.results.map((r) => {
+    r.computed = calcJourney(r);
+    r.level = JOURNEY.includes(r.override) ? r.override : r.computed;
+    r.drifting = r.visits >= 2 && r.lastVisitAt < t - 60 * DAY_MS;
+    r.milestones = String(r.milestones || '').split(',').filter(Boolean);
+    return r;
+  });
 }
 function validateChallenge(b, partial) {
   const o = {};
   const int = (v, lo, hi, name) => { const n = Math.round(Number(v)); if (!Number.isFinite(n) || n < lo || n > hi) throw bad(name + ' must be between ' + lo + ' and ' + hi); return n; };
   if (!partial || b.title !== undefined) { o.title = str(b.title, 100); if (!o.title) throw bad('Title is required'); }
   if (b.description !== undefined) o.description = str(b.description, 600);
-  if (!partial || b.kind !== undefined) { if (!['daily_sitting', 'checkins'].includes(b.kind)) throw bad('Type must be daily_sitting or checkins'); o.kind = b.kind; }
+  if (!partial || b.kind !== undefined) { if (!['daily_sitting', 'checkins', 'education'].includes(b.kind)) throw bad('Type must be daily_sitting, checkins or education'); o.kind = b.kind; }
+  if (b.minutesChoices !== undefined) {
+    const ch = String(b.minutesChoices || '').split(/[,\s]+/).filter(Boolean).map((x) => Math.round(Number(x)));
+    if (ch.some((x) => !(x >= 1 && x <= 180))) throw bad('Minute choices must be numbers between 1 and 180, e.g. 10, 15, 20');
+    o.minutes_choices = [...new Set(ch)].sort((a, c) => a - c).join(',');
+  }
+  if (b.rampTo !== undefined) o.ramp_to = int(b.rampTo || 0, 0, 180, 'Grow to (minutes)');
+  if (b.material !== undefined) { if (!['', 'quote', 'article', 'book', 'video'].includes(b.material)) throw bad('Material must be quote, article, book or video'); o.material = b.material; }
+  if (b.cadence !== undefined) { if (!['', 'day', 'week', 'month'].includes(b.cadence)) throw bad('How often must be day, week or month'); o.cadence = b.cadence; }
+  if (b.perPeriod !== undefined) o.per_period = int(b.perPeriod || 0, 0, 50, 'Items per period');
+  if (b.itemPoints !== undefined) o.item_points = int(b.itemPoints || 0, 0, 1000, 'Points per item');
+  if (b.signup !== undefined) o.signup = b.signup ? 1 : 0;
+  if (b.nextOf !== undefined) o.next_of = b.nextOf ? str(b.nextOf, 60) : null;
   if (b.days !== undefined) o.days = int(b.days, 1, 365, 'Days');
   if (b.minutes !== undefined) o.minutes = int(b.minutes, 0, 600, 'Minutes');
-  if (b.target !== undefined) o.target = int(b.target, 0, 100, 'Number of events');
+  if (b.target !== undefined) o.target = int(b.target, 0, 1000, 'Target');
   if (b.audience !== undefined) { if (!['all', 'seeker', 'initiate'].includes(b.audience)) throw bad('Audience must be all, seeker or initiate'); o.audience = b.audience; }
   if (b.points !== undefined) o.points = int(b.points, 0, 10000, 'Points');
   if (b.priority !== undefined) o.priority = int(b.priority, 0, 10000, 'Priority');
@@ -383,6 +437,9 @@ function validateChallenge(b, partial) {
 }
 function challengeOut(r) {
   return { id: r.id, title: r.title, description: r.description, kind: r.kind, days: r.days, minutes: r.minutes, target: r.target,
+    minutesChoices: r.minutes_choices ? String(r.minutes_choices).split(',').map(Number) : [], rampTo: r.ramp_to || 0,
+    material: r.material || '', cadence: r.cadence || '', perPeriod: r.per_period || 0, itemPoints: r.item_points || 0,
+    signup: !!r.signup, nextOf: r.next_of || null,
     audience: r.audience, points: r.points, priority: r.priority, active: !!r.active, updatedAt: r.updated_at };
 }
 const code4 = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, '0');
@@ -805,12 +862,12 @@ async function handle(request, env) {
       occ.sort((a, z) => a.startsAt - z.startsAt);
       seriesId = crypto.randomUUID();
     }
-    const ins = db.prepare(`INSERT INTO events (id, center_id, title, description, format, venue, address, online_url, starts_at, ends_at, timezone, access, status, checkin_code, created_by, created_at, updated_at, series_id, flyer_id)
-      VALUES (?1, 'mpls', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'scheduled', ?12, ?13, ?14, ?14, ?15, ?16)`);
+    const ins = db.prepare(`INSERT INTO events (id, center_id, title, description, format, venue, address, online_url, starts_at, ends_at, timezone, access, status, checkin_code, created_by, created_at, updated_at, series_id, flyer_id, kind, level)
+      VALUES (?1, 'mpls', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'scheduled', ?12, ?13, ?14, ?14, ?15, ?16, ?17, ?18)`);
     const ids = occ.map(() => crypto.randomUUID());
     const flyerId = b.flyerId ? str(b.flyerId, 60) : null;
     const stmts = occ.map((x, i) => ins.bind(ids[i], o.title, o.description || null, o.format, o.venue || null, o.address || null, o.online_url || null,
-      x.startsAt, x.endsAt, o.timezone || 'America/Chicago', o.access || 'public', code4(), s.uid, t, seriesId, flyerId));
+      x.startsAt, x.endsAt, o.timezone || 'America/Chicago', o.access || 'public', code4(), s.uid, t, seriesId, flyerId, o.kind || 'other', o.level || 'all'));
     if (seriesId) stmts.unshift(db.prepare('INSERT INTO series (id, center_id, freq, until_at, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
       .bind(seriesId, 'mpls', b.repeat.freq, occ[occ.length - 1].startsAt, s.uid, t));
     await db.batch(stmts);
@@ -1035,9 +1092,11 @@ async function handle(request, env) {
     const c = validateChallenge(b, request.method === 'PATCH');
     if (request.method === 'POST') {
       const id = crypto.randomUUID();
-      await db.prepare(`INSERT INTO challenges (id, title, description, kind, days, minutes, target, audience, points, priority, active, created_by, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13)`).bind(id, c.title, c.description || null, c.kind, c.days ?? 7, c.minutes ?? 0, c.target ?? 0,
-        c.audience || 'all', c.points ?? 50, c.priority ?? 100, c.active ?? 1, s.uid, t).run();
+      await db.prepare(`INSERT INTO challenges (id, title, description, kind, days, minutes, minutes_choices, ramp_to, target, material, cadence, per_period, item_points,
+          audience, points, priority, signup, next_of, active, created_by, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?21)`).bind(id, c.title, c.description || null, c.kind, c.days ?? 7,
+        c.minutes ?? 0, c.minutes_choices || '', c.ramp_to ?? 0, c.target ?? 0, c.material || '', c.cadence || '', c.per_period ?? 0, c.item_points ?? 0,
+        c.audience || 'all', c.points ?? 50, c.priority ?? 100, c.signup ?? 0, c.next_of ?? null, c.active ?? 1, s.uid, t).run();
       await logAdmin(env, s, 'challenge_create', id, c.title);
       return J({ challenge: challengeOut(await db.prepare('SELECT * FROM challenges WHERE id = ?1').bind(id).first()) }, 201);
     }
@@ -1116,6 +1175,165 @@ async function handle(request, env) {
     return J({ person: { userId: u.id, name: u.name, email: u.email, phone: u.phone || null, smsOk: !!u.sms_ok, provider: u.provider,
       category: u.category, createdAt: u.created_at, lastSeenAt: u.last_seen_at, blockedAt: u.blocked_at, blockReason: u.block_reason,
       points: u.points, pointsLevel: u.points_level, pointsAt: u.points_at, role: await roleOf(env, u.email), ...extra }, history });
+  }
+
+  /* ---------------- v0.17: Seeker Relationship Management (admins only) ---------------- */
+  const pubJ = (r) => ({ userId: r.userId, name: r.name, email: r.email, phone: r.phone || null, category: r.category, level: r.level, computed: r.computed,
+    override: r.override || null, drifting: r.drifting, visits: r.visits, firstVisitAt: r.firstVisitAt, lastVisitAt: r.lastVisitAt, guestsBrought: r.guestsBrought,
+    intros: r.intros, workshops: r.workshops, workshops90: r.workshops90, satsangs: r.satsangs, satsangs90: r.satsangs90, darshans: r.darshans, seva: r.seva,
+    rsvps: r.rsvps, viewed: r.viewed, milestones: r.milestones, mentorId: r.mentorId || null, mentorName: r.mentorName || null,
+    createdAt: r.createdAt, lastSeenAt: r.lastSeenAt, blocked: !!r.blockedAt });
+
+  // Journey overview: how many people at each level, who is drifting; optional filtered list
+  if (path === '/api/admin/journey' && request.method === 'GET') {
+    await requireAdmin(request, env);
+    const t = now(), rows = (await journeyRows(db, t)).filter((r) => !r.blockedAt);
+    const counts = Object.fromEntries(JOURNEY.map((k) => [k, 0]));
+    rows.forEach((r) => { counts[r.level]++; });
+    const monthStart = (() => { const d = centerDayStart(t); const dt = new Date(d + 12 * 3600000); return d - (Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', day: 'numeric' }).format(dt)) - 1) * DAY_MS; })();
+    const lv = url.searchParams.get('level') || '', q = (url.searchParams.get('q') || '').trim().toLowerCase(), dr = url.searchParams.get('drifting') === '1', nm = url.searchParams.get('nomentor') === '1';
+    let list = rows;
+    if (JOURNEY.includes(lv)) list = list.filter((r) => r.level === lv);
+    if (dr) list = list.filter((r) => r.drifting);
+    if (nm) list = list.filter((r) => !r.mentorId && r.level !== 'initiate');
+    if (q) list = list.filter((r) => (r.name || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q));
+    list.sort((a, b) => (b.lastVisitAt || b.createdAt || 0) - (a.lastVisitAt || a.createdAt || 0));
+    return J({ counts, total: rows.length, drifting: rows.filter((r) => r.drifting).length,
+      firstVisitsThisMonth: rows.filter((r) => r.firstVisitAt >= monthStart).length,
+      noMentor: rows.filter((r) => !r.mentorId && r.visits >= 2 && r.level !== 'initiate').length,
+      people: list.slice(0, 500).map(pubJ), at: t });
+  }
+
+  // One person's journey: signals, milestones, mentor, notes and a timeline of everything they did
+  if ((m = /^\/api\/admin\/users\/([^/]+)\/journey$/.exec(path)) && request.method === 'GET') {
+    await requireAdmin(request, env);
+    const uid = decodeURIComponent(m[1]), t = now();
+    const r = (await journeyRows(db, t, uid))[0];
+    if (!r) throw new HttpError(404, 'Person not found');
+    const ms = (await db.prepare('SELECT kind, at, by_email AS byEmail FROM milestones WHERE user_id = ?1').bind(uid).all()).results;
+    const notes = (await db.prepare('SELECT id, body, by_email AS byEmail, at FROM person_notes WHERE user_id = ?1 AND deleted_at IS NULL ORDER BY at DESC LIMIT 100').bind(uid).all()).results;
+    const ev = (sql) => db.prepare(sql).bind(uid).all().then((x) => x.results);
+    const [views, rsvps, checks] = await Promise.all([
+      ev(`SELECT v.first_at AS at, v.views, e.id AS eventId, e.title, e.kind, e.starts_at AS startsAt FROM event_views v JOIN events e ON e.id = v.event_id WHERE v.user_id = ?1`),
+      ev(`SELECT r.updated_at AS at, r.status, r.guests, e.id AS eventId, e.title, e.kind, e.starts_at AS startsAt FROM rsvps r JOIN events e ON e.id = r.event_id WHERE r.user_id = ?1`),
+      ev(`SELECT c.checked_in_at AS at, c.method, c.guests, e.id AS eventId, e.title, e.kind, e.starts_at AS startsAt FROM checkins c JOIN events e ON e.id = c.event_id WHERE c.user_id = ?1`)]);
+    const timeline = [{ type: 'joined', at: r.createdAt }]
+      .concat(views.map((x) => ({ type: 'viewed', ...x })), rsvps.map((x) => ({ type: 'rsvp', ...x })), checks.map((x) => ({ type: 'checkin', ...x })),
+        ms.map((x) => ({ type: 'milestone', kind: x.kind, at: x.at, byEmail: x.byEmail })))
+      .filter((x) => x.at).sort((a, b) => b.at - a.at).slice(0, 300);
+    return J({ journey: { ...pubJ(r), milestoneDetail: ms }, notes, timeline });
+  }
+
+  // Set level override, mentor or a milestone
+  if ((m = /^\/api\/admin\/users\/([^/]+)\/journey$/.exec(path)) && request.method === 'PATCH') {
+    const s = await requireAdmin(request, env);
+    const uid = decodeURIComponent(m[1]), b = await body(request), t = now(), stmts = [], what = [];
+    if (!(await loadUser(db, uid))) throw new HttpError(404, 'Person not found');
+    if (b.level !== undefined) {
+      if (b.level !== null && !JOURNEY.includes(b.level)) throw bad('Level must be one of: ' + JOURNEY.join(', '));
+      stmts.push(db.prepare('UPDATE users SET journey_level = ?2, journey_set_by = ?3, journey_set_at = ?4 WHERE id = ?1').bind(uid, b.level, s.email, t)); what.push('level ' + (b.level || 'auto'));
+    }
+    if (b.mentorId !== undefined) {
+      if (b.mentorId !== null) { if (b.mentorId === uid) throw bad('A person can’t be their own mentor'); if (!(await loadUser(db, b.mentorId))) throw bad('Mentor not found'); }
+      stmts.push(db.prepare('UPDATE users SET mentor_id = ?2 WHERE id = ?1').bind(uid, b.mentorId)); what.push('mentor');
+    }
+    if (b.milestone !== undefined) {
+      if (!MILESTONES.includes(b.milestone)) throw bad('Milestone must be one of: ' + MILESTONES.join(', '));
+      stmts.push(b.done ? db.prepare('INSERT OR REPLACE INTO milestones (user_id, kind, at, by_email) VALUES (?1, ?2, ?3, ?4)').bind(uid, b.milestone, t, s.email)
+        : db.prepare('DELETE FROM milestones WHERE user_id = ?1 AND kind = ?2').bind(uid, b.milestone));
+      what.push(b.milestone + (b.done ? '' : ' (removed)'));
+    }
+    if (stmts.length) { await db.batch(stmts); await logAdmin(env, s, 'journey_edit', uid, what.join(', ')); }
+    const r = (await journeyRows(db, t, uid))[0];
+    return J({ journey: pubJ(r) });
+  }
+
+  // Notes (short, never sensitive)
+  if ((m = /^\/api\/admin\/users\/([^/]+)\/notes$/.exec(path)) && request.method === 'POST') {
+    const s = await requireAdmin(request, env);
+    const uid = decodeURIComponent(m[1]), b = await body(request), txt = str(b.body, 500);
+    if (!txt) throw bad('Write a note first');
+    if (!(await loadUser(db, uid))) throw new HttpError(404, 'Person not found');
+    const id = crypto.randomUUID(), t = now();
+    await db.prepare('INSERT INTO person_notes (id, user_id, body, by_email, at) VALUES (?1, ?2, ?3, ?4, ?5)').bind(id, uid, txt, s.email, t).run();
+    await logAdmin(env, s, 'note_add', uid, null);
+    return J({ note: { id, body: txt, byEmail: s.email, at: t } });
+  }
+  if ((m = /^\/api\/admin\/notes\/([\w-]+)$/.exec(path)) && request.method === 'DELETE') {
+    const s = await requireAdmin(request, env);
+    const n = await db.prepare('SELECT user_id FROM person_notes WHERE id = ?1 AND deleted_at IS NULL').bind(m[1]).first();
+    if (!n) throw new HttpError(404, 'Note not found');
+    await db.prepare('UPDATE person_notes SET deleted_at = ?2 WHERE id = ?1').bind(m[1], now()).run();
+    await logAdmin(env, s, 'note_delete', n.user_id, null);
+    return J({ ok: true });
+  }
+
+  // Follow-ups: who to reach out to, worked out from what people did; handled ones drop off
+  if (path === '/api/admin/followups' && request.method === 'GET') {
+    await requireAdmin(request, env);
+    const t = now(), rows = (await journeyRows(db, t)).filter((r) => !r.blockedAt), by = Object.fromEntries(rows.map((r) => [r.userId, r]));
+    const handled = new Set((await db.prepare('SELECT user_id, kind, ref FROM followups').all()).results.map((x) => x.user_id + '|' + x.kind + '|' + x.ref));
+    const items = [];
+    const add = (kind, ref, uid, extra) => { const r = by[uid]; if (!r || handled.has(uid + '|' + kind + '|' + ref)) return;
+      items.push({ kind, ref: String(ref), userId: uid, name: r.name, email: r.email, phone: r.phone || null, level: r.level, visits: r.visits, lastVisitAt: r.lastVisitAt, mentorName: r.mentorName || null, ...extra }); };
+    // 1. First visit in the last 14 days → thank them
+    (await db.prepare(`SELECT c.user_id, c.event_id, c.checked_in_at, e.title, e.kind FROM checkins c JOIN events e ON e.id = c.event_id
+        WHERE c.checked_in_at >= ?1 AND c.checked_in_at = (SELECT MIN(c2.checked_in_at) FROM checkins c2 WHERE c2.user_id = c.user_id)`).bind(t - 14 * DAY_MS).all()).results
+      .forEach((x) => add('first_visit', x.event_id, x.user_id, { eventId: x.event_id, eventTitle: x.title, at: x.checked_in_at }));
+    // 2. Said Going but didn't come (events that ended in the last 14 days)
+    (await db.prepare(`SELECT r.user_id, e.id AS event_id, e.title, e.starts_at FROM rsvps r JOIN events e ON e.id = r.event_id
+        LEFT JOIN checkins c ON c.event_id = r.event_id AND c.user_id = r.user_id
+        WHERE r.status = 'going' AND c.user_id IS NULL AND e.status != 'cancelled' AND e.ends_at < ?1 AND e.ends_at >= ?2`).bind(t, t - 14 * DAY_MS).all()).results
+      .forEach((x) => add('no_show', x.event_id, x.user_id, { eventId: x.event_id, eventTitle: x.title, at: x.starts_at }));
+    rows.forEach((r) => {
+      // 3. Drifting: came 2+ times, nothing for 60–180 days
+      if (r.drifting && r.lastVisitAt >= t - 180 * DAY_MS) add('drifting', r.lastVisitAt, r.userId, { at: r.lastVisitAt });
+      // 4. Reached a new level recently (active in the last 30 days)
+      if ((r.level === 'l3' || r.level === 'l4') && r.lastVisitAt >= t - 30 * DAY_MS) add('level_up', r.level, r.userId, { at: r.lastVisitAt });
+      // 5. Coming regularly but has no mentor yet
+      if (r.visits >= 2 && !r.mentorId && r.level !== 'initiate' && r.lastVisitAt >= t - 90 * DAY_MS) add('mentor', '', r.userId, { at: r.lastVisitAt });
+    });
+    const order = { first_visit: 0, no_show: 1, level_up: 2, mentor: 3, drifting: 4 };
+    items.sort((a, b) => order[a.kind] - order[b.kind] || (b.at || 0) - (a.at || 0));
+    const counts = {}; items.forEach((x) => { counts[x.kind] = (counts[x.kind] || 0) + 1; });
+    return J({ items, counts, at: t });
+  }
+  if (path === '/api/admin/followups' && (request.method === 'POST' || request.method === 'DELETE')) {
+    const s = await requireAdmin(request, env);
+    const b = request.method === 'POST' ? await body(request) : { userId: url.searchParams.get('userId'), kind: url.searchParams.get('kind'), ref: url.searchParams.get('ref') };
+    const kinds = ['first_visit', 'no_show', 'drifting', 'level_up', 'mentor'];
+    if (!kinds.includes(b.kind) || !b.userId) throw bad('Unknown follow-up');
+    const ref = str(b.ref == null ? '' : String(b.ref), 100) || '';
+    if (request.method === 'DELETE') { await db.prepare('DELETE FROM followups WHERE user_id = ?1 AND kind = ?2 AND ref = ?3').bind(b.userId, b.kind, ref).run(); return J({ ok: true }); }
+    const st = b.status === 'skipped' ? 'skipped' : 'done';
+    await db.prepare('INSERT OR REPLACE INTO followups (user_id, kind, ref, status, at, by_email) VALUES (?1, ?2, ?3, ?4, ?5, ?6)').bind(b.userId, b.kind, ref, st, now(), s.email).run();
+    await logAdmin(env, s, 'followup_' + st, b.userId, b.kind);
+    return J({ ok: true });
+  }
+
+  // Event insight: opened → RSVP → came, first-timers, came back within 30 days, who came by level
+  if ((m = /^\/api\/admin\/events\/([\w-]+)\/insight$/.exec(path)) && request.method === 'GET') {
+    await requireAdmin(request, env);
+    const e = await db.prepare('SELECT * FROM events WHERE id = ?1').bind(m[1]).first();
+    if (!e) throw new HttpError(404, 'Event not found');
+    const t = now();
+    const one = (sql, ...a) => db.prepare(sql).bind(m[1], ...a).first();
+    const f = await one(`SELECT (SELECT COUNT(*) FROM event_views WHERE event_id = ?1) AS viewers,
+        (SELECT COALESCE(SUM(views), 0) FROM event_views WHERE event_id = ?1) AS views,
+        (SELECT COUNT(*) FROM rsvps WHERE event_id = ?1 AND status = 'going') AS going,
+        (SELECT COUNT(*) FROM rsvps WHERE event_id = ?1 AND status = 'maybe') AS maybe,
+        (SELECT COUNT(*) FROM rsvps WHERE event_id = ?1 AND status = 'no') AS cant,
+        (SELECT COUNT(*) FROM checkins WHERE event_id = ?1) AS came,
+        (SELECT COALESCE(SUM(guests), 0) FROM checkins WHERE event_id = ?1) AS guests,
+        (SELECT COUNT(*) FROM rsvps r WHERE r.event_id = ?1 AND r.status = 'going' AND NOT EXISTS (SELECT 1 FROM checkins c WHERE c.event_id = ?1 AND c.user_id = r.user_id)) AS noShows,
+        (SELECT COUNT(*) FROM checkins c WHERE c.event_id = ?1 AND NOT EXISTS (SELECT 1 FROM rsvps r WHERE r.event_id = ?1 AND r.user_id = c.user_id AND r.status IN ('going','maybe'))) AS walkIns,
+        (SELECT COUNT(*) FROM checkins c WHERE c.event_id = ?1 AND NOT EXISTS (SELECT 1 FROM checkins c2 WHERE c2.user_id = c.user_id AND c2.checked_in_at < c.checked_in_at)) AS firstTimers,
+        (SELECT COUNT(DISTINCT c.user_id) FROM checkins c WHERE c.event_id = ?1 AND EXISTS (SELECT 1 FROM checkins c2 JOIN events e2 ON e2.id = c2.event_id
+            WHERE c2.user_id = c.user_id AND e2.id != ?1 AND e2.starts_at > ?2 AND e2.starts_at <= ?2 + 30 * 86400000)) AS returned30`, e.starts_at);
+    const attendees = new Set((await db.prepare('SELECT user_id FROM checkins WHERE event_id = ?1').bind(m[1]).all()).results.map((x) => x.user_id));
+    const byLevel = Object.fromEntries(JOURNEY.map((k) => [k, 0]));
+    if (attendees.size) (await journeyRows(db, t)).forEach((r) => { if (attendees.has(r.userId)) byLevel[r.level]++; });
+    return J({ insight: { ...f, byLevel, kind: e.kind, level: e.level, ended: e.ends_at < t, returnWindowOpen: t < e.starts_at + 30 * DAY_MS } });
   }
 
   // Team (owner only): admins and hosts

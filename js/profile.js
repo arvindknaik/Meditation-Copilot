@@ -51,7 +51,7 @@
     MC.profile.userType = 'seeker';
     MC.saveProfile(); MC.emit('profile');
     close();
-    if (was !== 'seeker') MC.toast('Welcome, seeker. Your 42-day challenge is in Roadmap. 🌱', 4000);
+    if (was !== 'seeker') MC.toast('Welcome, seeker. 🌱', 3000);
     MC.go(firstTime ? 'roadmap' : MC.current || 'home');
   });
   $('tyBack').addEventListener('click', function () { showStep(false); });

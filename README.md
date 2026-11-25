@@ -105,3 +105,18 @@ Goal age must be a whole number, greater than your current age, and no more than
 - **Challenges from the center:** set up and ordered in the admin site (admin.sosmn.org → Challenges). The top one is shown as Recommended. Kinds: daily sitting (minutes a day for N days) and center check-ins (N check-ins within N days). A 42-day daily-sitting challenge uses the app's guided 42-day plan.
 - The app's own Admin screen keeps only Featured videos, Feedback and the check-in QR poster; everything else is in the admin site.
 - Server: migration `0007_site.sql` (guests on RSVPs and check-ins, "who opened it", challenges). Deploy: `npm run db:remote`, then `npx wrangler deploy` in `api`. Full go-live steps: `SOSMN.org\DEPLOY.md`.
+
+## v0.17 (November 2026) — Seeker Relationship Management, phase 1
+Admin site (admin.sosmn.org), admins only — hosts don't see any of it. Plan: `SOSMN.org\SOSMN-SRM.md`.
+- **Events** have a **Type** (Introduction, Workshop, Satsang, Darshan/retreat, Seva, Community, Other) and **Mainly for** (Everyone, New, Seekers, Initiates). Existing events were given a type from their titles; check and correct them.
+- **Journey**: everyone's level (New, Seeker L2–L4, Initiate), worked out from check-ins by event type; levels only move up; long absences show as Drifting. An admin can set a level by hand.
+- **Person page**: journey numbers, next steps for their level, milestones ticked by an admin (21/42-day challenge, no open questions, met Sant Rajinder Singh Ji in person), mentor, notes, and a timeline.
+- **Follow-ups**: first visits to thank, said-Going-but-didn't-come, new level, no mentor yet, drifting. Messages open in your own email or WhatsApp; mark done or skip.
+- **Event → Insight**: opened → said Going → came, first-timers, came back within 30 days, walk-ins, who came by level.
+- Server: migration `0008_srm.sql`. Deploy: `npm run db:remote`, then `npx wrangler deploy` in `api`; then deploy `SOSMN.org\deploy\sosmn-admin`.
+
+## v0.18 (November 2026) — Challenge Program, step 1 (SOSMN-SRM.md section 10)
+- **Meditation path:** the 42-day challenge is replaced by **21-Day Foundation** (same length every day: 10, 15 or 20 min, the seeker chooses) and **21-Day Advance** (grows about a minute a day to 30 min). After a Foundation, Copilot offers "another 21 days at the same time" or Advance. Missed days allowed: 1 per 10 days; one more ends the challenge (start again any time). Anyone already in a 42-day challenge finishes it under the old rules.
+- **Choose your first challenge:** a new Copilot user must pick at least one challenge after choosing seeker/initiate (21-Day Foundation, or Attend 6 sessions in 3 months, which needs Google/Microsoft sign-in). Existing users without a challenge see it once, with "Not now".
+- **Admin → Challenges:** meditation challenges can let people choose minutes, grow to a number of minutes, be offered at sign-up, and be offered as the next step after another challenge. Points are a bonus on completion.
+- Server: migration `0009_challenge_program.sql` (rebuilds the challenges table and adds the starter program). Deploy: `npm run db:remote`, `npx wrangler deploy` in `api`; then rebuild/deploy the site and admin site.
