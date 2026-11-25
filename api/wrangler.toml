@@ -33,6 +33,6 @@ MS_CLIENT_ID = "cc706be3-4021-4460-9705-95d4cd0c00d0"
 [[env.test.d1_databases]]
 binding = "DB"
 database_name = "meditation-copilot-test"
-database_id = "REPLACE-WITH-TEST-DATABASE-ID"
+database_id = "1e31da62-9e31-42c2-848c-d5efbc7a7f3d"
 [env.test.observability]
 enabled = true
