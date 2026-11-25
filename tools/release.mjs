@@ -81,6 +81,7 @@ async function toTest() {
   if (!clean()) fail('You have uncommitted changes. Run `release build` first.');
   const v = readJSON('version.json');
   if (v.build < 1) fail('No build yet. Run `release build` first.');
+  if (fs.readFileSync(path.join(ROOT, 'api', 'wrangler.toml'), 'utf8').includes('REPLACE-WITH-TEST-DATABASE-ID')) fail('The test environment is not set up yet. Choose 6 (First-time set-up of test.sosmn.org) first, then 2 again.');
   if (!(await confirm(`Deploy ${label(v)} to TEST (test.sosmn.org)?`))) fail('Stopped.');
   deployAll('test', v); await smoke('test', v);
   const d = deployments(); d.test = { build: label(v), commit: git('rev-parse', '--short', 'HEAD'), at: new Date().toISOString() }; writeJSON(DEP, d);

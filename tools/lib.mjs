@@ -24,7 +24,8 @@ function prep(cmd, args) {
 // Run a command and stream its output; throws on failure.
 export function run(cmd, args, opts = {}) {
   const [c, a, shell] = prep(cmd, args);
-  const r = spawnSync(c, a, { cwd: opts.cwd || ROOT, stdio: opts.capture ? 'pipe' : 'inherit', shell, windowsHide: true, env: { ...process.env, ...(opts.env || {}) }, input: opts.input });
+  const out = opts.capture ? 'pipe' : 'inherit';
+  const r = spawnSync(c, a, { cwd: opts.cwd || ROOT, stdio: [opts.input != null ? 'pipe' : 'inherit', out, out], shell, windowsHide: true, env: { ...process.env, ...(opts.env || {}) }, input: opts.input });
   if (r.status !== 0 && !opts.allowFail) throw new Error(`Failed: ${cmd} ${args.join(' ')}${opts.capture ? '\n' + (r.stderr || '') : ''}`);
   return opts.capture ? String(r.stdout || '').trim() : r.status;
 }
