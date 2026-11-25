@@ -12,18 +12,29 @@ export const readJSON = (p) => JSON.parse(fs.readFileSync(path.join(ROOT, p), 'u
 export const writeJSON = (p, v) => fs.writeFileSync(path.join(ROOT, p), JSON.stringify(v, null, 2) + '\n');
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Windows: run programs directly (no shell), so paths with spaces such as "C:\\Program Files\\nodejs" work.
+// Only .cmd/.bat files need cmd.exe; for those we quote every part ourselves.
+const WRANGLER_JS = path.join(ROOT, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
+function prep(cmd, args) {
+  if (!IS_WIN || !/\.(cmd|bat)$/i.test(cmd) && !['npm', 'npx'].includes(cmd)) return [cmd, args, false];
+  const q = (a) => (/^[\w.:\\/=-]+$/.test(a) ? a : '"' + String(a).replace(/"/g, '""') + '"');
+  return [[cmd, ...args].map(q).join(' '), [], true];
+}
+
 // Run a command and stream its output; throws on failure.
 export function run(cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, { cwd: opts.cwd || ROOT, stdio: opts.capture ? 'pipe' : 'inherit', shell: IS_WIN, env: { ...process.env, ...(opts.env || {}) }, input: opts.input });
+  const [c, a, shell] = prep(cmd, args);
+  const r = spawnSync(c, a, { cwd: opts.cwd || ROOT, stdio: opts.capture ? 'pipe' : 'inherit', shell, windowsHide: true, env: { ...process.env, ...(opts.env || {}) }, input: opts.input });
   if (r.status !== 0 && !opts.allowFail) throw new Error(`Failed: ${cmd} ${args.join(' ')}${opts.capture ? '\n' + (r.stderr || '') : ''}`);
   return opts.capture ? String(r.stdout || '').trim() : r.status;
 }
 export const git = (...a) => run('git', a, { capture: true });
-export const wrangler = (args, opts = {}) => run(bin('wrangler'), args, opts);
+export const wrangler = (args, opts = {}) => run(process.execPath, [WRANGLER_JS, ...args], opts);
 
 // Start a long-running process (servers). Returns the child; kill with stop().
 export function start(cmd, args, opts = {}) {
-  const child = spawn(cmd, args, { cwd: opts.cwd || ROOT, shell: IS_WIN, env: { ...process.env, ...(opts.env || {}) }, stdio: opts.quiet ? 'ignore' : 'inherit', detached: !IS_WIN });
+  const [c, a, shell] = prep(cmd, args);
+  const child = spawn(c, a, { cwd: opts.cwd || ROOT, shell, windowsHide: true, env: { ...process.env, ...(opts.env || {}) }, stdio: opts.quiet ? 'ignore' : 'inherit', detached: !IS_WIN });
   return child;
 }
 export function stop(child) {

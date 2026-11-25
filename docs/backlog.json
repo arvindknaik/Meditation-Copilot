@@ -1,50 +1,240 @@
 {
   "milestones": [
-    { "title": "v0.19", "description": "First release under the new process: SRM phase 1, Challenge Program step 1, release process." },
-    { "title": "v0.20", "description": "Challenge Program step 2: Library and Education challenges." },
-    { "title": "Later", "description": "Planned but not scheduled." }
+    {
+      "title": "v0.19",
+      "description": "First release under the new process: SRM phase 1, Challenge Program step 1, release process."
+    },
+    {
+      "title": "v0.20",
+      "description": "Challenge Program step 2: Library and Education challenges."
+    },
+    {
+      "title": "Later",
+      "description": "Planned but not scheduled."
+    }
   ],
   "epics": [
-    { "title": "Seeker Relationship Management (SRM)", "spec": "docs/SOSMN-SRM.md", "milestone": "v0.19",
+    {
+      "title": "Seeker Relationship Management (SRM)",
+      "spec": "docs/SOSMN-SRM.md",
+      "milestone": "v0.19",
       "goal": "Help every person take their next natural step, with a real person who knows them. Admins only.",
       "features": [
-        { "title": "Event type and audience on every event", "labels": ["admin-only", "needs-migration"], "milestone": "v0.19", "done": true },
-        { "title": "Journey levels (New, Seeker L2–L4, Initiate) and Journey tab", "labels": ["admin-only", "needs-migration"], "milestone": "v0.19", "done": true },
-        { "title": "Person page: timeline, mentor, notes, milestones", "labels": ["admin-only", "needs-migration"], "milestone": "v0.19", "done": true },
-        { "title": "Follow-ups list with ready-to-edit messages", "labels": ["admin-only"], "milestone": "v0.19", "done": true },
-        { "title": "Event insight (opened → Going → came, first-timers, came back)", "labels": ["admin-only"], "milestone": "v0.19", "done": true },
-        { "title": "Interests, language and contact preferences; unsubscribe link in every email", "labels": ["user-facing", "needs-migration"], "milestone": "Later" },
-        { "title": "Question log (no open questions on the teachings)", "labels": ["user-facing", "needs-migration"], "milestone": "Later" },
-        { "title": "Audience suggestions for events", "labels": ["admin-only"], "milestone": "Later" },
-        { "title": "Roadmap report shared by seekers with their mentor (contents TBD)", "labels": ["user-facing"], "milestone": "Later" },
-        { "title": "Seva roster", "labels": ["admin-only", "needs-migration"], "milestone": "Later" }
-      ] },
-    { "title": "Copilot Challenge Program", "spec": "docs/SOSMN-SRM.md section 10", "milestone": "v0.20",
+        {
+          "title": "Event type and audience on every event",
+          "labels": [
+            "admin-only",
+            "needs-migration"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Journey levels (New, Seeker L2–L4, Initiate) and Journey tab",
+          "labels": [
+            "admin-only",
+            "needs-migration"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Person page: timeline, mentor, notes, milestones",
+          "labels": [
+            "admin-only",
+            "needs-migration"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Follow-ups list with ready-to-edit messages",
+          "labels": [
+            "admin-only"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Event insight (opened → Going → came, first-timers, came back)",
+          "labels": [
+            "admin-only"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Interests, language and contact preferences; unsubscribe link in every email",
+          "labels": [
+            "user-facing",
+            "needs-migration"
+          ],
+          "milestone": "Later"
+        },
+        {
+          "title": "Question log (no open questions on the teachings)",
+          "labels": [
+            "user-facing",
+            "needs-migration"
+          ],
+          "milestone": "Later"
+        },
+        {
+          "title": "Audience suggestions for events",
+          "labels": [
+            "admin-only"
+          ],
+          "milestone": "Later"
+        },
+        {
+          "title": "Roadmap report shared by seekers with their mentor (contents TBD)",
+          "labels": [
+            "user-facing"
+          ],
+          "milestone": "Later"
+        },
+        {
+          "title": "Seva roster",
+          "labels": [
+            "admin-only",
+            "needs-migration"
+          ],
+          "milestone": "Later"
+        }
+      ]
+    },
+    {
+      "title": "Copilot Challenge Program",
+      "spec": "docs/SOSMN-SRM.md section 10",
+      "milestone": "v0.20",
       "goal": "Gentle goals with a finish line that make meditation, attendance and study a habit.",
       "features": [
-        { "title": "21-Day Foundation and 21-Day Advance (replaces the 42-day challenge)", "labels": ["user-facing", "needs-migration"], "milestone": "v0.19", "done": true },
-        { "title": "Choose your first challenge at Copilot sign-up", "labels": ["user-facing"], "milestone": "v0.19", "done": true },
-        { "title": "Admin challenge form: minute choices, grow-to, next step, offered at sign-up", "labels": ["admin-only"], "milestone": "v0.19", "done": true },
-        { "title": "Library in the admin site: articles, books (link look-up, chapters), videos", "labels": ["admin-only", "needs-migration"], "milestone": "v0.20" },
-        { "title": "Education challenges: daily quote, weekly articles, book chapters, weekly videos (with catch-up)", "labels": ["user-facing"], "milestone": "v0.20" },
-        { "title": "Reading card in Insights and points for reading/watching", "labels": ["user-facing"], "milestone": "v0.20" },
-        { "title": "Book Club: read a book together with weekly discussion", "labels": ["user-facing", "needs-migration"], "milestone": "Later" }
-      ] },
-    { "title": "Development and release process", "spec": "docs/DEV-PROCESS.md", "milestone": "v0.19",
+        {
+          "title": "21-Day Foundation and 21-Day Advance (replaces the 42-day challenge)",
+          "labels": [
+            "user-facing",
+            "needs-migration"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Choose your first challenge at Copilot sign-up",
+          "labels": [
+            "user-facing"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Admin challenge form: minute choices, grow-to, next step, offered at sign-up",
+          "labels": [
+            "admin-only"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Library in the admin site: articles, books (link look-up, chapters), videos",
+          "labels": [
+            "admin-only",
+            "needs-migration"
+          ],
+          "milestone": "v0.20"
+        },
+        {
+          "title": "Education challenges: daily quote, weekly articles, book chapters, weekly videos (with catch-up)",
+          "labels": [
+            "user-facing"
+          ],
+          "milestone": "v0.20"
+        },
+        {
+          "title": "Reading card in Insights and points for reading/watching",
+          "labels": [
+            "user-facing"
+          ],
+          "milestone": "v0.20"
+        },
+        {
+          "title": "Book Club: read a book together with weekly discussion",
+          "labels": [
+            "user-facing",
+            "needs-migration"
+          ],
+          "milestone": "Later"
+        }
+      ]
+    },
+    {
+      "title": "Development and release process",
+      "spec": "docs/DEV-PROCESS.md",
+      "milestone": "v0.19",
       "goal": "One repository, tests with a report on every build, test environment, approvals, release notes and What's new.",
       "features": [
-        { "title": "One repository with local run for any developer (Windows and Mac)", "labels": ["admin-only"], "milestone": "v0.19", "done": true },
-        { "title": "Unit, API and browser tests with a report per build", "labels": ["admin-only"], "milestone": "v0.19", "done": true },
-        { "title": "Release script: build → test → prod, with backups and rollback", "labels": ["admin-only"], "milestone": "v0.19", "done": true },
-        { "title": "Test environment: test.sosmn.org, test-admin.sosmn.org, test database", "labels": ["admin-only"], "milestone": "v0.19" },
-        { "title": "What's new page and version in every footer", "labels": ["user-facing"], "milestone": "v0.19", "done": true },
-        { "title": "Old Copilot address forwards to sosmn.org/copilot", "labels": ["user-facing"], "milestone": "v0.19", "done": true }
-      ] },
-    { "title": "Ready for more centers", "spec": "docs/DEV-PROCESS.md section 1", "milestone": "Later",
+        {
+          "title": "One repository with local run for any developer (Windows and Mac)",
+          "labels": [
+            "admin-only"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Unit, API and browser tests with a report per build",
+          "labels": [
+            "admin-only"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Release script: build → test → prod, with backups and rollback",
+          "labels": [
+            "admin-only"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Test environment: test.sosmn.org, test-admin.sosmn.org, test database",
+          "labels": [
+            "admin-only"
+          ],
+          "milestone": "v0.19"
+        },
+        {
+          "title": "What's new page and version in every footer",
+          "labels": [
+            "user-facing"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        }
+      ]
+    },
+    {
+      "title": "Ready for more centers",
+      "spec": "docs/DEV-PROCESS.md section 1",
+      "milestone": "Later",
       "goal": "Run another center by copying the repo or from one app, using centers/<id>.json.",
       "features": [
-        { "title": "Center settings file (centers/mpls.json) used by the build", "labels": ["admin-only"], "milestone": "v0.19", "done": true },
-        { "title": "Remove remaining hard-coded Minneapolis text from the apps", "labels": ["admin-only"], "milestone": "Later" }
-      ] }
+        {
+          "title": "Center settings file (centers/mpls.json) used by the build",
+          "labels": [
+            "admin-only"
+          ],
+          "milestone": "v0.19",
+          "done": true
+        },
+        {
+          "title": "Remove remaining hard-coded Minneapolis text from the apps",
+          "labels": [
+            "admin-only"
+          ],
+          "milestone": "Later"
+        }
+      ]
+    }
   ]
 }

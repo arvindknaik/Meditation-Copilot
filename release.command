@@ -10,7 +10,8 @@ echo "  2  Test      - deploy the current build to test.sosmn.org"
 echo "  3  Prod      - release notes, back up, deploy to sosmn.org"
 echo "  4  Status    - what is built, on test and live"
 echo "  5  Run locally (localhost:8000 / 8001)"
+echo "  6  First-time set-up of test.sosmn.org (once)"
 echo
-read -r -p "Choose 1-5: " C
-case "$C" in 1) node tools/release.mjs build;; 2) node tools/release.mjs test;; 3) node tools/release.mjs prod;; 4) node tools/release.mjs status;; 5) node tools/dev.mjs;; esac
+read -r -p "Choose 1-6: " C
+case "$C" in 1) node tools/release.mjs build;; 2) node tools/release.mjs test;; 3) node tools/release.mjs prod;; 4) node tools/release.mjs status;; 5) node tools/dev.mjs;; 6) node tools/release.mjs setup-test;; esac
 read -r -p "Press Enter to close" _

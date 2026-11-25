@@ -13,7 +13,7 @@ Covers sosmn.org (events site), sosmn.org/copilot (Meditation Copilot), admin.so
 - **Public for the pilot (3–6 months)**, then moved to an SOS organization and made private.
   - Visibility can be changed any time (Settings → General → Danger Zone). A repo can also be deleted, but copies made while it was public can't be recalled.
   - Rule: **nothing confidential is ever committed** — no passwords, keys, member data, backups or `RecoveryKey.txt`. Secrets live only in Cloudflare and GitHub secrets.
-- The old address `arvindknaik.github.io/Meditation-Copilot` becomes a small redirect to sosmn.org/copilot, kept in its own tiny repo named `Meditation-Copilot` (renaming moves GitHub Pages, so the old address needs its own repo).
+- The old address `arvindknaik.github.io/Meditation-Copilot` is retired (decided 2026-11-25): GitHub Pages is off and the team uses sosmn.org/copilot. Printed check-in posters must use `sosmn.org/checkin/`.
 
 ### Layout
 ```
@@ -140,7 +140,7 @@ release prod    (Arvind approves) show draft release notes to edit/approve, back
 | # | Step | Who |
 |---|---|---|
 | 1 | Rename `Meditation-Copilot` → `mn-meditation-center` on GitHub (Settings → General); turn off GitHub Pages there | Arvind |
-| 2 | Create a new public repo `Meditation-Copilot` holding only the redirect page; turn on Pages | Arvind (files prepared by Claude) |
+| 2 | ~~Redirect for the old Copilot address~~ — not needed (old address retired) | — |
 | 3 | Restructure into the layout above in `C:\Users\arvin\Dev\mn-meditation-center`; add center config, tests, scripts, issue templates, labels list | Claude |
 | 4 | Push; create labels, milestones `v0.19` / `v0.20` and the backlog issues | Arvind runs the script / Claude prepares |
 | 5 | Test environment: test database, test server and sites, `test.sosmn.org` domains; add test addresses to Google/Microsoft sign-in | Arvind (guided) |
@@ -148,12 +148,11 @@ release prod    (Arvind approves) show draft release notes to edit/approve, back
 | 7 | First run: `release build` → `release test` → `release prod` for **v0.19** | Arvind |
 
 ### Test environment — one-time set-up (step 5)
-Run in the repository folder (signed in with `npx wrangler login`):
-1. `npx wrangler d1 create meditation-copilot-test` → copy the `database_id` into `api/wrangler.toml` under `[env.test]` (replace `REPLACE-WITH-TEST-DATABASE-ID`).
-2. `cd api` then `npx wrangler secret put SESSION_SECRET --env test` (any long random text, different from prod) and `npx wrangler secret put ADMIN_EMAILS --env test` (your email).
-3. Google Cloud → Clients → Authorized JavaScript origins: add `https://test.sosmn.org` and `https://test-admin.sosmn.org`. Microsoft Entra → Redirect URIs: add `https://test.sosmn.org/`, `https://test.sosmn.org/copilot/`, `https://test-admin.sosmn.org/`.
-4. Zero Trust → Access → Applications → **Admins** → add the hostname `test-admin.sosmn.org`.
-5. `release test` creates `test.sosmn.org` and `test-admin.sosmn.org` automatically on the first deploy.
+Run `release.bat` (Mac: `release.command`) → **6 First-time set-up of test.sosmn.org**. It signs you in to Cloudflare if needed, creates the test database and writes its id into `api/wrangler.toml`, creates the tables, saves the test secrets in Cloudflare (a new random `SESSION_SECRET`, and `ADMIN_EMAILS`), and can add made-up people and events. Then, once, in a browser:
+1. Google Cloud → Clients → Authorized JavaScript origins: add `https://test.sosmn.org` and `https://test-admin.sosmn.org`.
+2. Microsoft Entra → Redirect URIs: add `https://test.sosmn.org/`, `https://test.sosmn.org/copilot/`, `https://test-admin.sosmn.org/`.
+3. Zero Trust → Access → Applications → **Admins** → add the hostname `test-admin.sosmn.org`.
+`release test` creates `test.sosmn.org` and `test-admin.sosmn.org` automatically on the first deploy.
 
 ### GitHub approvals — one-time set-up (step 6, optional)
 Settings → Environments → **test** and **production** → Required reviewers: you. In each, add secrets `CLOUDFLARE_API_TOKEN` (Cloudflare → My Profile → API Tokens → "Edit Cloudflare Workers" template + D1 edit) and `CLOUDFLARE_ACCOUNT_ID`. Then Actions → Deploy → Run workflow. Without this, `release.bat` on your computer does the same with your Cloudflare login.

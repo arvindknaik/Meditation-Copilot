@@ -11,11 +11,13 @@ echo   2  Test      - deploy the current build to test.sosmn.org
 echo   3  Prod      - release notes, back up, deploy to sosmn.org
 echo   4  Status    - what is built, on test and live
 echo   5  Run locally (localhost:8000 / 8001)
+echo   6  First-time set-up of test.sosmn.org (once)
 echo.
-set /p C=Choose 1-5: 
+set /p C=Choose 1-6: 
 if "%C%"=="1" node tools\release.mjs build
 if "%C%"=="2" node tools\release.mjs test
 if "%C%"=="3" node tools\release.mjs prod
 if "%C%"=="4" node tools\release.mjs status
 if "%C%"=="5" node tools\dev.mjs
+if "%C%"=="6" node tools\release.mjs setup-test
 pause

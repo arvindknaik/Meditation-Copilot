@@ -5,6 +5,7 @@
  *   release test   [--yes]          (Arvind) apply database changes to TEST and deploy the current build there, then smoke-test it
  *   release prod   [--yes]          (Arvind) approve release notes, back up the real database, apply its changes, deploy everything,
  *                                    tag the GitHub release, publish "What's new", start the next version
+ *   release setup-test              (Arvind, once) create the test database and server settings for test.sosmn.org
  *   release status                  what is built, what is on test, what is live
  *   release rollback test|prod      put the previous version of the server and sites back
  *
@@ -12,7 +13,9 @@
  * Database rule: only ADD tables/columns in a release; remove old ones in a later release, so a rollback stays safe. */
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { ROOT, run, git, wrangler, readJSON, writeJSON, ask } from './lib.mjs';
+import { seedSQL } from './seed.mjs';
 
 const [step, ...rest] = process.argv.slice(2);
 const YES = rest.includes('--yes') || process.env.CI === 'true';
@@ -156,6 +159,46 @@ async function toProd() {
   console.log(`\n✔ v${short} is live on https://sosmn.org. "What's new" is updated. The next version is v${maj}.${min + 1}.`);
 }
 
+async function setupTest() {
+  const api = path.join(ROOT, 'api'), tomlPath = path.join(api, 'wrangler.toml');
+  say('Checking your Cloudflare sign-in');
+  const who = (() => { try { return run(process.execPath, [path.join(ROOT, 'node_modules', 'wrangler', 'bin', 'wrangler.js'), 'whoami'], { capture: true, allowFail: true }) || ''; } catch { return ''; } })();
+  if (!/associated with the email|You are logged in/i.test(who)) { say('Opening the browser to sign in to Cloudflare'); wrangler(['login']); }
+  let toml = fs.readFileSync(tomlPath, 'utf8');
+  if (toml.includes('REPLACE-WITH-TEST-DATABASE-ID')) {
+    say('Creating the test database (meditation-copilot-test)');
+    let id = '';
+    const out = run(process.execPath, [path.join(ROOT, 'node_modules', 'wrangler', 'bin', 'wrangler.js'), 'd1', 'create', 'meditation-copilot-test'], { cwd: api, capture: true, allowFail: true });
+    id = (out.match(/database_id"?\s*[=:]\s*"?([0-9a-f-]{36})/i) || [])[1] || '';
+    if (!id) {   // already exists: look it up
+      const list = run(process.execPath, [path.join(ROOT, 'node_modules', 'wrangler', 'bin', 'wrangler.js'), 'd1', 'list', '--json'], { cwd: api, capture: true, allowFail: true });
+      try { id = (JSON.parse(list).find((d) => d.name === 'meditation-copilot-test') || {}).uuid || ''; } catch { /* not JSON */ }
+    }
+    if (!id) fail('Could not create or find the test database. Run `npx wrangler d1 create meditation-copilot-test` in the api folder and paste its database_id into api/wrangler.toml.');
+    toml = toml.replace('REPLACE-WITH-TEST-DATABASE-ID', id); fs.writeFileSync(tomlPath, toml);
+    console.log('  ✔ test database ' + id);
+  } else console.log('  ✔ test database already set in api/wrangler.toml');
+  say('Creating the test tables');
+  wrangler(['d1', 'migrations', 'apply', 'meditation-copilot-test', '--remote', '--env', 'test'], { cwd: api, input: 'y\n' });
+  say('Saving the test server secrets in Cloudflare (never in files)');
+  wrangler(['secret', 'put', 'SESSION_SECRET', '--env', 'test'], { cwd: api, input: crypto.randomBytes(32).toString('hex') });
+  const admins = (YES ? '' : await ask('Admin emails for TEST, comma-separated [arvind.k.naik@gmail.com]: ')) || 'arvind.k.naik@gmail.com';
+  wrangler(['secret', 'put', 'ADMIN_EMAILS', '--env', 'test'], { cwd: api, input: admins });
+  if (YES || /^y/i.test(await ask('Add made-up people and events to TEST so the admin pages have something to show? [y/N]: '))) {
+    const f = path.join(ROOT, 'reports', 'test-seed.sql'); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, seedSQL());
+    wrangler(['d1', 'execute', 'meditation-copilot-test', '--remote', '--env', 'test', '--file', f, '-y'], { cwd: api }); fs.rmSync(f);
+  }
+  if (!clean()) { run('git', ['add', 'api/wrangler.toml']); run('git', ['commit', '-q', '-m', 'Test environment: test database id']); }
+  console.log(`
+✔ Test server settings are ready. Three things only you can do in a browser (one time):
+  1. Google Cloud → APIs & Services → Credentials → your OAuth client → Authorized JavaScript origins:
+       add https://test.sosmn.org and https://test-admin.sosmn.org
+  2. Microsoft Entra → App registrations → your app → Authentication → Redirect URIs (Single-page application):
+       add https://test.sosmn.org/  https://test.sosmn.org/copilot/  https://test-admin.sosmn.org/
+  3. Cloudflare Zero Trust → Access → Applications → Admins → add the hostname test-admin.sosmn.org
+Then: release build → release test.`);
+}
+
 function status() {
   const v = readJSON('version.json'), d = deployments();
   console.log(`Current build:   ${label(v)}${v.build ? '' : ' (no build yet)'}\nOn test:         ${d.test ? `${d.test.build} (${d.test.at.slice(0, 16).replace('T', ' ')})` : '—'}\nLive (prod):     ${d.prod ? `${d.prod.version} = ${d.prod.build} (${d.prod.at.slice(0, 16).replace('T', ' ')})` : '— (v0.16 baseline, before this process)'}\nUncommitted:     ${clean() ? 'none' : 'yes — run release build'}`);
@@ -168,6 +211,6 @@ async function rollback(envName) {
   console.log(`\n✔ Rolled back on ${envName}. Database changes stay (they only add things). To restore data, use a file in backups/ or Cloudflare D1 Time Travel.`);
 }
 
-const steps = { build, test: toTest, prod: toProd, status, rollback: () => rollback(rest[0]) };
+const steps = { 'setup-test': setupTest, build, test: toTest, prod: toProd, status, rollback: () => rollback(rest[0]) };
 if (!steps[step]) { console.log(fs.readFileSync(new URL(import.meta.url), 'utf8').split('*/')[0].replace(/^#!.*\n\/\*\s?/, '').replace(/^ \* ?/gm, '')); process.exit(step ? 1 : 0); }
 await steps[step]();
