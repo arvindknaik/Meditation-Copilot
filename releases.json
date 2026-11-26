@@ -1,6 +1,21 @@
 {
   "releases": [
     {
+      "version": "0.21.0",
+      "date": "2026-11-26",
+      "summary": "A quick fix for the News page.",
+      "highlights": [
+        "The News page shows all articles again."
+      ],
+      "items": [
+        {
+          "type": "fixed",
+          "text": "News: the article list and year headings were replaced by the footer's year (introduced in v0.20). Added a test so it can't happen again.",
+          "audience": "all"
+        }
+      ]
+    },
+    {
       "version": "0.20.0",
       "date": "2026-11-26",
       "summary": "Reading and video challenges, event type icons, and a simpler, steadier sosmn.org.",
