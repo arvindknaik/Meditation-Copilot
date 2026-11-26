@@ -413,7 +413,7 @@
   }
 
   /* ---------- start ---------- */
-  document.querySelectorAll('[data-year]').forEach(function (s) { s.textContent = new Date().getFullYear(); });
+  document.querySelectorAll('[data-this-year]').forEach(function (s) { s.textContent = new Date().getFullYear(); });
   document.querySelectorAll('[data-nav="' + page + '"]').forEach(function (a) { a.setAttribute('aria-current', 'page'); });
   if (page === 'event') document.querySelectorAll('[data-nav="calendar"]').forEach(function (a) { a.setAttribute('aria-current', 'page'); });
   layoutSwitch();

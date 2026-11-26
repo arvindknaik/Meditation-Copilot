@@ -50,6 +50,9 @@ test('[site] the header stays in the same place on every page', async () => {
     pos.push(await p.evaluate(() => ['.org', '.main-nav', '#viewBtn'].map((q) => { const r = document.querySelector(q).getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width)].join(','); }).join(' | ')));
   }
   assert.equal(new Set(pos).size, 1, 'logo, menu and layout button line up on every page: ' + pos.join(' / '));
+  await p.goto(SITE + '/news/', { waitUntil: 'networkidle' }); await p.waitForTimeout(300);
+  assert.ok((await p.$$('#list .card:not([hidden]), .cards .card:not([hidden])')).length > 5, 'news articles are listed');
+  assert.ok((await p.$$eval('.year-h', (h) => new Set(h.map((x) => x.textContent)).size)) > 3, 'each year heading shows its own year');
   assert.match(await p.textContent('footer.site'), /Visitor guidelines/);
   await shot(p, 'site-guidelines-desktop'); assert.deepEqual(errors, []); await ctx.close();
 });
