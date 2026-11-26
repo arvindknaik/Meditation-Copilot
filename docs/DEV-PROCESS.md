@@ -129,8 +129,8 @@ release prod    (Arvind approves) show draft release notes to edit/approve, back
 ## 7. Release notes
 
 - Drafted from the milestone's closed issues, grouped **New / Improved / Fixed**, one line each; Arvind edits and approves.
-- `user-facing` items → **"What's new"** in Copilot and on sosmn.org.
-- `admin-only` items → "What's new" on the admin site and on GitHub.
+- **Highlights** (up to 3 short lines) → the only lines people see in **"What's new"** in Copilot and on sosmn.org (decided 2026-11-26: keep public notes very brief).
+- All New / Improved / Fixed items, including `admin:` lines → "What's new" on the admin site and the GitHub Release.
 - Full notes with issue links → GitHub Release.
 
 ---

@@ -36,9 +36,9 @@
   /* ---------- evaluation ---------- */
   function evaluate(c) {
     var today = MC.today(), todayKey = MC.toISO(today), start = MC.parseDate(c.startOn), end = MC.parseDate(c.endOn);
-    var out = { c: c, kind: c.type === 'center' ? { icon: '🪷', name: c.title || 'Center challenge', unit: 'days' } : KINDS[c.type], points: pointsFor(c), status: c.status, done: 0, total: 0, misses: 0, allow: 0, note: '', pct: 0, earned: 0 };
+    var out = { c: c, kind: c.type === 'center' ? { icon: c.kind === 'education' ? ({ quote: '💭', article: '📰', book: '📖', video: '▶️' }[c.material] || '📚') : '🪷', name: c.title || 'Center challenge', unit: 'days' } : KINDS[c.type], points: pointsFor(c), status: c.status, done: 0, total: 0, misses: 0, allow: 0, note: '', pct: 0, earned: 0 };
     if (c.status === 'dropped') { out.earned = 0; return finish(out); }
-    if (today < start) { out.upcoming = true; out.total = c.type === 'hours' ? c.target : c.type === 'amrit' ? c.days : c.type === 'center' ? (c.kind === 'checkins' ? c.target : c.days) : c.weeks; return finish(out); }
+    if (today < start) { out.upcoming = true; out.total = c.type === 'hours' ? c.target : c.type === 'amrit' ? c.days : c.type === 'center' ? (c.kind === 'checkins' || c.kind === 'education' ? eduTotal(c) : c.days) : c.weeks; return finish(out); }
     var sessions = MC.sessions.all();
     if (c.type === 'hours') {
       var from = start.getTime(), to = MC.addDays(end, 1).getTime(), min = 0;
@@ -69,6 +69,15 @@
       if (n >= c.target) out.status = 'done';
       else if (today > end) out.status = 'failed';
       out.note = n + ' of ' + c.target + ' check-ins' + (out.status === 'active' ? ' · ' + Math.max(0, MC.daysBetween(today, end) + 1) + ' days left' : '');
+    } else if (c.type === 'center' && c.kind === 'education') {
+      // Read or watch N items before the end date (js/library.js counts them). Catch-up is allowed, so there are no misses;
+      // the pace (e.g. 1 a week) is a guide shown as "on track" or "to catch up".
+      var lib = MC.library, got = lib ? lib.countFor(c) : 0, tot = eduTotal(c);
+      out.total = tot; out.done = Math.min(got, tot);
+      if (tot && got >= tot) out.status = 'done';
+      else if (today > end) out.status = 'failed';
+      var behind = lib ? Math.max(0, lib.expectedBy(c, tot) - got) : 0, left = Math.max(0, MC.daysBetween(today, end) + 1);
+      out.note = got + ' of ' + tot + ' ' + (lib ? lib.unit(c, tot) : '') + (out.status === 'active' ? ' · ' + (behind ? behind + ' to catch up' : 'on track') + ' · ' + left + ' days left' : '');
     } else if (c.type === 'center') {
       // Sit at least c.minutes on each of c.days days (all sittings that day count)
       out.total = c.days; out.allow = allowance(c.days);
@@ -117,6 +126,7 @@
     if ((c.status === 'done' || c.status === 'failed') && c.earned !== undefined) { out.earned = c.earned; out.done = c.finalDone !== undefined ? c.finalDone : out.done; out.status = c.status; }
     return out;
   }
+  function eduTotal(c) { return Number(c.target) || Number(c.chapters) || 0; }   // a book challenge with no total = the whole book
   function all() { return col.all().map(evaluate); }
   function active(type) { return col.all().filter(function (c) { return c.status === 'active' && (!type || c.type === type); }); }
 
@@ -140,7 +150,7 @@
     var list = (MC.store.get(CC_KEY, null) || {}).list || [];
     if (!list.length && MC.challenge && MC.challenge.defaults) list = MC.challenge.defaults();   // offline / not loaded yet: the starter program
     var seeker = MC.isSeeker && MC.isSeeker(), init = MC.isInitiated && MC.isInitiated();
-    return list.filter(function (x) { return (x.kind === 'daily_sitting' || x.kind === 'checkins') && x.active !== false && (x.audience === 'all' || (x.audience === 'seeker' && seeker) || (x.audience === 'initiate' && init)); });
+    return list.filter(function (x) { return (x.kind === 'daily_sitting' || x.kind === 'checkins' || x.kind === 'education') && x.active !== false && (x.audience === 'all' || (x.audience === 'seeker' && seeker) || (x.audience === 'initiate' && init)); });
   }
   function loadCenter() {
     if (!(MC.events && MC.events.enabled()) || Date.now() - ccAt < 10 * 60000) return;
@@ -154,6 +164,11 @@
   function is42(x) { return x.kind === 'daily_sitting'; }
   function ccMeta(x) {
     if (x.kind === 'checkins') return 'Check in at ' + x.target + ' center events within ' + x.days + ' days · ' + x.points + ' points';
+    if (x.kind === 'education') {
+      var u = { quote: ['thought', 'thoughts'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['talk', 'talks'] }[x.material] || ['item', 'items'];
+      var pace = x.perPeriod ? x.perPeriod + ' ' + u[x.perPeriod === 1 ? 0 : 1] + ' a ' + (x.cadence || 'week') : '';
+      return (x.material === 'book' && !x.target ? 'A whole book' : x.target + ' ' + u[1]) + (pace ? ', ' + pace : '') + ' · within ' + x.days + ' days · ' + (x.itemPoints || 0) + ' points each + ' + x.points + ' bonus';
+    }
     var ch = x.minutesChoices && x.minutesChoices.length ? x.minutesChoices.join('/') + ' min (you choose)' : x.minutes + ' min';
     return (x.rampTo ? 'Grow to ' + x.rampTo + ' min a day over ' + x.days + ' days' : 'Sit ' + ch + ' a day for ' + x.days + ' days') + ' · ' + x.points + ' points';
   }
@@ -167,7 +182,7 @@
     return '<div class="small" style="font-weight:700;margin:4px 0 6px">From the Minneapolis Center</div>' + list.map(function (x, i) {
       var on = is42(x) ? on42 && (c42.run.cid === x.id) : running[x.id];
       var later = is42(x) && on42 && !on;              // one meditation challenge at a time
-      return '<div class="goal"><div class="goal-head"><b>🪷 ' + MC.esc(x.title) + (i === 0 ? ' <span class="badge" style="margin-left:4px">Recommended</span>' : '') + '</b>' +
+      return '<div class="goal"><div class="goal-head"><b>' + (x.kind === 'education' ? ({ quote: '💭', article: '📰', book: '📖', video: '▶️' }[x.material] || '📚') : '🪷') + ' ' + MC.esc(x.title) + (i === 0 ? ' <span class="badge" style="margin-left:4px">Recommended</span>' : '') + '</b>' +
         (on ? '<span class="small">In progress</span>' : later ? '<span class="small muted">After your current challenge</span>' : '<button class="btn btn-soft btn-sm" data-cc="' + MC.esc(x.id) + '">Start</button>') + '</div>' +
         '<div class="goal-meta">' + MC.esc(ccMeta(x)) + '</div>' + (x.description ? '<div class="small muted" style="margin-top:4px">' + MC.esc(x.description) + '</div>' : '') + '</div>';
     }).join('') + '<div class="small" style="font-weight:700;margin:14px 0 6px">Your challenges</div>';
@@ -175,6 +190,18 @@
   function startCenter(id) {
     var x = centerList().filter(function (y) { return y.id === id; })[0]; if (!x) return;
     if (is42(x)) { MC.challenge.openOne(x); return; }
+    if (x.kind === 'education' && x.material === 'book') {
+      if (!MC.library) return;
+      MC.library.chooseBook(function (b) {
+        if (!b || !window.confirm('Start “' + x.title + '” with “' + b.title + '” (' + b.chapters + ' chapters) today? You have ' + x.days + ' days; catching up is fine.')) return;
+        addCenter(x, b); MC.toast('📖 Happy reading!'); MC.emit('data'); render();
+      });
+      return;
+    }
+    if (x.kind === 'education') {
+      if (!window.confirm('Start “' + x.title + '” today? ' + ccMeta(x) + '.')) return;
+      addCenter(x); MC.toast((x.material === 'video' ? '▶️' : '📚') + ' Challenge started. Enjoy!'); MC.emit('data'); render(); return;
+    }
     if (x.kind === 'checkins' && !(MC.events && MC.events.signedInMode && MC.events.signedInMode())) { MC.toast('Sign in with Google or Microsoft first: this challenge counts your center check-ins.'); return; }
     var t = MC.today();
     var c = { type: 'center', centerId: x.id, title: x.title, kind: x.kind, days: Number(x.days), minutes: Number(x.minutes) || 0, target: Number(x.target) || 0,
@@ -192,7 +219,9 @@
       o.status === 'done' ? '✓ Completed · +' + o.earned : o.status === 'failed' ? 'Not completed · +' + o.earned : 'Dropped';
     return '<div class="goal' + (o.status !== 'active' ? ' goal-done' : '') + '"><div class="goal-head"><b>' + o.kind.icon + ' ' + MC.esc(o.kind.name) + '</b><span class="small">' + MC.esc(label) + '</span></div>' +
       '<div class="goal-meta">' + MC.esc(fmtRange(c)) + (c.type === 'hours' ? ' · ' + c.target + ' hours' : '') + ' · ' + o.points + ' points</div>' +
-      (o.status === 'active' && !o.upcoming ? '<div class="bar"><div class="fill' + cls + '" style="width:' + o.pct + '%"></div></div><div class="goal-foot"><span>' + MC.esc(o.note) + '</span><button class="link small" data-drop="' + MC.esc(c.id) + '" style="padding:0">Drop</button></div>'
+      (c.kind === 'education' && c.bookTitle ? '<div class="small muted">📖 ' + MC.esc(c.bookTitle) + '</div>' : '') +
+      (o.status === 'active' && !o.upcoming ? '<div class="bar"><div class="fill' + cls + '" style="width:' + o.pct + '%"></div></div><div class="goal-foot"><span>' + MC.esc(o.note) + '</span><button class="link small" data-drop="' + MC.esc(c.id) + '" style="padding:0">Drop</button></div>' +
+        (c.kind === 'education' && MC.library ? '<div class="goal-acts">' + MC.library.actionsFor(o) + '</div>' : '')
         : o.status === 'active' ? '<div class="goal-foot"><span></span><button class="link small" data-drop="' + MC.esc(c.id) + '" style="padding:0">Cancel</button></div>' : '') + '</div>';
   }
   function render() {
@@ -213,6 +242,7 @@
     card.innerHTML = html;
     $('goalNew').addEventListener('click', openNew);
     card.querySelectorAll('[data-cc]').forEach(function (b) { b.addEventListener('click', function () { startCenter(b.dataset.cc); }); });
+    if (MC.library) MC.library.bindActions(card);
     card.querySelectorAll('[data-drop]').forEach(function (b) {
       b.addEventListener('click', function () {
         var c = col.get(b.dataset.drop); if (!c) return;
@@ -279,13 +309,18 @@
   });
 
   // Attendance challenge from the Challenge Program, started without questions (sign-up step and chooser)
-  function addCenter(x) {
+  function addCenter(x, book) {
     var t = MC.today();
-    col.add({ type: 'center', centerId: x.id, title: x.title, kind: x.kind, days: Number(x.days), minutes: Number(x.minutes) || 0, target: Number(x.target) || 0,
-      points: Number(x.points) || 0, startOn: MC.toISO(t), endOn: MC.toISO(MC.addDays(t, Number(x.days) - 1)), status: 'active' });
+    var c = { type: 'center', centerId: x.id, title: x.title, kind: x.kind, days: Number(x.days), minutes: Number(x.minutes) || 0, target: Number(x.target) || 0,
+      points: Number(x.points) || 0, startOn: MC.toISO(t), endOn: MC.toISO(MC.addDays(t, Number(x.days) - 1)), status: 'active' };
+    if (x.kind === 'education') {
+      c.material = x.material; c.cadence = x.cadence || 'week'; c.perPeriod = Number(x.perPeriod) || 0; c.itemPoints = Number(x.itemPoints) || 0;
+      if (book) { c.bookId = book.id; c.bookTitle = book.title; c.chapters = Number(book.chapters) || 0; }
+    }
+    col.add(c);
     MC.track('challenge_start2', { type: 'center', cid: x.id });
   }
-  MC.goals = { startCenter: addCenter, all: all, evaluate: evaluate, pointsFor: pointsFor, allowance: allowance, minutesInAmrit: minutesInAmrit, render: render };
+  MC.goals = { startCenter: addCenter, start: startCenter, allRaw: function () { return col.all(); }, all: all, evaluate: evaluate, pointsFor: pointsFor, allowance: allowance, minutesInAmrit: minutesInAmrit, render: render };
   MC.on('view', function (n) { if (n === 'roadmap') { setTimeout(render, 0); loadCenter(); } });
   MC.on('data', function () { if (MC.current === 'roadmap') setTimeout(render, 0); });
   MC.on('profile', function () { if (MC.current === 'roadmap') setTimeout(render, 0); });

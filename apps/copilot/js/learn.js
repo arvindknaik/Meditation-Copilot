@@ -111,8 +111,12 @@
       return '<button class="topic" data-id="' + MC.esc(a.id) + '"><span class="ti" aria-hidden="true">' + a.icon + '</span><b>' + MC.esc(a.title) + '</b><small>' + MC.esc(a.summary) + '</small></button>';
     }).join('');
     $('moreTopics').innerHTML = K.articles.filter(function (a) { return K.featured.indexOf(a.id) < 0; }).map(function (a) {
-      return '<button class="topic-row" data-id="' + MC.esc(a.id) + '"><span class="ti" aria-hidden="true">' + a.icon + '</span><span><b>' + MC.esc(a.title) + '</b><small>' + MC.esc(a.category) + '</small></span></button>';
+      var read = MC.library && MC.library.has('article', a.id);
+      return '<button class="topic-row" data-id="' + MC.esc(a.id) + '"><span class="ti" aria-hidden="true">' + a.icon + '</span><span><b>' + MC.esc(a.title) + '</b><small>' + MC.esc(a.category) + (read ? ' · ✓ Read' : '') + '</small></span></button>';
     }).join('');
+    // The center's Library (js/library.js): books, talks and recommended reading
+    var lib = $('learnLibrary');
+    if (lib && MC.library) { lib.innerHTML = MC.library.browseHTML(); MC.library.bindBrowse(lib); }
   }
   $('learnBrowse').addEventListener('click', function (e) {
     var b = e.target.closest('[data-id]'); if (b) location.hash = 'learn?a=' + encodeURIComponent(b.dataset.id);
@@ -134,9 +138,24 @@
         return '<a class="btn btn-soft btn-sm" href="' + MC.esc(l.url) + '" target="_blank" rel="noopener">' + MC.esc(l.label) + ' ↗</a>';
       }).join('') + '</div>';
     }
+    // "Mark as read" (Education challenges): enabled once the end of the article has been reached
+    if (MC.library) {
+      var read = MC.library.has('article', a.id);
+      html += '<div class="art-end" id="artEnd">' + (read ? '<span class="read-btn done">✓ Read</span>' :
+        '<button type="button" class="btn btn-primary btn-block" id="artRead" disabled>Mark as read</button><p class="small muted center" id="artReadHint" style="margin:6px 0 0">Read to the end to mark it as read.</p>') + '</div>';
+    }
     html += '</div>';
     $('learnArticle').innerHTML = html;
     $('artBack').addEventListener('click', function () { history.length > 1 ? history.back() : MC.go('learn'); });
+    var btn = $('artRead');
+    if (btn) {
+      var enable = function () { btn.disabled = false; var h = $('artReadHint'); if (h) h.remove(); };
+      if ('IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (es) { if (es.some(function (x) { return x.isIntersecting; })) { enable(); io.disconnect(); } });
+        io.observe($('artEnd'));
+      } else enable();
+      btn.addEventListener('click', function () { MC.library.mark('article', a.id, { title: a.title }); $('artEnd').innerHTML = '<span class="read-btn done">✓ Read</span>'; });
+    }
   }
 
   function param(name) {
@@ -144,11 +163,13 @@
     return m ? decodeURIComponent(m[1]) : null;
   }
 
+  MC.on('library', function () { if (MC.current === 'learn' && !$('learnHome').hidden) renderBrowse(); });
   MC.views.learn = {
     show: function () {
-      var a = byId(param('a'));
-      $('learnHome').hidden = !!a;
-      $('learnArticle').hidden = !a;
+      var a = byId(param('a')), b = param('b');
+      $('learnHome').hidden = !!(a || b);
+      $('learnArticle').hidden = !(a || b);
+      if (b && MC.library) { MC.library.renderBook($('learnArticle'), b); window.scrollTo(0, 0); return; }
       if (a) { renderArticle(a); return; }
       renderBrowse();
       $('learnQ').value = state.q;

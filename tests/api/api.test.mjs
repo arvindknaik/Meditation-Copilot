@@ -1,4 +1,4 @@
-// [srm] [challenges] [events] [admin] events server with a throw-away database of made-up people
+// [srm] [challenges] [events] [admin] [library] events server with a throw-away database of made-up people
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, client } from './_server.mjs';
@@ -15,7 +15,7 @@ test('[release] health check answers with a version', async () => {
 });
 test('[challenges] starter program is listed in priority order', async () => {
   const r = await c.call('GET', '/api/challenges');
-  assert.equal(JSON.stringify(r.challenges.map((x) => x.id)), JSON.stringify(['c21-foundation', 'c21-advance', 'c-attend6']));
+  assert.equal(JSON.stringify(r.challenges.map((x) => x.id)), JSON.stringify(['c21-foundation', 'c21-advance', 'c-attend6', 'e-quote30', 'e-article12', 'e-book', 'e-video4']));
   assert.equal(r.challenges[0].signup, true); assert.equal(r.challenges[1].rampTo, 30);
 });
 test('[challenges] admins can change a challenge; others are refused', async () => {
@@ -23,16 +23,21 @@ test('[challenges] admins can change a challenge; others are refused', async () 
   const r = await c.call('PATCH', '/api/admin/challenges/c21-advance', owner, { rampTo: 35 }); assert.equal(r.status, 200);
   assert.equal((await c.call('GET', '/api/challenges')).challenges.find((x) => x.id === 'c21-advance').rampTo, 35);
 });
-test('[srm] journey levels and counts', async () => {
+test('[srm] stages and status for each person', async () => {
   const j = await c.call('GET', '/api/admin/journey', owner);
-  const lv = Object.fromEntries(j.people.map((p) => [p.email, p.level]));
-  assert.equal(lv['mark@example.com'], 'l3'); assert.equal(lv['lena@example.com'], 'l4'); assert.equal(lv['dev@example.com'], 'new');
-  assert.equal(lv['kim@example.com'], 'initiate'); assert.ok(j.people.find((p) => p.email === 'omar@example.com').drifting);
+  const P = Object.fromEntries(j.people.map((p) => [p.email, p]));
+  assert.equal(P['dev@example.com'].stage, 'potential'); assert.equal(P['sara@example.com'].stage, 'new');
+  assert.equal(P['mark@example.com'].stage, 'seeker'); assert.equal(P['asha@example.com'].stage, 'satsangi'); assert.equal(P['kim@example.com'].stage, 'initiate');
+  assert.equal(P['priya@example.com'].status, 'active'); assert.equal(P['omar@example.com'].status, 'drifted'); assert.equal(P['ravi@example.com'].status, 'dropped');
+  assert.equal(P['dev@example.com'].status, null);
+  assert.ok(P['mark@example.com'].orientationDone, 'Mark: 7 workshops and 2 shared challenges'); assert.equal(P['priya@example.com'].zip, '55421');
+  assert.equal(j.statusCounts.dropped, 1);
 });
 test('[srm] follow-ups list the right people', async () => {
   const f = await c.call('GET', '/api/admin/followups', owner);
   const has = (kind, email) => f.items.some((i) => i.kind === kind && i.email === email);
-  assert.ok(has('first_visit', 'priya@example.com')); assert.ok(has('no_show', 'sara@example.com')); assert.ok(has('level_up', 'mark@example.com'));
+  assert.ok(has('first_visit', 'priya@example.com')); assert.ok(has('no_show', 'sara@example.com'));
+  assert.ok(has('orientation', 'mark@example.com')); assert.ok(has('satsangi', 'lena@example.com')); assert.ok(has('drifting', 'omar@example.com'));
   const it = f.items.find((i) => i.kind === 'first_visit');
   await c.call('POST', '/api/admin/followups', owner, { userId: it.userId, kind: it.kind, ref: it.ref, status: 'done' });
   assert.ok(!(await c.call('GET', '/api/admin/followups', owner)).items.some((i) => i.kind === 'first_visit' && i.userId === it.userId), 'done follow-ups drop off');
@@ -41,19 +46,57 @@ test('[admin] hosts cannot see journeys, notes or follow-ups', async () => {
   assert.equal((await c.call('GET', '/api/admin/journey', host)).status, 403);
   assert.equal((await c.call('GET', '/api/admin/followups', host)).status, 403);
 });
-test('[srm] notes, mentor and milestones on a person', async () => {
-  const j = await c.call('GET', '/api/admin/journey?q=priya', owner); const uid = j.people[0].userId;
+test('[srm] notes, mentor, stage, Passive and Sevadar on a person', async () => {
+  const j = await c.call('GET', '/api/admin/journey?q=lena', owner); const uid = j.people[0].userId, U = `/api/admin/users/${encodeURIComponent(uid)}/journey`;
   const kim = (await c.call('GET', '/api/admin/journey?q=kim', owner)).people[0].userId;
-  assert.equal((await c.call('PATCH', `/api/admin/users/${encodeURIComponent(uid)}/journey`, owner, { mentorId: kim, milestone: 'met_master', done: true })).journey.level, 'l4');
+  const r = await c.call('PATCH', U, owner, { mentorId: kim, milestone: 'met_master', done: true, stage: 'satsangi', sevadar: true });
+  assert.equal(r.journey.stage, 'satsangi'); assert.equal(r.journey.sevadar, true); assert.equal(r.journey.category, 'friend', 'Satsangi sees Community events');
+  assert.equal((await c.call('PATCH', U, owner, { passive: true, passiveReason: 'Caring for family' })).journey.status, 'passive');
+  assert.ok(!(await c.call('GET', '/api/admin/followups', owner)).items.some((i) => i.userId === uid && i.kind === 'drifting'));
   assert.equal((await c.call('POST', `/api/admin/users/${encodeURIComponent(uid)}/notes`, owner, { body: 'Interested in the kids program' })).status, 200);
-  const p = await c.call('GET', `/api/admin/users/${encodeURIComponent(uid)}/journey`, owner);
-  assert.equal(p.notes.length, 1); assert.equal(p.journey.mentorName, 'Kim Test'); assert.ok(p.timeline.length > 2);
+  const p = await c.call('GET', U, owner);
+  assert.equal(p.notes.length, 1); assert.equal(p.journey.mentorName, 'Kim Test'); assert.equal(p.journey.passiveReason, 'Caring for family'); assert.ok(p.timeline.length > 2);
 });
-test('[events] new events keep their type and audience', async () => {
+test('[srm] profile: edited name, ZIP, no messages; challenges shared from Copilot', async () => {
+  const r = await c.call('PUT', '/api/me/contact', seeker, { phone: '612-555-0100', smsOk: true, zip: '55421', name: 'Pri' });
+  assert.equal(r.contact.zip, '55421'); assert.equal(r.contact.name, 'Pri'); assert.equal(r.contact.providerName, 'Priya Test');
+  assert.equal((await c.call('PUT', '/api/me/contact', seeker, { zip: '554' })).status, 400);
+  await c.call('POST', '/api/me/challenge-done', seeker, { ref: 'run-1', title: '21-Day Foundation', finishedOn: '2026-11-20' });
+  let p = (await c.call('GET', '/api/admin/journey?q=priya', owner)).people[0];
+  assert.equal(p.name, 'Pri'); assert.equal(p.providerName, 'Priya Test'); assert.equal(p.challenges, 1);
+  const n = await c.call('PUT', '/api/me/contact', seeker, { phone: '612-555-0100', smsOk: true, noMessages: true });
+  assert.equal(n.contact.smsOk, false, 'no messages also stops texts'); assert.equal(n.contact.noMessages, true);
+  p = (await c.call('GET', '/api/admin/journey?q=priya', owner)).people[0]; assert.equal(p.status, 'declined');
+  await c.call('PUT', '/api/me/contact', seeker, { phone: '612-555-0100', smsOk: true, noMessages: false, name: 'Priya Test' });
+});
+test('[events] new events keep their type, audience and children’s program', async () => {
   const st = Date.now() + 5 * 86400000;
-  const r = await c.call('POST', '/api/admin/events', owner, { title: 'Test Workshop', format: 'in_person', access: 'public', kind: 'workshop', level: 'seeker', startsAt: st, endsAt: st + 3600000, timezone: 'America/Chicago' });
+  const r = await c.call('POST', '/api/admin/events', owner, { title: 'Test Festival', format: 'in_person', access: 'satsang', kind: 'festival', children: true, startsAt: st, endsAt: st + 3600000, timezone: 'America/Chicago' });
   assert.ok(r.status === 200 || r.status === 201, JSON.stringify(r));
   const id = (r.events || [r.event])[0].id;
   const e = await c.call('GET', '/api/events/' + id, owner);
-  assert.equal(e.event.kind, 'workshop'); assert.equal(e.event.level, 'seeker');
+  assert.equal(e.event.kind, 'festival'); assert.equal(e.event.children, true); assert.equal(e.event.access, 'satsang');
+  assert.equal((await c.call('GET', '/api/events/' + id, seeker)).status, 404, 'Community events are hidden from Seekers');
+});
+
+test('[library] only approved items reach Copilot; admins add, approve and remove', async () => {
+  assert.equal((await c.call('GET', '/api/admin/library', host)).status, 403, 'hosts cannot manage the library');
+  const all = await c.call('GET', '/api/admin/library', owner);
+  assert.ok(all.items.some((x) => x.kind === 'book' && x.status === 'draft'), 'starter books arrive as drafts');
+  assert.ok(!(await c.call('GET', '/api/library')).items.some((x) => x.id === 'b-empowering-soul'), 'drafts are hidden');
+  assert.equal((await c.call('PATCH', '/api/admin/library/b-empowering-soul', owner, { status: 'approved' })).status, 400, 'a book needs its chapters first');
+  assert.equal((await c.call('PATCH', '/api/admin/library/b-empowering-soul', owner, { chapters: 12, status: 'approved' })).status, 200);
+  const v = await c.call('POST', '/api/admin/library', owner, { kind: 'video', title: 'Test talk', url: 'https://youtu.be/dQw4w9WgXcQ', status: 'approved' });
+  assert.equal(v.status, 201);
+  const pub = (await c.call('GET', '/api/library')).items;
+  assert.ok(pub.some((x) => x.id === 'b-empowering-soul' && x.chapters === 12)); assert.ok(pub.some((x) => x.title === 'Test talk'));
+  assert.equal(pub[0].status, undefined);
+  await c.call('DELETE', '/api/admin/library/' + v.item.id, owner);
+  assert.ok(!(await c.call('GET', '/api/library')).items.some((x) => x.title === 'Test talk'));
+});
+test('[challenges] education challenges need something to read or watch', async () => {
+  assert.equal((await c.call('POST', '/api/admin/challenges', owner, { title: 'Read', kind: 'education', days: 28, target: 4 })).status, 400);
+  const r = await c.call('POST', '/api/admin/challenges', owner, { title: 'Read', kind: 'education', days: 28, target: 4, material: 'article', cadence: 'week', perPeriod: 1, itemPoints: 10 });
+  assert.equal(r.status, 201); assert.equal(r.challenge.material, 'article'); assert.equal(r.challenge.perPeriod, 1);
+  await c.call('DELETE', '/api/admin/challenges/' + r.challenge.id, owner);
 });

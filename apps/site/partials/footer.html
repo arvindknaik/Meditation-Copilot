@@ -1,26 +1,12 @@
 <footer class="site">
   <div class="site-inner">
-    <div class="foot-cols">
-      <div>
-        <p><b>{{center.name}}</b><br>{{center.address}}<br>
-          <a href="mailto:{{center.email}}">{{center.email}}</a> · <a href="https://wa.me/{{center.whatsapp}}" target="_blank" rel="noopener">WhatsApp</a></p>
-        <p>All programs are free of charge and open to people of all backgrounds.</p>
-      </div>
-      <div>
-        <p class="foot-h">Learn more</p>
-        <p><a href="{{center.sosPage}}" target="_blank" rel="noopener">Our center on sos.org ↗</a><br>
-          <a href="https://www.sos.org/" target="_blank" rel="noopener">Science of Spirituality · sos.org ↗</a><br>
-          <a href="/news/">News &amp; archive</a> · <a href="/about/">About</a> · <a href="/privacy/">Privacy</a></p>
-      </div>
-    </div>
-    <p class="view-switch" role="group" aria-label="Choose layout"></p>
-    <p class="fine">Run by volunteers of the Science of Spirituality Minneapolis Meditation Center · © <span data-year></span> Science of Spirituality ·
-      <a href="https://www.sos.org/privacy-policy/" target="_blank" rel="noopener">sos.org privacy</a> · <a href="https://www.sos.org/terms-of-use" target="_blank" rel="noopener">terms</a></p>
-    <p class="fine copilot-link"><a href="/copilot/">Meditation Copilot</a> <span>· prototype (not officially approved)</span></p>
-    <p class="fine version"><a href="/whats-new/">What’s new</a> · <span>{{version_label}}</span></p>
+    <p><b>{{center.name}}</b> · <a href="/about/#directions">{{center.address}}</a></p>
+    <p><a href="mailto:{{center.email}}">{{center.email}}</a> · <a href="https://wa.me/{{center.whatsapp}}" target="_blank" rel="noopener">WhatsApp</a> · <a href="/guidelines/">Visitor guidelines</a> · <a href="/privacy/">Privacy</a></p>
+    <p class="fine">All programs are free · Run by volunteers · © <span data-year></span> Science of Spirituality · <a href="/copilot/">Meditation Copilot</a> (prototype) · <a href="/whats-new/">What’s new</a> {{version_label}}</p>
   </div>
 </footer>
 <dialog class="sheet" id="sheet"><div class="sheet-body" id="sheetBody"></div></dialog>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="/js/auth.js?v={{v}}"></script>
+<script src="/js/types.js?v={{v}}"></script>
 <script src="/js/site.js?v={{v}}"></script>

@@ -13,7 +13,8 @@ export function seedSQL(now = Date.now()) {
   const people = [
     ['owner@example.com', 'Arvind Owner', 'initiate'], ['priya@example.com', 'Priya Test', 'seeker'], ['mark@example.com', 'Mark Test', 'seeker'],
     ['lena@example.com', 'Lena Test', 'seeker'], ['omar@example.com', 'Omar Test', 'seeker'], ['sara@example.com', 'Sara Test', 'seeker'],
-    ['dev@example.com', 'Dev Test', 'seeker'], ['kim@example.com', 'Kim Test', 'initiate'], ['host@example.com', 'Host Test', 'seeker']];
+    ['dev@example.com', 'Dev Test', 'seeker'], ['kim@example.com', 'Kim Test', 'initiate'], ['host@example.com', 'Host Test', 'seeker'],
+    ['ravi@example.com', 'Ravi Test', 'seeker'], ['asha@example.com', 'Asha Test', 'friend']];
   const id = (e) => 'dev:' + e;
   for (const [e, n, c] of people) sql.push(`INSERT OR IGNORE INTO users (id, provider, email, name, created_at, last_seen_at, category, contact_ack_at) VALUES (${q(id(e))}, 'dev', ${q(e)}, ${q(n)}, ${now - 120 * DAY}, ${now - DAY}, ${q(c)}, ${now - 100 * DAY});`);
   sql.push(`INSERT OR IGNORE INTO staff (email, role, added_by, added_at) VALUES ('host@example.com', 'host', 'owner@example.com', ${now});`);
@@ -26,7 +27,7 @@ export function seedSQL(now = Date.now()) {
   const W = [84, 77, 70, 63, 56, 49, 42, 35, 28, 21, 14, 7, 3].map((d) => ev('Meditation Workshop', 'workshop', d, 'seeker'));
   const S = [80, 66, 52, 38, 24, 10, 4].map((d) => ev('Satsang', 'satsang', d));
   const I = [90, 30, 5].map((d) => ev('Introduction to Meditation', 'intro', d, 'new'));
-  const D = [ev('Retreat with Darshan', 'darshan', 45)];
+  const D = [ev('Retreat with Darshan', 'darshan', 45)], OLD = ev('Introduction to Meditation', 'intro', 400, 'all');
   const F = [ev('Weekly Meditation Workshop', 'workshop', -3, 'seeker'), ev('Satsang', 'satsang', -6), ev('Introduction to Meditation', 'intro', -10, 'new')];
   const ci = (e, who, g = 0) => sql.push(`INSERT OR IGNORE INTO checkins (event_id, user_id, method, checked_in_at, guests) VALUES (${q(e.eid)}, ${q(id(who))}, 'code', ${e.st + 600000}, ${g});`);
   const rs = (e, who, st = 'going') => sql.push(`INSERT OR REPLACE INTO rsvps (event_id, user_id, status, updated_at, guests) VALUES (${q(e.eid)}, ${q(id(who))}, ${q(st)}, ${e.st - 2 * DAY}, 0);`);
@@ -38,7 +39,18 @@ export function seedSQL(now = Date.now()) {
   rs(W[12], 'sara@example.com'); vw(W[12], 'sara@example.com');                                            // said Going, didn't come
   vw(I[2], 'dev@example.com');                                                                             // New
   S.slice(3).forEach((s) => ci(s, 'kim@example.com'));
+  ci(OLD, 'ravi@example.com');                                                                             // last came 400 days ago → Dropped
+  S.slice(1, 5).forEach((s) => ci(s, 'asha@example.com'));                                                 // Satsangi (flagged by an admin)
+  // Mark shared two finished challenges from Copilot → orientation done (5+ workshops, 2 challenges)
+  ['c1', 'c2'].forEach((r, i) => sql.push(`INSERT OR IGNORE INTO challenge_shares (user_id, ref, title, finished_on, at) VALUES (${q(id('mark@example.com'))}, ${q(r)}, '21-Day Foundation', NULL, ${now - (20 - i) * DAY});`));
+  sql.push(`UPDATE users SET zip = '55421' WHERE id = ${q(id('priya@example.com'))};`);
   rs(F[0], 'priya@example.com'); rs(F[0], 'mark@example.com', 'maybe');
+  // Library (v0.20): made-up approved items so Learn and the reading challenges have something to show
+  const lib = (id, kind, title, url, extra = '') => sql.push(`INSERT OR IGNORE INTO library (id, kind, title, author, url, summary, chapters, status, priority, created_at, updated_at) VALUES (${q(id)}, ${q(kind)}, ${q(title)}, 'Test Author', ${q(url)}, ${q('Made-up item for testing. ' + extra)}, ${kind === 'book' ? 6 : 0}, 'approved', 10, ${now}, ${now});`);
+  lib('t-book', 'book', 'A Test Book on Meditation', 'https://example.com/buy/test-book', 'Six short chapters.');
+  lib('t-article', 'article', 'A Test Article', 'https://example.com/test-article');
+  lib('t-video1', 'video', 'Test Talk One', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  lib('t-video2', 'video', 'Test Talk Two', 'https://www.youtube.com/watch?v=9bZkp7q19f0');
   return sql.join('\n') + '\n';
 }
 

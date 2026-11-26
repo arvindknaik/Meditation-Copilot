@@ -228,6 +228,21 @@ Built and tested locally; deploy with migration `0008_srm.sql` (see the app READ
 - **Event → Insight**: opened → Going → came, first-timers, back within 30 days, walk-ins, by level.
 - Not yet: interests/consent profile, unsubscribe links, question log, audience suggestions, Roadmap report (phases 2–3).
 
+### People stages and status (decided 2026-11-26, v0.20) — replaces New / Seeker L2–L4 / Initiate
+**Stage** (one per person, only moves up; admins can override):
+| Stage | Meaning | How it is set |
+|---|---|---|
+| **Potential** | We have their details; may receive announcements only if they agreed | Account, no event sign-up yet |
+| **New** | Interested: signed up for an event, hasn't come yet | RSVP Going/Maybe, no check-in |
+| **Seeker** | Has come. Orientation = **5 workshops + 2 challenges** | First check-in; challenges shared from Copilot or ticked by an admin |
+| **Satsangi** (community member) | Attends satsang regularly; **sees Community events** | **Set by an admin** (Follow-ups suggests 6+ satsangs in 3 months) |
+| **Initiate** | Initiated; permanent | Set by the person in Copilot or by an admin |
+
+**Status**: **Active** (came in the last 60 days) · **Drifted** (last 12 months, not 60 days) · **Dropped** (over 12 months) · **Passive** (admin-set with a short reason; left out of drifted follow-ups) · **Declined** (asked for no messages: chosen in "Your details" or set by an admin; overrides everything).
+**Sevadar**: a flag for people who contribute to running the center.
+**Events**: types Public Intro, Workshop, Satsang, Retreat, Darshan, Festival, Celebration; one **Audience**: Public · Community (Satsangis and Initiates) · Initiates; a "children's program available" flag. Every event is FREE.
+**Profile**: editable name (admins see the original sign-in name too), optional 5-digit ZIP code, "no messages" choice. Migration `0011_people_events.sql`.
+
 ## 9. Decisions
 
 | # | Topic | Decision (2026-11-25) |
@@ -322,5 +337,6 @@ Rule: **time-bound** tasks (sitting on a given day) allow misses; **count** task
 | **SRM** | Level 2 "1–2 articles a week" and "21/42-day challenge" tracked through these challenges (visible via Roadmap report) |
 
 ### 10.10 Status
-- **Step 1 built 2026-11-25 (v0.18):** 21-Day Foundation / Advance engine, "choose your first challenge" at sign-up, attendance challenge, admin challenge form (minute choices, grow-to, next step, offered at sign-up, bonus points). Migration `0009_challenge_program.sql`. Not yet deployed.
-- Next: step 2 (Library + Education), step 3 (Book Club).
+- **Step 1 built 2026-11-25 (v0.18):** 21-Day Foundation / Advance engine, "choose your first challenge" at sign-up, attendance challenge, admin challenge form (minute choices, grow-to, next step, offered at sign-up, bonus points). Migration `0009_challenge_program.sql`. Ships in v0.19.
+- **Step 2 built 2026-11-26 (v0.20):** admin **Library** tab (books with look-up from a purchase link/ISBN via Google Books and Open Library, talks, article links; approval before Copilot shows them); Education challenge type in the admin form; starter challenges Daily Thought · 30 days, An article a week · 12 weeks, Read a book · a chapter a week, Talks · 3 a week for 4 weeks; Copilot "✓ I read it" on the Thought for today with catch-up, "Mark as read" on Learn articles, books with chapter ticks and a finish celebration (+100), "✓ Watched" on return from a talk, "Your reading" card in Learn, reading points in Rewards. Reading history is kept in the person's own data (synced to their own cloud drive), never on the center's server. Migration `0010_library.sql`.
+- Next: step 3 (Book Club).

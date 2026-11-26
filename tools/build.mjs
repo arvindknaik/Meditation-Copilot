@@ -56,17 +56,22 @@ function applyEnv(js) {
 }
 const WHATSAPP = `<a href="https://wa.me/${center.whatsapp}" target="_blank" rel="noopener">WhatsApp</a>`;
 
+/* ---------- Shared partials (head, header, footer) for every sosmn.org page ---------- */
+const SITE_PARTS = path.join(ROOT, 'apps/site/partials');
+const sitePart = (n) => fs.readFileSync(path.join(SITE_PARTS, n + '.html'), 'utf8');
+const SP = { head: render(sitePart('head'), { layout_boot: render(sitePart('layout-boot')) }), header: render(sitePart('header')), footer: render(sitePart('footer')) };
+
 /* ---------- News & About pages ---------- */
 const news = readJSON('content/news/news.json');
 const items = news.items, arts = items.filter((x) => x.kind === 'article'), ICON = news.icons, CATS = news.categories;
 const SITE = env.siteUrl;
 function page(title, desc, body, canonical, extraHead = '') {
-  const cur = (p) => (canonical.startsWith(p) ? ' aria-current="page"' : '');
+  // Same head, header and footer as the events pages (apps/site/partials), so the header never moves between pages
+  const nav = canonical.startsWith('/news') ? 'news' : canonical.startsWith('/about') ? 'about' : canonical.startsWith('/guidelines') ? 'about' : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+${SP.head}
 <title>${E(title)}</title>
 <meta name="description" content="${E(desc)}">
 <link rel="canonical" href="${SITE}${canonical}">
@@ -74,35 +79,14 @@ function page(title, desc, body, canonical, extraHead = '') {
 <meta property="og:description" content="${E(desc)}">
 <meta property="og:url" content="${SITE}${canonical}">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="#043a5b">
-<link rel="icon" href="/img/favicon-64.png" type="image/png">
-<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
 <link rel="stylesheet" href="/news/news.css?v=${cacheKey}">
 ${extraHead}</head>
-<body>
-<a class="skip" href="#main">Skip to content</a>
-<header class="site">
-  <div class="site-inner">
-    <a class="org" href="/"><span class="org-mark"><img src="/img/sos-logo.png" srcset="/img/sos-logo.png 1x, /img/sos-logo-192.png 2x" alt="Science of Spirituality logo" width="54" height="34"></span><span><b>${E(center.org)}</b><small>${E(center.shortName)}</small></span></a>
-    <nav aria-label="Site">
-      <a href="/">Events</a>
-      <a href="/calendar/">Calendar</a>
-      <a href="/news/"${cur('/news')}>News</a>
-      <a href="/about/"${cur('/about')}>About</a>
-    </nav>
-  </div>
-</header>
+<body data-page="${nav}">
+${SP.header}
 <main id="main">
 ${body}
 </main>
-<footer class="site">
-  <div class="site-inner">
-    <p><b>${E(center.name)}</b><br>${E(center.address)} · <a href="mailto:${E(center.email)}">${E(center.email)}</a> · ${WHATSAPP}</p>
-    <p>Current programs: <a href="/">upcoming events</a> and the <a href="/calendar/">calendar</a>. More about us: <a href="${E(center.sosPage)}" target="_blank" rel="noopener">our center on sos.org ↗</a>. All programs are free of charge.</p>
-    <p class="fine"><a href="/privacy/">Privacy</a> · <a href="https://www.sos.org/terms-of-use" target="_blank" rel="noopener">sos.org terms</a> · Run by volunteers of the ${E(center.name)} · © ${new Date().getFullYear()} Science of Spirituality.</p>
-    <p class="fine" style="opacity:.8"><a href="/copilot/">Meditation Copilot</a> · prototype (not officially approved) · <a href="/whats-new/">What’s new</a> · ${E(versionLabel)}</p>
-  </div>
-</footer>
+${SP.footer}
 </body>
 </html>
 `;
@@ -189,20 +173,21 @@ function buildAbout() {
   const body = `<div class="wrap narrow">
   <article class="post">
     <header><h1>About the Meditation Center</h1></header>
-    <div class="infobox">
-      <p><b>Events:</b> <a href="/">Upcoming</a> · <a href="/calendar/">Calendar</a> · <a href="${E(center.sosPage)}" target="_blank" rel="noopener">Our page on sos.org ↗</a> · <a href="https://www.sos.org/find-local-programs/" target="_blank" rel="noopener">Programs worldwide ↗</a></p>
-      <p><b>Contact:</b> <a href="mailto:${E(center.email)}">${E(center.email)}</a> · ${WHATSAPP} · <a href="#directions">Directions</a></p>
-    </div>
     <div class="prose">${about}</div>
   </article>
 </div>`;
   return page(`About · ${center.name}`, `About the ${center.name}.`, body, '/about/');
 }
+function buildGuidelines() {
+  const g = fs.readFileSync(path.join(ROOT, 'content/pages/guidelines.html'), 'utf8');
+  return page(`Visitor guidelines · ${center.name}`, 'Guidelines for visiting the Science of Spirituality Minneapolis Meditation Center.',
+    `<div class="wrap narrow"><article class="post"><header><h1>Visitor guidelines</h1></header><div class="prose">${g}</div></article></div>`, '/guidelines/');
+}
 function build404() {
   return page('Page not found', 'Page not found', `<div class="wrap narrow center" style="padding:72px 0">
   <h1>Page not found</h1>
   <p class="lead">That page may have moved when the website was refreshed.</p>
-  <p><a class="btn" href="/">Upcoming events</a> <a class="btn ghost" href="/news/">News &amp; archive</a></p>
+  <p><a class="btn btn-primary" href="/">Upcoming events</a> <a class="btn btn-ghost" href="/news/">News &amp; archive</a></p>
 </div>`, '/404');
 }
 // What's new: user-facing items on sosmn.org; everything (incl. admin-only) on the admin site
@@ -211,7 +196,8 @@ function whatsNew(audience) {
   const GROUP = { new: 'New', improved: 'Improved', fixed: 'Fixed' };
   return list.map((r) => `<section class="rel"><h2>v${E(r.version.replace(/\.0$/, ''))} <small>${E(new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</small></h2>` +
     (r.summary ? `<p>${E(r.summary)}</p>` : '') +
-    Object.keys(GROUP).map((g) => { const xs = r.items.filter((i) => i.type === g); return xs.length ? `<h3>${GROUP[g]}</h3><ul>${xs.map((i) => `<li>${E(i.text)}${audience === 'admin' && i.audience === 'admin' ? ' <span class="tag">Admin</span>' : ''}</li>`).join('')}</ul>` : ''; }).join('') + '</section>').join('') ||
+    // People see only the brief highlights (when the release has them); the admin site shows the detailed notes
+    (audience !== 'admin' && r.highlights && r.highlights.length ? `<ul>${r.highlights.map((x) => `<li>${E(x)}</li>`).join('')}</ul>` : Object.keys(GROUP).map((g) => { const xs = r.items.filter((i) => i.type === g); return xs.length ? `<h3>${GROUP[g]}</h3><ul>${xs.map((i) => `<li>${E(i.text)}${audience === 'admin' && i.audience === 'admin' ? ' <span class="tag">Admin</span>' : ''}</li>`).join('')}</ul>` : ''; }).join('')) + '</section>').join('') ||
     '<p>No release notes yet.</p>';
 }
 
@@ -221,6 +207,7 @@ clearDir(OUT);
 write(OUT, 'news/index.html', buildIndex());
 arts.forEach((x, i) => write(OUT, `news/${x.slug}/index.html`, buildArticle(i, x)));
 write(OUT, 'about/index.html', buildAbout());
+write(OUT, 'guidelines/index.html', buildGuidelines());
 write(OUT, '404.html', build404());
 write(OUT, 'whats-new/index.html', page(`What’s new · ${center.name}`, 'How sosmn.org and Meditation Copilot have changed over time.',
   `<div class="wrap narrow"><article class="post"><header><h1>What’s new</h1><p class="note">Changes to sosmn.org and Meditation Copilot, newest first. You are using ${E(versionLabel)}.</p></header><div class="prose whats-new">${whatsNew('user')}</div></article></div>`, '/whats-new/'));
@@ -283,6 +270,7 @@ clearDir(OUT_ADMIN);
 copyDir(path.join(ROOT, 'apps/admin'), OUT_ADMIN);
 fs.copyFileSync(path.join(SITE_SRC, 'css/site.css'), path.join(OUT_ADMIN, 'css/site.css'));
 write(OUT_ADMIN, 'js/auth.js', applyEnv(fs.readFileSync(path.join(SITE_SRC, 'js/auth.js'), 'utf8')));
+fs.copyFileSync(path.join(SITE_SRC, 'js/types.js'), path.join(OUT_ADMIN, 'js/types.js'));
 copyDir(path.join(SITE_SRC, 'img'), path.join(OUT_ADMIN, 'img'));
 for (const f of ['index.html']) { const p = path.join(OUT_ADMIN, f); fs.writeFileSync(p, render(fs.readFileSync(p, 'utf8'))); }
 write(OUT_ADMIN, 'js/admin.js', applyEnv(fs.readFileSync(path.join(OUT_ADMIN, 'js/admin.js'), 'utf8')));

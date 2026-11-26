@@ -31,6 +31,9 @@
   $('sheet').addEventListener('click', function (e) { if (e.target === $('sheet') || e.target.closest('[data-close]')) closeSheet(); });
   function headcount(e) { var n = e.headcount != null ? e.headcount : e.going; return n ? n + ' going' : ''; }
   function badge(e) { return e.status === 'cancelled' ? '<span class="tag cx">Cancelled</span>' : ''; }
+  var T = window.SOS_TYPES;
+  var FREE = '<span class="tag free">FREE</span>';
+  function kicker(e) { return esc([T.label(e.kind), FORMAT[e.format] || '', e.access !== 'public' ? T.AUDIENCE[e.access] : ''].filter(Boolean).join(' · ')); }
 
   /* ---------- account: sign-in, contact details ---------- */
   function paintAccount() {
@@ -68,17 +71,31 @@
     });
   }
   function contactSheet(first) {
-    var s = S.session(), c = (s && s.contact) || {};
+    var s = S.session(), c = (s && s.contact) || {}, nm = c.name || (s && s.user && s.user.name) || '';
     return new Promise(function (res, rej) {
-      sheet('<h2 class="sheet-title">' + (first ? 'Your contact details' : 'Contact details') + '</h2>' +
-        '<p class="small">We use these only to remind you about events you sign up for. They stay with the Minneapolis Center and are never shared.</p>' +
+      sheet('<h2 class="sheet-title">' + (first ? 'Your details' : 'Your details') + '</h2>' +
+        '<label class="field" for="cName">Your name</label><input class="input" id="cName" autocomplete="name" maxlength="80" value="' + esc(nm) + '">' +
+        (c.providerName && c.providerName !== nm ? '<p class="small muted" style="margin:4px 0 0">From ' + (s.provider === 'microsoft' ? 'Microsoft' : 'Google') + ': ' + esc(c.providerName) + '</p>' : '') +
         '<label class="field">Email</label><input class="input" value="' + esc(c.email || (s && s.user && s.user.email) || '') + '" disabled>' +
+        '<label class="field" for="cZip">ZIP code <span class="muted">(optional)</span></label><input class="input" id="cZip" inputmode="numeric" autocomplete="postal-code" maxlength="10" placeholder="55421" value="' + esc(c.zip || '') + '">' +
         '<label class="field" for="cPhone">Mobile phone <span class="muted">(optional)</span></label><input class="input" id="cPhone" type="tel" autocomplete="tel" value="' + esc(c.phone || '') + '" placeholder="612-555-0100">' +
-        '<label class="check"><input type="checkbox" id="cSms"' + (c.smsOk ? ' checked' : '') + '> OK to send me event reminders by text or WhatsApp</label>' +
+        '<label class="check" id="cSmsRow"' + (c.phone ? '' : ' hidden') + '><input type="checkbox" id="cSms"' + (c.smsOk || !c.phone ? ' checked' : '') + '> OK to send me event reminders by text or WhatsApp <span class="muted">(uncheck if you’d rather not)</span></label>' +
+        '<label class="check"><input type="checkbox" id="cNoMsg"' + (c.noMessages ? ' checked' : '') + '> Please don’t send me any messages from the center</label>' +
+        '<p class="privacy-note small">🔒 <b>Your privacy:</b> we use your details only to share center programs and reminders, and to know roughly where our visitors come from (ZIP code). They are kept confidential by the Minneapolis Center volunteers, never sold or shared, and you can ask us to delete them at any time. <a href="/privacy/">Privacy notice</a></p>' +
         '<p class="error" id="cErr" role="alert"></p>' +
         '<div class="actions"><button class="btn btn-ghost" data-close type="button">Cancel</button><button class="btn btn-primary" id="cSave" type="button">Save</button></div>');
+      // Typing a number ticks the reminders box (people can untick it); clearing the number hides it
+      var hadPhone = !!c.phone;
+      $('cPhone').addEventListener('input', function () {
+        var has = !!this.value.trim(); $('cSmsRow').hidden = !has;
+        if (has && !hadPhone && !$('cNoMsg').checked) $('cSms').checked = true;
+        hadPhone = has;
+      });
+      $('cNoMsg').addEventListener('change', function () { if (this.checked) $('cSms').checked = false; });
       $('cSave').onclick = function () {
-        S.saveContact({ phone: $('cPhone').value.trim() || null, smsOk: $('cSms').checked }).then(function () { closeSheet(); toast('Saved.'); res(S.session()); }, function (x) { $('cErr').textContent = x.message; });
+        var phone = $('cPhone').value.trim() || null;
+        S.saveContact({ name: $('cName').value.trim(), zip: $('cZip').value.trim() || null, phone: phone, smsOk: !!phone && $('cSms').checked && !$('cNoMsg').checked, noMessages: $('cNoMsg').checked })
+          .then(function () { return S.refreshMe(); }).then(function () { closeSheet(); toast('Saved.'); res(S.session()); }, function (x) { $('cErr').textContent = x.message; });
       };
       $('sheet').addEventListener('close', function once() { if (!S.contactOk()) rej(new Error('cancelled')); }, { once: true });
     });
@@ -86,7 +103,7 @@
   function accountSheet() {
     var s = S.session(); if (!s) return;
     sheet('<h2 class="sheet-title">' + esc(s.user.name || 'Your account') + '</h2><p class="small muted">' + esc(s.user.email) + ' · signed in with ' + (s.provider === 'microsoft' ? 'Microsoft' : 'Google') + '</p>' +
-      '<div class="stack"><button class="btn btn-ghost btn-block" id="aContact" type="button">Contact details</button><a class="btn btn-ghost btn-block" href="/calendar/?mine=1">My events</a>' +
+      '<div class="stack"><button class="btn btn-ghost btn-block" id="aContact" type="button">Your details</button><a class="btn btn-ghost btn-block" href="/calendar/?mine=1">My events</a>' +
       '<button class="btn btn-ghost btn-block" id="aOut" type="button">Sign out</button></div><div class="actions"><button class="btn btn-ghost" data-close type="button">Close</button></div>');
     $('aContact').onclick = function () { contactSheet(false).catch(function () {}); };
     $('aOut').onclick = function () { S.signOut(); closeSheet(); toast('Signed out.'); if (page === 'event') loadEvent(); else if (page === 'home') loadHome(); };
@@ -114,8 +131,8 @@
   function heroCard(e) {
     var img = flyer(e);
     return '<a class="card ev-hero" href="/event/?id=' + encodeURIComponent(e.id) + '">' +
-      '<span class="ev-img">' + (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<span class="ph" aria-hidden="true">🪷</span>') + '</span>' +
-      '<span class="ev-body"><span class="kicker">' + (e.hero ? '★ Featured' : 'Next event') + ' · ' + esc(FORMAT[e.format] || '') + '</span>' +
+      '<span class="ev-img">' + (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<span class="ph" style="--tc:' + T.color(e.kind) + '">' + T.icon(e.kind, 96) + '</span>') + '</span>' +
+      '<span class="ev-body"><span class="kicker">' + (e.hero ? '★ Featured · ' : '') + kicker(e) + ' ' + FREE + '</span>' +
       '<b class="ev-title">' + esc(e.title) + '</b><span class="ev-when">' + esc(whenText(e)) + '</span>' +
       (e.venue && e.format !== 'online' ? '<span class="ev-meta">' + esc(e.venue) + '</span>' : '') +
       (e.description ? '<span class="ev-desc">' + esc(e.description.slice(0, 220)) + (e.description.length > 220 ? '…' : '') + '</span>' : '') +
@@ -123,8 +140,8 @@
   }
   function smallCard(e) {
     return '<a class="card ev-card" href="/event/?id=' + encodeURIComponent(e.id) + '">' +
-      '<span class="date-chip"><b>' + esc(fmt(e.startsAt, { day: 'numeric' })) + '</b>' + esc(fmt(e.startsAt, { month: 'short' })) + '</span>' +
-      '<span class="ev-body"><span class="kicker">' + esc(FORMAT[e.format] || '') + '</span><b class="ev-title">' + esc(e.title) + '</b>' +
+      T.thumb(e, flyer(e, true), 52) +
+      '<span class="ev-body"><span class="kicker">' + kicker(e) + ' ' + FREE + '</span><b class="ev-title">' + esc(e.title) + '</b>' +
       '<span class="ev-when">' + esc(whenText(e)) + '</span><span class="ev-foot">' + myTag(e) + '<span class="muted small">' + esc(headcount(e)) + '</span>' + badge(e) + '</span></span></a>';
   }
 
@@ -173,7 +190,7 @@
       var k = dayKey(d.getTime() + 12 * 3600000), list = byDay[k] || [];
       html += '<div class="cal-day' + (d.getMonth() !== m ? ' out' : '') + (k === todayK ? ' today' : '') + '"><span class="dnum">' + d.getDate() + '</span>' +
         list.map(function (e) {
-          return '<a class="cal-ev' + (e.status === 'cancelled' ? ' cx' : '') + (e.myRsvp === 'going' || e.myCheckin ? ' mine' : '') + '" href="/event/?id=' + encodeURIComponent(e.id) + '" title="' + esc(e.title) + '">' +
+          return '<a class="cal-ev' + (e.status === 'cancelled' ? ' cx' : '') + (e.myRsvp === 'going' || e.myCheckin ? ' mine' : '') + '" style="--tc:' + T.color(e.kind) + '" href="/event/?id=' + encodeURIComponent(e.id) + '" title="' + esc(T.label(e.kind) + ': ' + e.title) + '">' +
             '<i>' + esc(fmt(e.startsAt, { hour: 'numeric', minute: '2-digit' }).replace(':00', '')) + '</i> ' + esc(e.title) + '</a>';
         }).join('') + '</div>';
       if (i === 34 && d.getMonth() !== m) break;
@@ -220,13 +237,17 @@
     var e = ev, img = flyer(e), past = e.endsAt < Date.now(), cx = e.status === 'cancelled';
     var mapQ = encodeURIComponent((e.address || e.venue || '4054 Van Buren St NE, Columbia Heights, MN 55421'));
     var html = '<article class="card ev-page">' + (img ? '<a class="ev-flyer" href="' + esc(img) + '" target="_blank" rel="noopener"><img src="' + esc(img) + '" alt="Event flyer"></a>' : '') +
-      '<div class="ev-page-body"><p class="kicker">' + esc(FORMAT[e.format] || '') + (e.repeats ? ' · repeats ' + esc(e.repeats) : '') + '</p>' +
+      '<div class="ev-page-body"><div class="ev-type">' + T.icon(e.kind, 40) + '<p class="kicker">' + kicker(e) + (e.repeats ? ' · repeats ' + esc(e.repeats) : '') + '</p></div>' +
       '<h1>' + esc(e.title) + '</h1>' + (cx ? '<p class="notice warn"><b>This event was cancelled.</b></p>' : '') +
+      '<p class="free-line">' + FREE + ' <span>This program is free of charge, like all our programs. No registration fee, no donations expected.</span></p>' +
       '<p class="ev-when big">🗓 ' + esc(fmt(e.startsAt, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })) + '<br>🕒 ' +
         esc(fmt(e.startsAt, { hour: 'numeric', minute: '2-digit' }) + ' – ' + fmt(e.endsAt, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })) + '</p>' +
       (e.format !== 'online' ? '<p class="ev-where">📍 <b>' + esc(e.venue || 'Minneapolis Meditation Center') + '</b>' + (e.address ? '<br>' + esc(e.address) : '') +
         ' · <a href="https://www.google.com/maps/search/?api=1&query=' + mapQ + '" target="_blank" rel="noopener">Map ↗</a></p>' : '') +
       (e.description ? '<div class="ev-desc-full">' + esc(e.description).replace(/\n/g, '<br>') + '</div>' : '') +
+      (e.format !== 'online' ? '<p class="ev-kids">' + (e.children ? '👧 <b>Children’s program available.</b> Children are welcome in their own program during this event.'
+        : '👪 No separate children’s program at this event. Parents, please keep children with you.') + '</p>' : '') +
+      (e.format !== 'online' ? '<p class="small muted">Please read our <a href="/guidelines/">visitor guidelines</a>: the center is monitored by video for safety and security, and photography needs permission.</p>' : '') +
       '<p class="muted small">' + esc(headcount(e)) + (e.checkedIn ? ' · ' + (e.checkedIn + (e.checkedInGuests || 0)) + ' checked in' : '') + '</p></div></article>';
 
     // RSVP
@@ -371,22 +392,24 @@
     }).catch(function (x) { if (x.message !== 'cancelled') box.innerHTML = '<div class="card"><p>' + esc(x.message) + '</p></div>'; });
   }
 
-  /* ---------- layout switch (phone / computer) ---------- */
+  /* ---------- layout switch (phone / computer): the small icon in the header ---------- */
   function layoutSwitch() {
-    var KEY = 'mc.layout', root = document.documentElement;
+    var KEY = 'mc.layout', root = document.documentElement, btn = $('viewBtn');
     function pref() { try { return localStorage.getItem(KEY) || 'auto'; } catch (e) { return 'auto'; } }
-    function paint() {
-      var m = root.getAttribute('data-layout') || 'mobile', p = pref();
-      document.querySelectorAll('.view-switch').forEach(function (el) {
-        el.innerHTML = '<span class="vs-label">View</span><button type="button" data-view="mobile" aria-pressed="' + (m === 'mobile') + '">📱 Mobile</button>' +
-          '<button type="button" data-view="desktop" aria-pressed="' + (m === 'desktop') + '">🖥️ Desktop</button>' + (p !== 'auto' ? '<button type="button" class="vs-auto" data-view="auto">Auto</button>' : '');
+    if (!btn) return;
+    var m = root.getAttribute('data-layout') || 'mobile';
+    btn.firstElementChild.textContent = m === 'desktop' ? '🖥️' : '📱';
+    btn.title = 'Layout: ' + (pref() === 'auto' ? 'Auto (' + (m === 'desktop' ? 'computer' : 'phone') + ')' : m === 'desktop' ? 'Computer' : 'Phone');
+    btn.onclick = function () {
+      var p = pref(), opt = function (v, label, hint) {
+        return '<button type="button" class="btn btn-block ' + (p === v ? 'btn-primary' : 'btn-ghost') + '" data-view="' + v + '" style="margin-top:8px">' + label + (hint ? ' <span class="small" style="font-weight:400">' + hint + '</span>' : '') + '</button>'; };
+      sheet('<h2 class="sheet-title">Layout</h2><p class="small muted">Choose how this site looks on this device.</p>' +
+        opt('auto', 'Auto', '(recommended)') + opt('mobile', '📱 Phone') + opt('desktop', '🖥️ Computer') +
+        '<div class="actions"><button class="btn btn-ghost" data-close type="button">Close</button></div>');
+      $('sheetBody').querySelectorAll('[data-view]').forEach(function (b) {
+        b.onclick = function () { var u = new URL(location.href); u.searchParams.set('view', b.dataset.view); location.replace(u.toString()); };
       });
-    }
-    document.addEventListener('click', function (e) {
-      var b = e.target.closest && e.target.closest('.view-switch [data-view]'); if (!b) return;
-      var u = new URL(location.href); u.searchParams.set('view', b.dataset.view); location.replace(u.toString());
-    });
-    paint();
+    };
   }
 
   /* ---------- start ---------- */

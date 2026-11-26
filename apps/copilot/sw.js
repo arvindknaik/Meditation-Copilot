@@ -25,6 +25,8 @@ const ASSETS = [
   './js/calendar.js',
   './js/vendor/qrcode.js',
   './js/events.js',
+  './js/library.js',
+  './js/share.js',
   './js/social.js',
   './js/goals.js',
   './js/sync.js',

@@ -96,12 +96,15 @@ function draftNotes(v) {
   const short = v.version.replace(/\.0$/, '');
   return `# Release notes for v${short}
 # Edit this file, save it, then come back and press Enter.
-# One line per change, under New / Improved / Fixed. Start a line with "admin:" if only admins should see it
-# (it then appears on the admin site and GitHub, not in the apps). Delete lines users don't need. Lines starting with # are ignored.
+# Highlights: up to 3 short lines. Only these appear in the apps' "What's new".
+# New / Improved / Fixed: the detailed notes, for the admin site and GitHub. Start a line with "admin:" for admin-only changes.
+# Lines starting with # are ignored.
 # Changes since ${since || 'the beginning'}:
 ${subjects.map((s) => '#   ' + s).join('\n')}
 
 summary: 
+
+## Highlights
 
 ## New
 
@@ -111,14 +114,15 @@ summary:
 `;
 }
 function parseNotes(txt, v) {
-  const rel = { version: v.version, date: today(), summary: '', items: [] }; let type = null;
+  const rel = { version: v.version, date: today(), summary: '', highlights: [], items: [] }; let type = null;
   for (const raw of txt.split('\n')) {
     const l = raw.trim(); if (!l || l.startsWith('# ')) continue;
     if (/^summary:/i.test(l)) { rel.summary = l.replace(/^summary:\s*/i, ''); continue; }
     // Headings: "## New", "New", "**New**" or "New:" (Notepad's Markdown view can drop the ## when it saves)
-    const h = l.replace(/^#+\s*/, '').replace(/[*_:]/g, '').trim().match(/^(New|Improved|Fixed)$/i); if (h) { type = h[1].toLowerCase(); continue; }
+    const h = l.replace(/^#+\s*/, '').replace(/[*_:]/g, '').trim().match(/^(Highlights|New|Improved|Fixed)$/i); if (h) { type = h[1].toLowerCase(); continue; }
     if (!type || l.startsWith('#')) continue;
     const t = l.replace(/^([-*•]|\d+[.)])\s*/, ''); const admin = /^admin:/i.test(t);
+    if (type === 'highlights') { if (rel.highlights.length < 3) rel.highlights.push(t); continue; }
     rel.items.push({ type, text: t.replace(/^admin:\s*/i, ''), audience: admin ? 'admin' : 'all' });
   }
   return rel;
@@ -157,7 +161,7 @@ async function toProd() {
   const [maj, min] = v.version.split('.').map(Number); writeJSON('version.json', { version: `${maj}.${min + 1}.0`, build: 0, date: today() });
   run('git', ['add', 'version.json']); run('git', ['commit', '-q', '-m', `Start v${maj}.${min + 1}`]);
   run('git', ['push', 'origin', 'main', '--follow-tags']);
-  const body = rel.items.map((i) => `- **${i.type}**${i.audience === 'admin' ? ' (admin)' : ''}: ${i.text}`).join('\n') + `\n\nTests: see reports/latest.md at ${d.prod.commit}.`;
+  const body = (rel.highlights.length ? '**Highlights**\n' + rel.highlights.map((x) => '- ' + x).join('\n') + '\n\n' : '') + rel.items.map((i) => `- **${i.type}**${i.audience === 'admin' ? ' (admin)' : ''}: ${i.text}`).join('\n') + `\n\nTests: see reports/latest.md at ${d.prod.commit}.`;
   if (run('gh', ['--version'], { capture: true, allowFail: true })) {
     run('gh', ['release', 'create', `v${short}`, '--title', `v${short} · ${rel.date}`, '--notes', body], { allowFail: true });
   } else console.log(`\n(GitHub release: install the GitHub CLI "gh" to create it automatically, or add it on github.com → Releases → Draft from tag v${short}.)`);

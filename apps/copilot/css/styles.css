@@ -771,3 +771,26 @@ html.mc-desktop .hero-ev .he-ph { aspect-ratio: auto !important; }
 .cp-min { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
 .ch-dot.miss { background: #e8b4ae; border-color: #e8b4ae; }
 #firstDlg .sheet-body { max-height: 88vh; overflow: auto; }
+
+/* Library and Education challenges (v0.20) */
+.thought-foot { margin-top: 10px; font-style: normal; font-family: var(--sans); }
+.read-btn { font: inherit; font-size: .82rem; font-weight: 700; border: 1px solid var(--gold); color: var(--gold-ink); background: transparent; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+.read-btn.done { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); cursor: default; display: inline-block; }
+.art-end { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); text-align: center; }
+.lib-item { align-items: center; }
+.lib-item > span:nth-child(2) { flex: 1; min-width: 0; }
+.lib-item .ext { color: var(--muted); }
+.lib-item[disabled] { opacity: .55; cursor: default; }
+.lib-thumb { width: 34px; height: 48px; object-fit: cover; border-radius: 4px; flex: 0 0 34px; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.reading-card .rd-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; }
+.reading-card .rd-grid b { display: block; font-size: 1.05rem; }
+.reading-card .rd-grid small { color: var(--muted); font-size: .74rem; }
+.book-cover { float: right; width: 92px; margin: 0 0 10px 14px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.ch-grid-btns { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 8px; clear: both; margin: 8px 0; }
+.ch-btn { font: inherit; font-weight: 700; aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+.ch-btn.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+.book-done { clear: both; margin-top: 16px; padding: 14px; border-radius: 12px; background: var(--gold-soft); text-align: center; font-weight: 700; }
+.goal-acts { display: flex; gap: 8px; margin-top: 8px; }
+.cu-item { padding: 10px 0; border-top: 1px solid var(--line); }
+.cu-item:first-child { border-top: 0; }
+.cu-item .quote { margin: 6px 0 8px; }

@@ -9,15 +9,20 @@
   var $ = function (id) { return document.getElementById(id); };
   var app = $('app');
   var FORMAT = { in_person: 'In person', online: 'Online', hybrid: 'In person & online' };
-  var ACCESS = { public: 'Everyone', satsang: 'Seeker friends & initiates', initiates: 'Initiates only' };
-  var CATEGORY = { seeker: 'Seeker', friend: 'Seeker friend', initiate: 'Initiate' };
-  var KIND = { intro: 'Introduction', workshop: 'Workshop', satsang: 'Satsang', darshan: 'Darshan / retreat', seva: 'Seva', community: 'Community / celebration', other: 'Other' };
-  var AUD = { all: 'Everyone', 'new': 'New (introduction)', seeker: 'Seekers', initiate: 'Initiates' };
-  var LEVEL = { 'new': 'New', l2: 'Seeker · L2', l3: 'Seeker · L3', l4: 'Seeker · L4', initiate: 'Initiate' };
-  var LEVEL_HINT = { 'new': 'Needs an introduction', l2: 'Going deeper: workshops, a 21-Day Foundation or Advance, questions answered', l3: 'Regular satsang, early-morning practice, toward 60 min daily',
-    l4: 'The role of the Master, Darshan, seva', initiate: 'Steady progress in meditation and seva' };
-  var MILESTONE = { challenge_done: 'Completed a 21-day (or the original 42-day) challenge', questions_clear: 'No open questions on the teachings', met_master: 'Met Sant Rajinder Singh Ji in person' };
-  var TABS = [['events', 'Events', 'host'], ['followups', 'Follow-ups', 'admin'], ['journey', 'Journey', 'admin'], ['people', 'People', 'admin'], ['invite', 'Invite', 'admin'], ['challenges', 'Challenges', 'admin'],
+  var T = window.SOS_TYPES;                                   // event types and audiences (js/types.js, shared with sosmn.org)
+  var ACCESS = T.AUDIENCE;                                     // public · satsang = Community (by invitation) · initiates
+  var KIND = {}; T.order.forEach(function (k) { KIND[k] = T.label(k); });
+  var CATEGORY = { seeker: 'Seeker', friend: 'Satsangi', initiate: 'Initiate' };
+  // People: stage (only moves up) and status (see SOSMN-SRM.md)
+  var LEVEL = { potential: 'Potential', 'new': 'New', seeker: 'Seeker', satsangi: 'Satsangi', initiate: 'Initiate' };
+  var LEVEL_HINT = { potential: 'We have their details; announcements only if they agreed', 'new': 'Interested: signed up for an event, hasn’t come yet',
+    seeker: 'Has come. Orientation: 5 workshops and 2 challenges', satsangi: 'Attends satsang regularly (set by an admin); sees Community events', initiate: 'Initiated (permanent): steady progress in meditation and seva' };
+  var STATUS = { active: ['Active', 'came in the last 60 days'], drifted: ['Drifted', 'came in the last 12 months, not in 60 days'], dropped: ['Dropped', 'last came over 12 months ago'],
+    passive: ['Passive', 'away for a known reason; staying gently in touch'], declined: ['Declined', 'asked for no messages'] };
+  var MILESTONE = { challenge_done: 'Finished a challenge (told us in person)', questions_clear: 'No open questions on the teachings', met_master: 'Met Sant Rajinder Singh Ji in person' };
+  function flyerThumb(e) { return e.flyerId ? S.CFG.apiBase + '/api/flyers/' + encodeURIComponent(e.flyerId) + '?size=thumb' : null; }
+  function stTag(st) { return st ? '<span class="tag st st-' + esc(st) + '" title="' + esc(STATUS[st][1]) + '">' + esc(STATUS[st][0]) + '</span>' : ''; }
+  var TABS = [['events', 'Events', 'host'], ['followups', 'Follow-ups', 'admin'], ['journey', 'Journey', 'admin'], ['people', 'People', 'admin'], ['invite', 'Invite', 'admin'], ['challenges', 'Challenges', 'admin'], ['library', 'Library', 'admin'],
     ['overview', 'Overview', 'admin'], ['team', 'Team', 'admin'], ['log', 'Activity', 'admin']];
   var ACTIONS = {
     sign_in: 'Signed in', checkin: 'Checked someone in', checkin_undo: 'Undid a check-in', event_create: 'Created an event', event_edit: 'Edited an event',
@@ -95,7 +100,7 @@
     window.scrollTo(0, 0);
     ({ events: drawEvents, event: function () { drawEvent(decodeURIComponent(p[1] || ''), p[2]); }, people: drawPeople, person: function () { drawPerson(decodeURIComponent(p[1] || '')); },
       followups: drawFollowups, journey: function () { drawJourney(p[1] || ''); },
-      invite: drawInvite, challenges: drawChallenges, overview: drawOverview, team: drawTeam, log: drawLog }[p[0]] || drawEvents)();
+      invite: drawInvite, challenges: drawChallenges, library: drawLibrary, overview: drawOverview, team: drawTeam, log: drawLog }[p[0]] || drawEvents)();
   }
   window.addEventListener('hashchange', route);
 
@@ -118,8 +123,8 @@
         '<div class="adm-list">' + (list.length ? list.map(function (e) {
           var cx = e.status === 'cancelled', onHome = top.indexOf(e) >= 0;
           return '<a class="card adm-ev' + (cx ? ' cx' : '') + '" href="#event/' + encodeURIComponent(e.id) + '">' +
-            '<span class="date-chip"><b>' + esc(fmt(e.startsAt, { day: 'numeric' })) + '</b>' + esc(fmt(e.startsAt, { month: 'short' })) + '</span>' +
-            '<span class="ev-body"><b class="ev-title">' + esc(e.title) + '</b><span class="small">' + esc(whenText(e)) + ' · ' + esc(FORMAT[e.format]) + (e.access !== 'public' ? ' · ' + esc(ACCESS[e.access]) : '') + '</span>' +
+            T.thumb(e, flyerThumb(e), 48) +
+            '<span class="ev-body"><b class="ev-title">' + esc(e.title) + '</b><span class="small">' + esc(KIND[e.kind] || '') + ' · ' + esc(whenText(e)) + ' · ' + esc(FORMAT[e.format]) + (e.access !== 'public' ? ' · ' + esc(ACCESS[e.access]) : '') + (e.children ? ' · 👧 children’s program' : '') + '</span>' +
             '<span class="ev-foot"><span class="small"><b>' + n(e.headcount) + '</b> going' + (e.guests ? ' (incl. ' + e.guests + ' guests)' : '') + ' · <b>' + n(e.checkedIn + (e.checkedInGuests || 0)) + '</b> checked in · ' + n(e.views) + ' views</span>' +
             (cx ? '<span class="tag cx">Cancelled</span>' : '') + (onHome ? '<span class="tag' + (e.id === heroId ? ' gold' : '') + '">' + (e.id === heroId ? '★ Home page hero' : 'On home page') + '</span>' : '') +
             (e.repeats ? '<span class="tag">Repeats ' + esc(e.repeats) + '</span>' : '') + '</span></span></a>';
@@ -144,7 +149,8 @@
     var inRows = rows.filter(function (x) { return x.checkedInAt; });
     var sum = function (l, k) { return l.reduce(function (a, x) { return a + (x[k] || 0); }, 0); };
     app.innerHTML = '<p class="crumbs"><a href="#events">‹ Events</a></p>' +
-      '<div class="card adm-head-card"><div class="adm-head-main"><p class="kicker">' + esc(KIND[e.kind] || 'Other') + ' · ' + esc(FORMAT[e.format]) + ' · ' + esc(ACCESS[e.access]) + (e.repeats ? ' · repeats ' + esc(e.repeats) : '') + '</p>' +
+      '<div class="card adm-head-card"><div class="adm-head-main">' + (e.flyerId ? '<a class="adm-flyer" href="' + esc(S.CFG.apiBase + '/api/flyers/' + encodeURIComponent(e.flyerId)) + '" target="_blank" rel="noopener" title="Open the flyer"><img src="' + esc(flyerThumb(e)) + '" alt="Event flyer"></a>' : '') +
+        '<div class="ev-type">' + T.icon(e.kind, 36) + '<p class="kicker">' + esc(KIND[e.kind] || '') + ' · ' + esc(FORMAT[e.format]) + ' · ' + esc(ACCESS[e.access]) + (e.children ? ' · 👧 Children’s program' : '') + (e.repeats ? ' · repeats ' + esc(e.repeats) : '') + '</p></div>' +
         '<h1>' + esc(e.title) + '</h1>' + (cx ? '<p class="notice warn"><b>Cancelled.</b> People can still see it, marked as cancelled.</p>' : '') +
         '<p><b>' + esc(day(e.startsAt)) + '</b> · ' + esc(fmt(e.startsAt, { hour: 'numeric', minute: '2-digit' })) + '–' + esc(fmt(e.endsAt, { hour: 'numeric', minute: '2-digit' })) +
         (e.venue && e.format !== 'online' ? ' · ' + esc(e.venue) : '') + '</p>' +
@@ -364,10 +370,10 @@
     var b = sheet('<h2 class="sheet-title">' + (e ? 'Edit event' : 'New event') + '</h2><form id="ef">' +
       '<label class="field" for="fTitle">Title</label><input class="input" id="fTitle" required maxlength="120" value="' + esc(e ? e.title : '') + '">' +
       '<div class="grid2"><div><label class="field" for="fFormat">Format</label><select class="input" id="fFormat">' + Object.keys(FORMAT).map(function (k) { return '<option value="' + k + '"' + ((e ? e.format : 'in_person') === k ? ' selected' : '') + '>' + FORMAT[k] + '</option>'; }).join('') + '</select></div>' +
-      '<div><label class="field" for="fAccess">Who can see it</label><select class="input" id="fAccess">' + Object.keys(ACCESS).map(function (k) { return '<option value="' + k + '"' + ((e ? e.access : 'public') === k ? ' selected' : '') + '>' + ACCESS[k] + '</option>'; }).join('') + '</select></div></div>' +
-      '<div class="grid2"><div><label class="field" for="fKind">Type</label><select class="input" id="fKind">' + Object.keys(KIND).map(function (k) { return '<option value="' + k + '"' + ((e ? e.kind || 'other' : 'workshop') === k ? ' selected' : '') + '>' + KIND[k] + '</option>'; }).join('') + '</select></div>' +
-      '<div><label class="field" for="fLevel">Mainly for</label><select class="input" id="fLevel">' + Object.keys(AUD).map(function (k) { return '<option value="' + k + '"' + ((e ? e.level || 'all' : 'all') === k ? ' selected' : '') + '>' + AUD[k] + '</option>'; }).join('') + '</select></div></div>' +
-      '<p class="small muted">Type and “mainly for” drive the seeker journey (workshops and satsangs count toward levels). People don’t see them.</p>' +
+      '<div><label class="field" for="fKind">Type</label><select class="input" id="fKind">' + T.order.map(function (k) { return '<option value="' + k + '"' + ((e ? e.kind : 'workshop') === k ? ' selected' : '') + '>' + KIND[k] + '</option>'; }).join('') + '</select></div></div>' +
+      '<div class="grid2"><div><label class="field" for="fAccess">Audience</label><select class="input" id="fAccess">' + Object.keys(ACCESS).map(function (k) { return '<option value="' + k + '"' + ((e ? e.access : 'public') === k ? ' selected' : '') + '>' + ACCESS[k] + '</option>'; }).join('') + '</select></div>' +
+      '<div><label class="field">&nbsp;</label><label class="check"><input type="checkbox" id="fKids"' + (e && e.children ? ' checked' : '') + '> 👧 Children’s program available</label></div></div>' +
+      '<p class="small muted"><b>Public</b>: everyone. <b>Community</b>: people flagged Satsangi, and Initiates. <b>Initiates</b>: initiates only. Without a children’s program, the event page asks parents to keep children with them. Workshops and satsangs count toward each person’s stage.</p>' +
       '<div class="grid3"><div><label class="field" for="fDate">Date <span class="muted" id="fDateHint"></span></label><input class="input" id="fDate" type="date" required value="' + (st ? st.date : defDate) + '"></div>' +
       '<div><label class="field" for="fStart">Starts</label><input class="input" id="fStart" type="time" required value="' + (st ? st.time : '18:00') + '"></div>' +
       '<div><label class="field" for="fEnd">Ends</label><input class="input" id="fEnd" type="time" required value="' + (en ? en.time : '19:30') + '"></div></div>' +
@@ -430,7 +436,7 @@
       var startsAt = centerTime(d.y, d.m, d.d, s[0], s[1]), endsAt = centerTime(d.y, d.m, d.d, z[0], z[1]);
       if (endsAt <= startsAt) endsAt += 86400000;
       var f = $('fFormat').value;
-      var payload = { title: $('fTitle').value, format: f, access: $('fAccess').value, kind: $('fKind').value, level: $('fLevel').value, startsAt: startsAt, endsAt: endsAt, timezone: TZ,
+      var payload = { title: $('fTitle').value, format: f, access: $('fAccess').value, kind: $('fKind').value, children: $('fKids').checked, startsAt: startsAt, endsAt: endsAt, timezone: TZ,
         venue: f === 'online' ? '' : $('fVenue').value, address: f === 'online' ? '' : $('fAddr').value, onlineUrl: f === 'in_person' ? '' : $('fUrl').value, description: $('fDesc').value };
       var freq = !e && $('fRepeat') && $('fRepeat').value;
       if (freq) {
@@ -561,14 +567,14 @@
       case 'first_visit': return { subject: 'Thank you for coming to ' + ev, body: 'Hi ' + nm + ',\n\nThank you for joining us at ' + ev + '. It was lovely to have you at the center.\n\nIf you would like to go a little deeper, our weekly workshops are a good next step. You can see what’s coming up here: ' + up + '\n\nPlease feel free to reply with any questions about meditation.' + SIGN };
       case 'no_show': return { subject: 'We missed you at ' + ev, body: 'Hi ' + nm + ',\n\nWe missed you at ' + ev + ', and hope all is well. Here is what’s coming up next: ' + up + '\n\nHope to see you soon.' + SIGN };
       case 'drifting': return { subject: 'We’ve missed you at the center', body: 'Hi ' + nm + ',\n\nWe haven’t seen you at the center for a while and wanted to say hello. Here is what’s coming up: ' + up + '\n\nIf anything would make it easier to join us, or if you have questions about your meditation, just reply.' + SIGN };
-      case 'level_up': return it.level === 'l4'
-        ? { subject: 'Thank you for being part of our satsangs', body: 'Hi ' + nm + ',\n\nIt is wonderful to see you at satsang so regularly. If you would like to learn more about seva at the center, or about upcoming programs with Sant Rajinder Singh Ji Maharaj, we would be glad to talk.' + SIGN }
-        : { subject: 'Joining our satsangs', body: 'Hi ' + nm + ',\n\nIt is wonderful to see you at the workshops so regularly. You may enjoy our regular satsangs (group meditation and talks) as a next step: ' + up + '\n\nPlease reply if you have any questions.' + SIGN };
+      case 'orientation': return { subject: 'Congratulations, and a next step', body: 'Hi ' + nm + ',\n\nCongratulations on completing your workshops and challenges. It has been wonderful to see you at the center so regularly.\n\nYou may enjoy our regular satsangs (group meditation and talks) as a next step: ' + up + '\n\nPlease reply if you have any questions.' + SIGN };
+      case 'satsangi': return { subject: 'Thank you for being part of our satsangs', body: 'Hi ' + nm + ',\n\nIt is wonderful to see you at satsang so regularly. We would love to keep you informed about community programs, seva at the center, and upcoming programs with Sant Rajinder Singh Ji Maharaj.' + SIGN };
       default: return null;
     }
   }
-  var FU = { first_visit: ['First visit', 'Say thank you'], no_show: ['Said Going, didn’t come', 'Sorry we missed you'], level_up: ['New level', 'Encourage the next step'],
-    mentor: ['No mentor yet', 'Comes regularly; pair them with a mentor'], drifting: ['Drifting', 'Came often, not seen in 60+ days'] };
+  var FU = { first_visit: ['First visit', 'Say thank you'], no_show: ['Said Going, didn’t come', 'Sorry we missed you'],
+    orientation: ['Orientation done', '5+ workshops and 2 challenges: congratulate, suggest satsang'], satsangi: ['Ready to be Satsangi?', 'Comes to satsang regularly (6+ in 3 months). Flag them on their page if right'],
+    mentor: ['No mentor yet', 'Comes regularly; pair them with a mentor'], drifting: ['Drifted', 'Came often, not seen in 60+ days (Passive and Declined people are left out)'] };
 
   function drawFollowups() {
     loading();
@@ -579,12 +585,13 @@
         return '<div class="card"><div class="sec-head"><h2>' + esc(FU[k][0]) + ' <span class="count">' + list.length + '</span></h2><span class="small muted">' + esc(FU[k][1]) + '</span></div>' + list.map(function (it, i) {
           var m = message(it), digits = String(it.phone || '').replace(/\D/g, ''); if (digits.length === 10) digits = '1' + digits;
           var detail = it.kind === 'first_visit' ? 'Came to ' + esc(it.eventTitle) + ' · ' + esc(day(it.at)) : it.kind === 'no_show' ? 'Said Going to ' + esc(it.eventTitle) + ' · ' + esc(day(it.at))
-            : it.kind === 'drifting' ? it.visits + ' visits · last ' + esc(ago(it.lastVisitAt)) : it.kind === 'level_up' ? 'Now ' + esc(LEVEL[it.level]) + ' · last visit ' + esc(ago(it.lastVisitAt)) : it.visits + ' visits · last ' + esc(ago(it.lastVisitAt));
+            : it.kind === 'orientation' ? it.workshops + ' workshops · ' + it.challenges + ' challenges' : it.kind === 'satsangi' ? it.satsangs90 + ' satsangs in 3 months'
+            : it.visits + ' visits · last ' + esc(ago(it.lastVisitAt));
           return '<div class="ad-row fu-row" data-i="' + items.indexOf(it) + '"><span class="ag-main"><a href="#person/' + encodeURIComponent(it.userId) + '"><b>' + esc(it.name || '(no name)') + '</b></a> ' + lvTag(it.level) +
             '<small>' + detail + (it.mentorName ? ' · mentor ' + esc(it.mentorName) : '') + '</small></span><span class="fu-acts">' +
             (m && it.email ? '<a class="btn btn-ghost btn-sm" data-act="mail" href="mailto:' + esc(it.email) + '?subject=' + encodeURIComponent(m.subject) + '&body=' + encodeURIComponent(m.body) + '">✉ Email</a>' : '') +
             (m && digits ? '<a class="btn btn-ghost btn-sm" data-act="wa" target="_blank" rel="noopener" href="https://wa.me/' + digits + '?text=' + encodeURIComponent(m.body) + '">WhatsApp</a>' : '') +
-            (m ? '<button class="btn btn-ghost btn-sm" type="button" data-act="copy">Copy</button>' : '<a class="btn btn-ghost btn-sm" href="#person/' + encodeURIComponent(it.userId) + '">Assign mentor ›</a>') +
+            (m ? '<button class="btn btn-ghost btn-sm" type="button" data-act="copy">Copy</button>' : '') + (it.kind === 'mentor' || it.kind === 'satsangi' ? '<a class="btn btn-ghost btn-sm" href="#person/' + encodeURIComponent(it.userId) + '">' + (it.kind === 'mentor' ? 'Assign mentor ›' : 'Open their page ›') + '</a>' : '') +
             '<button class="btn btn-soft btn-sm" type="button" data-act="done">✓ Done</button><button class="btn btn-ghost btn-sm" type="button" data-act="skip" title="Not needed">Skip</button></span></div>';
         }).join('') + '</div>';
       }).join('');
@@ -607,33 +614,37 @@
     }).catch(fail);
   }
 
-  var jFilter = { level: '', drifting: false, nomentor: false, q: '' };
+  var jFilter = { level: '', status: '', sevadar: false, nomentor: false, q: '' };
   function drawJourney(lv) {
     if (lv !== undefined && lv !== '') jFilter.level = lv === 'all' ? '' : lv;
     loading();
-    var qs = '?level=' + encodeURIComponent(jFilter.level) + (jFilter.drifting ? '&drifting=1' : '') + (jFilter.nomentor ? '&nomentor=1' : '') + (jFilter.q ? '&q=' + encodeURIComponent(jFilter.q) : '');
+    var qs = '?stage=' + encodeURIComponent(jFilter.level) + '&status=' + encodeURIComponent(jFilter.status) + (jFilter.sevadar ? '&sevadar=1' : '') + (jFilter.nomentor ? '&nomentor=1' : '') + (jFilter.q ? '&q=' + encodeURIComponent(jFilter.q) : '');
     S.api('GET', '/api/admin/journey' + qs).then(function (j) {
-      var c = j.counts || {}, list = j.people || [];
+      var c = j.counts || {}, sc = j.statusCounts || {}, list = j.people || [];
       var lvTile = function (k) { return '<button type="button" class="kpi kpi-btn' + (jFilter.level === k ? ' on' : '') + '" data-lv="' + k + '"><small>' + esc(LEVEL[k]) + '</small><b>' + n(c[k]) + '</b><span>' + esc(LEVEL_HINT[k]) + '</span></button>'; };
-      app.innerHTML = '<div class="sec-head page-head"><h1>Seeker journey</h1><span class="small muted">Admins only</span></div>' +
-        '<div class="card"><div class="kpi-grid kpi-5">' + ['new', 'l2', 'l3', 'l4', 'initiate'].map(lvTile).join('') + '</div>' +
-        '<div class="kpi-grid" style="margin-top:12px">' + tile('First visits this month', n(j.firstVisitsThisMonth)) + tile('Drifting', n(j.drifting), 'came 2+ times, not in 60 days') + tile('No mentor yet', n(j.noMentor), 'coming regularly') + tile('Everyone', n(j.total)) + '</div>' +
-        '<details class="how"><summary>How levels are worked out</summary><ul class="small">' +
-          '<li><b>New</b>: signed up, invited or RSVP’d, but no check-in yet.</li><li><b>Seeker L2</b>: checked in at least once.</li>' +
-          '<li><b>Seeker L3</b>: 6 or more workshops, or 2 or more satsangs.</li><li><b>Seeker L4</b>: 6 or more satsangs, a Darshan/retreat, or “met Sant Rajinder Singh Ji in person”.</li>' +
-          '<li><b>Initiate</b>: status set to Initiate.</li><li>Levels only move up; long absences show as <b>Drifting</b>. Workshops and satsangs count by the event’s <b>Type</b>. You can set a level by hand on a person’s page.</li></ul></details></div>' +
-        '<div class="card"><div class="filters"><input type="search" class="input" id="jq" placeholder="Search name or email" value="' + esc(jFilter.q) + '">' +
-          '<label class="chk"><input type="checkbox" id="jDr"' + (jFilter.drifting ? ' checked' : '') + '> Drifting</label><label class="chk"><input type="checkbox" id="jNm"' + (jFilter.nomentor ? ' checked' : '') + '> No mentor</label>' +
-          (jFilter.level ? '<button class="btn btn-ghost btn-sm" id="jAll" type="button">Show all levels</button>' : '') + '</div>' +
-          (list.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Person</th><th>Level</th><th>Visits</th><th>Workshops · Satsangs</th><th>Last visit</th><th>Mentor</th></tr></thead><tbody>' + list.map(function (r) {
-            return '<tr><td><a href="#person/' + encodeURIComponent(r.userId) + '"><b>' + esc(r.name || '(no name)') + '</b></a><br><small class="muted">' + esc(r.email || '') + '</small></td><td>' + lvTag(r.level) + (r.override ? ' <small class="muted" title="Set by hand">✎</small>' : '') + (r.drifting ? ' <span class="tag cx">Drifting</span>' : '') + '</td>' +
+      var stTile = function (k) { return '<button type="button" class="kpi kpi-btn st-' + k + (jFilter.status === k ? ' on' : '') + '" data-st="' + k + '"><small>' + esc(STATUS[k][0]) + '</small><b>' + n(sc[k]) + '</b><span>' + esc(STATUS[k][1]) + '</span></button>'; };
+      app.innerHTML = '<div class="sec-head page-head"><h1>People’s journey</h1><span class="small muted">Admins only</span></div>' +
+        '<div class="card"><h2 class="h-sm">Stage</h2><div class="kpi-grid kpi-5">' + Object.keys(LEVEL).map(lvTile).join('') + '</div>' +
+        '<h2 class="h-sm" style="margin-top:14px">Status</h2><div class="kpi-grid kpi-5">' + Object.keys(STATUS).map(stTile).join('') + '</div>' +
+        '<div class="kpi-grid" style="margin-top:12px">' + tile('First visits this month', n(j.firstVisitsThisMonth)) + tile('No mentor yet', n(j.noMentor), 'coming regularly') + tile('Sevadars', n(j.sevadars)) + tile('Everyone', n(j.total)) + '</div>' +
+        '<details class="how"><summary>How stages and status are worked out</summary><ul class="small">' +
+          '<li><b>Potential</b>: we have their details but they haven’t signed up for an event. <b>New</b>: signed up for an event, hasn’t come yet. <b>Seeker</b>: has come at least once; orientation = 5 workshops and 2 challenges (shared from Copilot or ticked here).</li>' +
+          '<li><b>Satsangi</b>: set by an admin on the person’s page (Follow-ups suggests people with 6+ satsangs in 3 months); they see <b>Community</b> events. <b>Initiate</b>: permanent.</li>' +
+          '<li>Stages only move up. <b>Status</b> follows the last visit: Active (60 days), Drifted (12 months), Dropped (longer). <b>Passive</b> is set by an admin with a reason; <b>Declined</b> means they asked for no messages (they chose it in their details, or an admin set it).</li></ul></details></div>' +
+        '<div class="card"><div class="filters"><input type="search" class="input" id="jq" placeholder="Search name, email or ZIP" value="' + esc(jFilter.q) + '">' +
+          '<label class="chk"><input type="checkbox" id="jSv"' + (jFilter.sevadar ? ' checked' : '') + '> Sevadars</label><label class="chk"><input type="checkbox" id="jNm"' + (jFilter.nomentor ? ' checked' : '') + '> No mentor</label>' +
+          (jFilter.level || jFilter.status ? '<button class="btn btn-ghost btn-sm" id="jAll" type="button">Show everyone</button>' : '') + '</div>' +
+          (list.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Person</th><th>Stage · Status</th><th>Visits</th><th>Workshops · Satsangs</th><th>Last visit</th><th>Mentor</th></tr></thead><tbody>' + list.map(function (r) {
+            return '<tr><td><a href="#person/' + encodeURIComponent(r.userId) + '"><b>' + esc(r.name || '(no name)') + '</b></a>' + (r.sevadar ? ' <span class="tag gold" title="Sevadar">Sevadar</span>' : '') + '<br><small class="muted">' + esc(r.email || '') + (r.zip ? ' · ' + esc(r.zip) : '') + '</small></td>' +
+              '<td>' + lvTag(r.level) + (r.override ? ' <small class="muted" title="Set by hand">✎</small>' : '') + ' ' + stTag(r.status) + '</td>' +
               '<td>' + n(r.visits) + (r.guestsBrought ? '<br><small class="muted">+' + r.guestsBrought + ' guests</small>' : '') + '</td><td>' + n(r.workshops) + ' · ' + n(r.satsangs) + '</td><td>' + esc(r.lastVisitAt ? day(r.lastVisitAt) : '—') + '</td><td>' + esc(r.mentorName || '—') + '</td></tr>';
           }).join('') + '</tbody></table></div>' + (list.length >= 500 ? '<p class="small muted">Showing 500. Search or filter to narrow down.</p>' : '') : '<p class="muted">Nobody here.</p>') + '</div>';
       app.querySelectorAll('[data-lv]').forEach(function (b) { b.onclick = function () { jFilter.level = jFilter.level === b.dataset.lv ? '' : b.dataset.lv; drawJourney(); }; });
+      app.querySelectorAll('[data-st]').forEach(function (b) { b.onclick = function () { jFilter.status = jFilter.status === b.dataset.st ? '' : b.dataset.st; drawJourney(); }; });
       var t; $('jq').oninput = function () { clearTimeout(t); t = setTimeout(function () { jFilter.q = $('jq').value.trim(); drawJourney(); }, 350); };
-      $('jDr').onchange = function () { jFilter.drifting = this.checked; drawJourney(); };
+      $('jSv').onchange = function () { jFilter.sevadar = this.checked; drawJourney(); };
       $('jNm').onchange = function () { jFilter.nomentor = this.checked; drawJourney(); };
-      if ($('jAll')) $('jAll').onclick = function () { jFilter.level = ''; drawJourney(); };
+      if ($('jAll')) $('jAll').onclick = function () { jFilter.level = ''; jFilter.status = ''; drawJourney(); };
       if (jFilter.q) { var q = $('jq'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
     }).catch(fail);
   }
@@ -641,47 +652,68 @@
   function nextSteps(J) {
     var ms = {}; (J.milestones || []).forEach(function (k) { ms[k] = true; });
     var ck = function (ok, txt) { return '<li class="' + (ok ? 'ok' : '') + '">' + (ok ? '✓ ' : '○ ') + txt + '</li>'; };
+    var O = J.orientation || { workshops: 5, challenges: 2 };
     switch (J.level) {
-      case 'new': return ck(J.intros > 0, 'Attend an Introduction') + ck(J.visits > 0, 'First visit to the center');
-      case 'l2': return ck(J.workshops90 >= 6, 'Workshops in the last 3 months: ' + J.workshops90 + ' of 6–8') + ck(ms.challenge_done, MILESTONE.challenge_done) + ck(ms.questions_clear, MILESTONE.questions_clear) + ck(false, 'Learning articles: 1–2 a week (in Copilot)');
-      case 'l3': return ck(J.satsangs90 >= 6, 'Satsangs in the last 3 months: ' + J.satsangs90 + ' (about 2 a month)') + ck(false, 'Early-morning meditation habit') + ck(false, 'Toward 60 minutes of meditation daily');
-      case 'l4': return ck(ms.met_master, MILESTONE.met_master) + ck(J.darshans > 0, 'Darshan / retreat attended') + ck(J.seva > 0, 'Taking part in seva');
-      default: return ck(J.satsangs90 > 0, 'Satsang in the last 3 months') + ck(J.seva > 0, 'Seva at the center') + ck(false, 'Steady progress in meditation time and quality (shared only through their Roadmap report)');
+      case 'potential': return ck(false, 'Sign up for a Public Intro');
+      case 'new': return ck(J.visits > 0, 'First visit to the center');
+      case 'seeker': return ck(J.workshops >= O.workshops, 'Orientation workshops: ' + J.workshops + ' of ' + O.workshops) + ck(J.challenges >= O.challenges, 'Challenges finished: ' + J.challenges + ' of ' + O.challenges + ' <small class="muted">(shared from Copilot, or ticked below)</small>') +
+        ck(ms.questions_clear, MILESTONE.questions_clear) + ck(J.satsangs90 >= 6, 'Satsangs in the last 3 months: ' + J.satsangs90 + ' (regular attendance → Satsangi)');
+      case 'satsangi': return ck(J.satsangs90 >= 6, 'Satsangs in the last 3 months: ' + J.satsangs90) + ck(ms.met_master, MILESTONE.met_master) + ck(J.darshans + J.retreats > 0, 'Darshan or retreat attended');
+      default: return ck(J.satsangs90 > 0, 'Satsang in the last 3 months') + ck(J.sevadar, 'Sevadar: helps run the center') + ck(false, 'Steady progress in meditation time and quality (shared only through their Roadmap report)');
     }
   }
-  var TL = { joined: 'Signed up', viewed: 'Opened', rsvp: 'RSVP', checkin: 'Came to', milestone: 'Milestone' };
+  var TL = { joined: 'Signed up', viewed: 'Opened', rsvp: 'RSVP', checkin: 'Came to', milestone: 'Milestone', challenge: 'Finished a challenge' };
   function drawPerson(uid) {
     loading();
     Promise.all([S.api('GET', '/api/admin/users/' + encodeURIComponent(uid)), S.api('GET', '/api/admin/users/' + encodeURIComponent(uid) + '/journey')]).then(function (r) {
       var p = r[0].person, J = r[1].journey, notes = r[1].notes || [], tl = r[1].timeline || [], digits = String(p.phone || '').replace(/\D/g, '');
-      var lvOpts = '<option value="">Automatic (' + esc(LEVEL[J.computed]) + ')</option>' + Object.keys(LEVEL).map(function (k) { return '<option value="' + k + '"' + (J.override === k ? ' selected' : '') + '>' + esc(LEVEL[k]) + ' (set by hand)</option>'; }).join('');
+      var auto = J.computed === 'satsangi' || J.computed === 'initiate' ? null : J.computed;
+      var lvOpts = Object.keys(LEVEL).map(function (k) { var sel = J.override ? J.override === k : J.level === k;
+        return '<option value="' + k + '"' + (sel ? ' selected' : '') + '>' + esc(LEVEL[k]) + (k === auto && !J.override ? ' (automatic)' : '') + '</option>'; }).join('');
       app.innerHTML = '<p class="crumbs"><a href="#journey">‹ Journey</a> · <a href="#people">People</a></p><div class="grid2 top"><div>' +
-        '<div class="card"><h1 class="h-person">' + esc(p.name || '(no name)') + ' ' + lvTag(J.level) + (J.drifting ? ' <span class="tag cx">Drifting</span>' : '') + '</h1>' +
+        '<div class="card"><h1 class="h-person">' + esc(p.name || '(no name)') + ' ' + lvTag(J.level) + ' ' + stTag(J.status) + (J.sevadar ? ' <span class="tag gold">Sevadar</span>' : '') + '</h1>' +
+        (J.providerName ? '<p class="small muted" style="margin-top:-6px">Name from sign-in: ' + esc(J.providerName) + '</p>' : '') +
+        (J.declined ? '<p class="small notice warn">Asked for <b>no messages</b> from the center. Don’t send announcements or reminders.</p>' : '') +
         '<div class="kv"><span>Email</span><a href="mailto:' + esc(p.email) + '">' + esc(p.email) + '</a>' +
+        '<span>ZIP code</span><span>' + esc(J.zip || '—') + '</span>' +
         '<span>Phone</span><span>' + (p.phone ? '<a href="tel:' + esc(p.phone) + '">' + esc(phone(p.phone)) + '</a>' + (p.smsOk ? ' · <a href="https://wa.me/' + digits + '" target="_blank" rel="noopener">WhatsApp</a> <small class="muted">(allowed messages)</small>' : ' <small class="muted">(no messages)</small>') : '—') + '</span>' +
-        '<span>Status</span><span><select class="input sm" id="pCat">' + Object.keys(CATEGORY).map(function (c) { return '<option value="' + c + '"' + (p.category === c ? ' selected' : '') + '>' + CATEGORY[c] + '</option>'; }).join('') + '</select></span>' +
+
         '<span>Account</span><span>' + esc({ google: 'Google', microsoft: 'Microsoft', manual: 'Added by an admin (not signed in yet)' }[p.provider] || p.provider) + '</span>' +
         '<span>Joined</span><span>' + esc(day(p.createdAt)) + '</span><span>Last seen</span><span>' + esc(when(p.lastSeenAt)) + '</span>' +
         '<span>Copilot points</span><span>' + (p.points == null ? '—' : n(p.points) + (p.pointsLevel ? ' · ' + esc(p.pointsLevel) : '')) + '</span></div>' +
         '<div class="adm-actions"><button class="btn btn-ghost btn-sm' + (p.blockedAt ? '' : ' danger') + '" id="pBlock" type="button">' + (p.blockedAt ? 'Unblock' : 'Block from events') + '</button></div>' +
         (p.blockedAt ? '<p class="small notice warn">Blocked ' + esc(day(p.blockedAt)) + (p.blockReason ? ': ' + esc(p.blockReason) : '') + '</p>' : '') + '</div>' +
-        '<div class="card"><h2>Journey</h2><p class="small muted">' + esc(LEVEL_HINT[J.level]) + '</p>' +
+        '<div class="card"><h2>Journey</h2><p class="small muted">' + esc(LEVEL_HINT[J.level]) + (J.status ? ' · ' + esc(STATUS[J.status][0]) + ': ' + esc(STATUS[J.status][1]) : '') + (J.passiveReason ? ' (' + esc(J.passiveReason) + ')' : '') + '</p>' +
           '<div class="kpi-grid kpi-4">' + tile('Visits', n(J.visits), J.guestsBrought ? '+' + J.guestsBrought + ' guests brought' : '') + tile('Workshops', n(J.workshops), J.workshops90 + ' in 3 months') + tile('Satsangs', n(J.satsangs), J.satsangs90 + ' in 3 months') + tile('Last visit', J.lastVisitAt ? esc(ago(J.lastVisitAt)) : '—', J.firstVisitAt ? 'first ' + esc(day(J.firstVisitAt)) : '') + '</div>' +
           '<h3>Next steps</h3><ul class="steps">' + nextSteps(J) + '</ul>' +
           '<h3>Milestones <small class="muted">(ticked by an admin)</small></h3>' + Object.keys(MILESTONE).map(function (k) { return '<label class="chk block"><input type="checkbox" data-ms="' + k + '"' + (J.milestones.indexOf(k) >= 0 ? ' checked' : '') + '> ' + esc(MILESTONE[k]) + '</label>'; }).join('') +
-          '<div class="grid2" style="margin-top:12px"><div><label class="field" for="pLv">Level</label><select class="input" id="pLv">' + lvOpts + '</select></div>' +
-          '<div><label class="field">Mentor</label><div id="pMentor">' + (J.mentorId ? '<a href="#person/' + encodeURIComponent(J.mentorId) + '">' + esc(J.mentorName || 'Mentor') + '</a> <button class="btn btn-ghost btn-sm" id="mClear" type="button">Change</button>' : '<button class="btn btn-soft btn-sm" id="mPick" type="button">Assign a mentor</button>') + '</div></div></div></div>' +
+          '<div class="grid2" style="margin-top:12px"><div><label class="field" for="pLv">Stage</label><select class="input" id="pLv">' + lvOpts + '</select></div>' +
+          '<div><label class="field">Mentor</label><div id="pMentor">' + (J.mentorId ? '<a href="#person/' + encodeURIComponent(J.mentorId) + '">' + esc(J.mentorName || 'Mentor') + '</a> <button class="btn btn-ghost btn-sm" id="mClear" type="button">Change</button>' : '<button class="btn btn-soft btn-sm" id="mPick" type="button">Assign a mentor</button>') + '</div></div></div>' +
+          '<div class="flags"><label class="chk block"><input type="checkbox" id="pSev"' + (J.sevadar ? ' checked' : '') + '> <b>Sevadar</b>: contributes to running the center</label>' +
+          '<label class="chk block"><input type="checkbox" id="pPas"' + (J.status === 'passive' ? ' checked' : '') + (J.declined ? ' disabled' : '') + '> <b>Passive</b>: away for a known reason, staying gently in touch (left out of “Drifted” follow-ups)</label>' +
+          '<label class="chk block"><input type="checkbox" id="pDec"' + (J.declined ? ' checked' : '') + '> <b>Declined</b>: no messages at all (they can also choose this in their details)</label></div></div>' +
         '</div><div>' +
         '<div class="card"><h2>Notes <small class="muted">admins only</small></h2><form id="nForm" class="note-form"><textarea class="input" id="nBody" rows="2" maxlength="500" placeholder="Short and practical, e.g. “came with her sister; interested in the kids’ program”. No health, family or spiritual details."></textarea><button class="btn btn-primary btn-sm" type="submit">Add note</button></form>' +
           (notes.length ? notes.map(function (x) { return '<div class="note"><p>' + esc(x.body) + '</p><small class="muted">' + esc(x.byEmail || '') + ' · ' + esc(when(x.at)) + ' · <a href="#" data-del="' + esc(x.id) + '">remove</a></small></div>'; }).join('') : '<p class="small muted">No notes yet.</p>') + '</div>' +
         '<div class="card"><h2>Timeline</h2>' + (tl.length ? '<ul class="timeline">' + tl.map(function (x) {
-          var what = x.type === 'joined' ? 'Signed up' : x.type === 'milestone' ? 'Milestone: ' + esc(MILESTONE[x.kind] || x.kind) :
-            TL[x.type] + ' <a href="#event/' + encodeURIComponent(x.eventId) + '">' + esc(x.title) + '</a>' + (x.kind && x.kind !== 'other' ? ' <span class="tag">' + esc(KIND[x.kind]) + '</span>' : '') +
+          var what = x.type === 'joined' ? 'Signed up' : x.type === 'milestone' ? 'Milestone: ' + esc(MILESTONE[x.kind] || x.kind) : x.type === 'challenge' ? '🏅 Finished a challenge: ' + esc(x.title) :
+            TL[x.type] + ' <a href="#event/' + encodeURIComponent(x.eventId) + '">' + esc(x.title) + '</a>' + (KIND[x.kind] ? ' <span class="tag">' + esc(KIND[x.kind]) + '</span>' : '') +
             (x.type === 'rsvp' ? ' · ' + esc({ going: 'Going', maybe: 'Maybe', no: 'Can’t go' }[x.status] || x.status) : '') + (x.guests ? ' · +' + x.guests + ' guests' : '') + (x.type === 'viewed' && x.views > 1 ? ' · ' + x.views + ' times' : '');
           return '<li class="tl-' + esc(x.type) + '"><span class="tl-when">' + esc(when(x.at)) + '</span><span>' + what + '</span></li>';
         }).join('') + '</ul>' : '<p class="muted">Nothing yet.</p>') + '</div></div></div>';
       var patch = function (body, msg) { return S.api('PATCH', '/api/admin/users/' + encodeURIComponent(uid) + '/journey', body).then(function () { toast(msg); drawPerson(uid); }).catch(function (x) { toast(x.message); }); };
-      $('pLv').onchange = function () { patch({ level: this.value || null }, 'Level updated.'); };
+      $('pLv').onchange = function () {
+        var v = this.value, msg = v === 'satsangi' ? 'Flag ' + first(p.name) + ' as Satsangi? They will see Community events.' : v === 'initiate' ? 'Mark ' + first(p.name) + ' as Initiate? This is permanent.' : '';
+        if (msg && !window.confirm(msg)) { this.value = J.level; return; }
+        patch({ stage: v === auto ? null : v }, 'Stage updated.'); };
+      $('pSev').onchange = function () { patch({ sevadar: this.checked }, this.checked ? 'Marked as Sevadar.' : 'Sevadar removed.'); };
+      $('pPas').onchange = function () {
+        if (!this.checked) { patch({ passive: false }, 'No longer Passive.'); return; }
+        var r = window.prompt('Why is ' + first(p.name) + ' away? (short, admins only, no health or personal details)', '');
+        if (r === null) { this.checked = false; return; }
+        patch({ passive: true, passiveReason: r }, 'Marked Passive.'); };
+      $('pDec').onchange = function () { if (this.checked && !window.confirm('Record that ' + first(p.name) + ' asked for no messages from the center?')) { this.checked = false; return; }
+        patch({ declined: this.checked }, this.checked ? 'Recorded: no messages.' : 'Messages allowed again.'); };
       app.querySelectorAll('[data-ms]').forEach(function (c) { c.onchange = function () { patch({ milestone: c.dataset.ms, done: c.checked }, c.checked ? 'Milestone recorded.' : 'Milestone removed.'); }; });
       var pick = function () {
         var b = sheet('<h2 class="sheet-title">Assign a mentor for ' + esc(first(p.name)) + '</h2><p class="small muted">Usually an initiate who can welcome them, answer questions and check in now and then.</p>' +
@@ -700,7 +732,6 @@
         S.api('POST', '/api/admin/users/' + encodeURIComponent(uid) + '/notes', { body: v }).then(function () { toast('Note added.'); drawPerson(uid); }).catch(function (x) { toast(x.message); }); };
       app.querySelectorAll('[data-del]').forEach(function (a) { a.onclick = function (ev) { ev.preventDefault(); if (!window.confirm('Remove this note?')) return;
         S.api('DELETE', '/api/admin/notes/' + encodeURIComponent(a.dataset.del)).then(function () { toast('Note removed.'); drawPerson(uid); }).catch(function (x) { toast(x.message); }); }; });
-      $('pCat').onchange = function () { S.api('PATCH', '/api/admin/users?user=' + encodeURIComponent(p.userId), { category: $('pCat').value }).then(function () { toast('Status updated.'); drawPerson(uid); }).catch(function (x) { toast(x.message); }); };
       $('pBlock').onclick = function () {
         var block = !p.blockedAt, reason = '';
         if (block) { reason = window.prompt('Block ' + (p.name || 'this person') + ' from center events? Optional reason (admins only):', ''); if (reason === null) return; }
@@ -721,9 +752,9 @@
         '<div class="kpi-grid" style="margin-top:14px">' + tile('First-timers', n(x.firstTimers), pct(x.firstTimers, x.came) + ' of those who came') +
           tile('Came back within 30 days', x.ended ? n(x.returned30) : '—', x.ended ? pct(x.returned30, x.came) + (x.returnWindowOpen ? ' so far (still counting)' : '') : 'after the event') +
           tile('Said Going, didn’t come', x.ended ? n(x.noShows) : '—', x.ended ? pct(x.noShows, x.going) + ' of Going' : 'after the event') + tile('Walk-ins', n(x.walkIns), 'came without an RSVP') + '</div></div>' +
-        '<div class="card"><h2>Who came, by journey level</h2>' + (total ? '<div class="lvbars">' + Object.keys(LEVEL).map(function (k) { var v = bl[k] || 0;
+        '<div class="card"><h2>Who came, by stage</h2>' + (total ? '<div class="lvbars">' + Object.keys(LEVEL).map(function (k) { var v = bl[k] || 0;
           return '<div class="bar-row"><span>' + esc(LEVEL[k]) + '</span><span class="lvbar"><i style="width:' + (total ? Math.round(100 * v / total) : 0) + '%"></i></span><b>' + v + '</b></div>'; }).join('') + '</div>' : '<p class="muted">No check-ins yet.</p>') +
-          '<p class="small muted">Type: <b>' + esc(KIND[x.kind] || 'Other') + '</b> · mainly for <b>' + esc(AUD[x.level] || 'Everyone') + '</b>. Change these with ✎ Edit.</p></div>';
+          '<p class="small muted">Type: <b>' + esc(KIND[x.kind] || '') + '</b> · audience: <b>' + esc(ACCESS[x.access] || 'Public') + '</b>. Change these with ✎ Edit.</p></div>';
     }).catch(function (x2) { box.innerHTML = '<div class="card"><p>' + esc(x2.message) + '</p></div>'; });
   }
 
@@ -760,7 +791,10 @@
       return c.rampTo ? 'Grow from their minutes to ' + c.rampTo + ' min over ' + c.days + ' days' : 'Sit ' + m + ' a day for ' + c.days + ' days';
     }
     if (c.kind === 'checkins') return 'Attend ' + c.target + ' center programs within ' + c.days + ' days';
-    return 'Education';
+    var what = { quote: ['thought', 'thoughts'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['video', 'videos'] }[c.material] || ['item', 'items'];
+    var per = c.perPeriod ? c.perPeriod + ' ' + what[c.perPeriod === 1 ? 0 : 1] + ' a ' + (c.cadence || 'week') : '';
+    var total = c.material === 'book' && !c.target ? 'a whole book' : c.target + ' ' + what[1];
+    return 'Read/watch ' + total + (per ? ' (' + per + ')' : '') + ' within ' + c.days + ' days · ' + (c.itemPoints || 0) + ' points each';
   }
   function chForm(c, count, list) {
     list = list || [];
@@ -768,7 +802,7 @@
     sheet('<h2 class="sheet-title">' + (c ? 'Edit challenge' : 'New challenge') + '</h2><form id="cf">' +
       '<label class="field" for="cTitle">Title</label><input class="input" id="cTitle" required maxlength="100" value="' + esc(c ? c.title : '') + '">' +
       '<label class="field" for="cDesc">Description</label><textarea class="input" id="cDesc" rows="3" maxlength="600">' + esc(c ? c.description || '' : '') + '</textarea>' +
-      '<div class="grid2"><div><label class="field" for="cKind">Type</label><select class="input" id="cKind"><option value="daily_sitting">Meditation (daily sitting)</option><option value="checkins">Attend center programs</option></select></div>' +
+      '<div class="grid2"><div><label class="field" for="cKind">Type</label><select class="input" id="cKind"><option value="daily_sitting">Meditation (daily sitting)</option><option value="checkins">Attend center programs</option><option value="education">Education (read or watch)</option></select></div>' +
       '<div><label class="field" for="cAud">For</label><select class="input" id="cAud"><option value="all">Everyone</option><option value="seeker">New seekers</option><option value="initiate">Initiates</option></select></div>' +
       '<div><label class="field" for="cDays">Length (days)</label><input class="input" id="cDays" type="number" min="1" max="365" value="' + (c ? c.days : 21) + '"></div>' +
       '<div><label class="field" for="cPts">Bonus points when completed</label><input class="input" id="cPts" type="number" min="0" max="10000" value="' + (c ? c.points : 100) + '"></div></div>' +
@@ -777,22 +811,98 @@
         '<div><label class="field" for="cRamp">Grow to (minutes, optional)</label><input class="input" id="cRamp" type="number" min="0" max="180" placeholder="e.g. 30" value="' + (c && c.rampTo ? c.rampTo : '') + '"></div></div>' +
         '<p class="small muted">With “grow to”, the daily target rises a little each day from their current minutes to this number by the last day (like 21-Day Advance). Missed days allowed: 1 for every 10 days.</p></div>' +
       '<div id="cTgtBox"><label class="field" for="cTgt">Programs to attend</label><input class="input" id="cTgt" type="number" min="1" max="100" value="' + (c ? c.target || 6 : 6) + '"><p class="small muted">Catch-up is allowed: any check-ins before the end date count.</p></div>' +
+      '<div id="cEduBox"><div class="grid2"><div><label class="field" for="cMat">Read or watch</label><select class="input" id="cMat"><option value="quote">Thought for today (quotes)</option><option value="article">Articles</option><option value="book">A book (chapters)</option><option value="video">Videos</option></select></div>' +
+        '<div><label class="field" for="cCad">Pace</label><select class="input" id="cCad"><option value="day">per day</option><option value="week">per week</option><option value="month">per month</option></select></div>' +
+        '<div><label class="field" for="cPer">How many each time</label><input class="input" id="cPer" type="number" min="1" max="50" value="' + (c && c.perPeriod ? c.perPeriod : 1) + '"></div>' +
+        '<div><label class="field" for="cTot">Total to finish</label><input class="input" id="cTot" type="number" min="0" max="1000" value="' + (c && c.kind === 'education' ? c.target : 12) + '"></div>' +
+        '<div><label class="field" for="cItemPts">Points for each one</label><input class="input" id="cItemPts" type="number" min="0" max="1000" value="' + (c && c.kind === 'education' ? c.itemPoints : 10) + '"></div></div>' +
+        '<p class="small muted">Catch-up is allowed: anything read or watched before the end date counts, so there are no missed days. For a book, set the total to 0 to mean “the whole book” (its chapters come from the Library). Finishing a book always earns 100 points on top.</p></div>' +
       '<label class="field" for="cNext">Offer as the next step after</label><select class="input" id="cNext">' + nextOpts + '</select>' +
       '<label class="check"><input type="checkbox" id="cSignup"' + (c && c.signup ? ' checked' : '') + '> Offer at sign-up (“choose your first challenge”)</label>' +
       '<label class="check"><input type="checkbox" id="cAct"' + (!c || c.active ? ' checked' : '') + '> Active (shown in Copilot)</label>' +
       '<p class="error" id="cErr"></p><div class="actions">' + (c ? '<button class="btn btn-ghost danger" id="cDel" type="button">Remove</button>' : '') + '<button class="btn btn-ghost" data-close type="button">Cancel</button><button class="btn btn-primary" type="submit">Save</button></div></form>');
     $('cKind').value = c ? c.kind : 'daily_sitting'; $('cAud').value = c ? c.audience : 'all';
-    function sync() { var d = $('cKind').value === 'daily_sitting'; $('cSitBox').hidden = !d; $('cTgtBox').hidden = d; }
+    $('cMat').value = c && c.material ? c.material : 'article'; $('cCad').value = c && c.cadence ? c.cadence : 'week';
+    function sync() { var k = $('cKind').value; $('cSitBox').hidden = k !== 'daily_sitting'; $('cTgtBox').hidden = k !== 'checkins'; $('cEduBox').hidden = k !== 'education'; }
     $('cKind').onchange = sync; sync();
     if ($('cDel')) $('cDel').onclick = function () { if (!window.confirm('Remove “' + c.title + '”? People who started it keep their points.')) return; S.api('DELETE', '/api/admin/challenges/' + c.id).then(function () { closeSheet(); drawChallenges(); }).catch(function (x) { $('cErr').textContent = x.message; }); };
     $('cf').onsubmit = function (ev) {
       ev.preventDefault();
-      var sit = $('cKind').value === 'daily_sitting';
+      var sit = $('cKind').value === 'daily_sitting', edu = $('cKind').value === 'education';
       var body = { title: $('cTitle').value, description: $('cDesc').value, kind: $('cKind').value, audience: $('cAud').value, days: Number($('cDays').value),
         minutes: sit ? Number($('cMin').value) : 0, minutesChoices: sit ? $('cChoices').value : '', rampTo: sit ? Number($('cRamp').value || 0) : 0,
-        target: sit ? 0 : Number($('cTgt').value), points: Number($('cPts').value), nextOf: $('cNext').value || null, signup: $('cSignup').checked, active: $('cAct').checked };
+        material: edu ? $('cMat').value : '', cadence: edu ? $('cCad').value : '', perPeriod: edu ? Number($('cPer').value || 0) : 0, itemPoints: edu ? Number($('cItemPts').value || 0) : 0,
+        target: sit ? 0 : edu ? Number($('cTot').value || 0) : Number($('cTgt').value), points: Number($('cPts').value), nextOf: $('cNext').value || null, signup: $('cSignup').checked, active: $('cAct').checked };
       if (!c) body.priority = (count + 1) * 10;
       S.api(c ? 'PATCH' : 'POST', '/api/admin/challenges' + (c ? '/' + c.id : ''), body).then(function () { closeSheet(); toast('Saved.'); drawChallenges(); }).catch(function (x) { $('cErr').textContent = x.message; });
+    };
+  }
+
+  /* =====================================================================
+   * Library (v0.20): the center's reading and watching list for Copilot
+   * ===================================================================== */
+  var libKind = 'book';
+  var LIBK = { book: ['Books', 'book'], video: ['Videos', 'video'], article: ['Articles', 'article'] };
+  function drawLibrary() {
+    loading();
+    S.api('GET', '/api/admin/library').then(function (j) {
+      var all = j.items || [], list = all.filter(function (x) { return x.kind === libKind; });
+      app.innerHTML = '<div class="sec-head page-head"><h1>Library</h1><button class="btn btn-primary" id="libNew" type="button">+ Add ' + LIBK[libKind][1] + '</button></div>' +
+        '<p class="small muted">Books, videos and articles recommended in Meditation Copilot, used by the reading and watching challenges. Seekers only see items marked <b>Approved</b>. Use books and talks authored or authorized by the SOS Masters.</p>' +
+        '<div class="seg" role="group" aria-label="Show">' + Object.keys(LIBK).map(function (k) {
+          var c = all.filter(function (x) { return x.kind === k; }).length;
+          return '<button type="button" data-lk="' + k + '" class="' + (k === libKind ? 'on' : '') + '">' + LIBK[k][0] + ' (' + c + ')</button>'; }).join('') + '</div>' +
+        '<div class="card" style="margin-top:12px">' + (list.length ? list.map(function (x, i) {
+          return '<div class="ad-row lib-row"><span class="lib-pic">' + (x.image ? '<img src="' + esc(x.image) + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + ({ book: '📖', video: '▶', article: '📰' }[x.kind]) + '</span>') + '</span>' +
+            '<span class="ag-main"><b>' + esc(x.title) + '</b>' + (x.status === 'approved' ? ' <span class="tag gold">Approved</span>' : ' <span class="tag">Draft</span>') +
+            '<small>' + esc([x.author, x.kind === 'book' ? (x.chapters ? x.chapters + ' chapters' : 'chapters not set') : '', x.minutes ? x.minutes + ' min' : '', x.url ? x.url.replace(/^https:\/\/(www\.)?/, '').slice(0, 48) : 'no link'].filter(Boolean).join(' · ')) + '</small></span>' +
+            '<span class="ck-act"><button class="btn btn-ghost btn-sm" data-le="' + i + '" type="button">Edit</button></span></div>';
+        }).join('') : '<p class="muted">No ' + LIBK[libKind][0].toLowerCase() + ' yet.</p>') + '</div>';
+      app.querySelectorAll('[data-lk]').forEach(function (b) { b.onclick = function () { libKind = b.dataset.lk; drawLibrary(); }; });
+      $('libNew').onclick = function () { libForm(null, list.length); };
+      app.querySelectorAll('[data-le]').forEach(function (b) { b.onclick = function () { libForm(list[Number(b.dataset.le)], 0); }; });
+    }).catch(fail);
+  }
+  function libForm(x, count) {
+    var kind = x ? x.kind : libKind, book = kind === 'book';
+    var v = function (k, d) { return esc(x && x[k] != null && x[k] !== 0 ? x[k] : (d == null ? '' : d)); };
+    sheet('<h2 class="sheet-title">' + (x ? 'Edit ' : 'Add ') + LIBK[kind][1] + '</h2><form id="lf">' +
+      '<label class="field" for="lUrl">' + (book ? 'Where to buy it (Amazon or any bookseller link)' : kind === 'video' ? 'Video link (YouTube or sos.org)' : 'Article link') + '</label>' +
+      '<div class="row-inline"><input class="input" id="lUrl" type="url" placeholder="https://" value="' + v('url') + '">' + (book ? '<button class="btn btn-soft" id="lLook" type="button">Look up</button>' : '') + '</div>' +
+      (book ? '<p class="small muted" id="lLookMsg">Paste the link (or type an ISBN or the title) and press Look up to fill in the title, author and cover. Always check them.</p>' : '') +
+      '<label class="field" for="lTitle">Title</label><input class="input" id="lTitle" required maxlength="200" value="' + v('title') + '">' +
+      '<label class="field" for="lAuthor">' + (kind === 'video' ? 'Speaker' : 'Author') + '</label><input class="input" id="lAuthor" maxlength="120" value="' + v('author') + '">' +
+      '<label class="field" for="lSum">Short summary, in your own words</label><textarea class="input" id="lSum" rows="3" maxlength="800">' + v('summary') + '</textarea>' +
+      '<div id="lAbout"></div>' +
+      '<div class="grid2">' + (book ? '<div><label class="field" for="lCh">Number of chapters</label><input class="input" id="lCh" type="number" min="0" max="300" value="' + v('chapters') + '"></div>' +
+        '<div><label class="field" for="lIsbn">ISBN</label><input class="input" id="lIsbn" maxlength="17" value="' + v('isbn') + '"></div>' : '') +
+        '<div><label class="field" for="lMin">' + (kind === 'video' ? 'Length (minutes)' : 'Reading time (minutes)') + '</label><input class="input" id="lMin" type="number" min="0" max="1000" value="' + v('minutes') + '"></div>' +
+        '<div><label class="field" for="lPri">Order (lower shows first)</label><input class="input" id="lPri" type="number" min="0" max="10000" value="' + (x ? x.priority : (count + 1) * 10) + '"></div></div>' +
+      '<label class="field" for="lImg">Picture link (cover or thumbnail, optional)</label><input class="input" id="lImg" type="url" placeholder="https://" value="' + v('image') + '">' +
+      '<label class="check"><input type="checkbox" id="lApp"' + (x && x.status === 'approved' ? ' checked' : '') + '> Approved: show it in Copilot</label>' +
+      '<p class="error" id="lErr"></p><div class="actions">' + (x ? '<button class="btn btn-ghost danger" id="lDel" type="button">Remove</button>' : '') +
+      '<button class="btn btn-ghost" data-close type="button">Cancel</button><button class="btn btn-primary" type="submit">Save</button></div></form>');
+    if ($('lLook')) $('lLook').onclick = function () {
+      var q = $('lUrl').value.trim() || $('lIsbn').value.trim() || $('lTitle').value.trim();
+      if (!q) { $('lLookMsg').textContent = 'Paste a link, an ISBN or a title first.'; return; }
+      $('lLook').disabled = true; $('lLookMsg').textContent = 'Looking up…';
+      S.api('POST', '/api/admin/library/lookup', { query: q }).then(function (r) {
+        var f = r.found;
+        if (!f) { $('lLookMsg').textContent = 'Nothing found' + (r.ref && r.ref.isbn ? ' for ISBN ' + r.ref.isbn : '') + '. Please type the details.'; if (r.ref && r.ref.isbn && !$('lIsbn').value) $('lIsbn').value = r.ref.isbn; return; }
+        if (!$('lTitle').value) $('lTitle').value = f.title; if (!$('lAuthor').value) $('lAuthor').value = f.author;
+        if (!$('lIsbn').value) $('lIsbn').value = f.isbn || (r.ref && r.ref.isbn) || ''; if (!$('lImg').value && f.image) $('lImg').value = f.image;
+        $('lLookMsg').textContent = 'Found on ' + f.source + (f.pages ? ' · ' + f.pages + ' pages' : '') + '. Please check the details and add the number of chapters.';
+        $('lAbout').innerHTML = (f.image ? '<img class="lib-cover" src="' + esc(f.image) + '" alt="Cover">' : '') +
+          (f.about ? '<details class="small"><summary>Publisher’s description (for reference only)</summary><p>' + esc(f.about) + '</p></details>' : '');
+      }).catch(function (e) { $('lLookMsg').textContent = e.message; }).then(function () { $('lLook').disabled = false; });
+    };
+    if ($('lDel')) $('lDel').onclick = function () { if (!window.confirm('Remove “' + x.title + '” from the library? People who read it keep their points.')) return; S.api('DELETE', '/api/admin/library/' + x.id).then(function () { closeSheet(); drawLibrary(); }).catch(function (e) { $('lErr').textContent = e.message; }); };
+    $('lf').onsubmit = function (ev) {
+      ev.preventDefault();
+      var b = { kind: kind, title: $('lTitle').value, author: $('lAuthor').value, url: $('lUrl').value.trim(), summary: $('lSum').value, image: $('lImg').value.trim(),
+        minutes: Number($('lMin').value || 0), priority: Number($('lPri').value || 100), status: $('lApp').checked ? 'approved' : 'draft' };
+      if (book) { b.chapters = Number($('lCh').value || 0); b.isbn = $('lIsbn').value; }
+      S.api(x ? 'PATCH' : 'POST', '/api/admin/library' + (x ? '/' + x.id : ''), b).then(function () { closeSheet(); toast('Saved.'); drawLibrary(); }).catch(function (e) { $('lErr').textContent = e.message; });
     };
   }
 
@@ -806,7 +916,7 @@
       var p = j.people || {}, a = j.activity || {}, max = Math.max.apply(null, (j.signups || [0]).concat([1]));
       app.innerHTML = '<div class="sec-head page-head"><h1>Overview</h1></div><div class="grid2 top">' +
         '<div class="card"><h2>People</h2><div class="kpi-grid">' + tile('Registered', n(p.total)) + tile('New · 7 days', n(p.new7), n(p.new30) + ' in 30 days') + tile('Active · 7 days', n(p.active7), n(p.active30) + ' in 30 days') +
-          tile('Initiates', n(p.initiates), n(p.friends) + ' seeker friends · ' + n(p.seekers) + ' seekers') + '</div>' +
+          tile('Initiates', n(p.initiates), n(p.friends) + ' satsangis · ' + n(p.seekers) + ' seekers') + '</div>' +
           '<p class="small muted" style="margin:14px 0 4px">New sign-ups by week</p><div class="bars">' + (j.signups || []).map(function (v) { return '<span class="bar" style="height:' + Math.max(4, v / max * 100) + '%" title="' + v + '"><i>' + (v || '') + '</i></span>'; }).join('') + '</div>' +
           '<div class="small muted bars-x"><span>8 weeks ago</span><span>this week</span></div></div>' +
         '<div class="card"><h2>Events · last 30 days</h2><div class="kpi-grid">' + tile('Upcoming events', n(a.upcoming)) + tile('RSVPs (going)', n(a.rsvps30)) + tile('Check-ins', n(a.checkins30)) + tile('Can be messaged', n(p.messagesOk), n(p.withPhone) + ' gave a phone') + '</div></div></div>' +
@@ -847,14 +957,18 @@
 
   /* ---------- layout switch + start ---------- */
   function layoutSwitch() {
-    var m = document.documentElement.getAttribute('data-layout');
-    document.querySelectorAll('.view-switch').forEach(function (el) {
-      el.innerHTML = '<span class="vs-label">View</span><button type="button" data-view="mobile" aria-pressed="' + (m === 'mobile') + '">📱 Mobile</button><button type="button" data-view="desktop" aria-pressed="' + (m === 'desktop') + '">🖥️ Desktop</button>';
-    });
-    document.addEventListener('click', function (e) {
-      var b = e.target.closest && e.target.closest('.view-switch [data-view]'); if (!b) return;
-      try { localStorage.setItem('mc.layout', b.dataset.view); } catch (x) {} location.reload();
-    });
+    var m = document.documentElement.getAttribute('data-layout'), btn = $('viewBtn'), p = null;
+    try { p = localStorage.getItem('mc.layout'); } catch (x) {}
+    if (!btn) return;
+    btn.firstElementChild.textContent = m === 'desktop' ? '🖥️' : '📱';
+    btn.onclick = function () {
+      var opt = function (v, label) { return '<button type="button" class="btn btn-block ' + ((p || 'auto') === v ? 'btn-primary' : 'btn-ghost') + '" data-view="' + v + '" style="margin-top:8px">' + label + '</button>'; };
+      sheet('<h2 class="sheet-title">Layout</h2>' + opt('auto', 'Auto (recommended)') + opt('mobile', '📱 Phone') + opt('desktop', '🖥️ Computer') +
+        '<div class="actions"><button class="btn btn-ghost" data-close type="button">Close</button></div>');
+      $('sheetBody').querySelectorAll('[data-view]').forEach(function (b) {
+        b.onclick = function () { try { if (b.dataset.view === 'auto') localStorage.removeItem('mc.layout'); else localStorage.setItem('mc.layout', b.dataset.view); } catch (x) {} location.reload(); };
+      });
+    };
   }
   layoutSwitch();
   S.handleRedirect().catch(function (x) { toast(x.message, 5000); }).then(start);

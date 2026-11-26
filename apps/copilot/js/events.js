@@ -23,7 +23,7 @@
   var REPEAT = { weekly: 'Repeats weekly', biweekly: 'Repeats every other week', monthly: 'Repeats monthly' };
   var FORMAT = { in_person: '📍 In person', online: '💻 Online', hybrid: '📍💻 In person & online' };
   var ACCESS = { public: '🌍 Public', satsang: '🪷 Satsang', initiates: '🔒 Initiates' };
-  var CATEGORY = { seeker: 'Seeker', friend: 'Seeker Friend', initiate: 'Initiate' };
+  var CATEGORY = { seeker: 'Seeker', friend: 'Satsangi', initiate: 'Initiate' };
   var MSG_KEY = 'meditation-copilot:event-messages';      // events I've posted a message on (for the +5 reward)
   var SETTINGS_KEY = 'meditation-copilot:center-settings';
   function badge(e) { var a = e.access || 'public'; return a === 'public' ? '' : '<span class="badge ' + a + '">' + ACCESS[a] + '</span>'; }
@@ -169,7 +169,7 @@
       return '<div class="section-title" style="margin-top:20px">SOS events</div>' +
         (MC.events.isStaff() ? '<a class="btn btn-primary btn-sm btn-block" href="#admin" id="acAdmin" style="margin:0 0 10px">🛡 Open Admin</a>' : '') +
         (cat ? '<p class="small" style="margin:-6px 0 6px">Events status: <b>' + MC.esc(CATEGORY[cat] || cat) + '</b>' +
-          (cat === 'seeker' ? ' <span class="muted">· the center can mark you a Seeker Friend after a few visits</span>' : '') + '</p>' : '') +
+          (cat === 'seeker' ? ' <span class="muted">· the center can mark you a Satsangi once you come to satsang regularly</span>' : '') + '</p>' : '') +
         (session.user && session.user.blocked ? '<p class="small" style="margin:0 0 6px;color:var(--danger,#b00)">Your account can\u2019t take part in center events. Contact MinneapolisCenter@sos.org.</p>' : '') +
         '<p class="small" style="margin:0 0 10px">Contact details: ' + contactSummary() + '</p>' +
         '<button class="btn btn-ghost btn-sm btn-block" id="acContact">✎ Edit contact details</button>';
@@ -636,7 +636,7 @@
     if (!MC.events.isAdmin()) { view.innerHTML = '<div class="card">Admins only.</div>'; return; }
     view.innerHTML = '<a class="link" href="#calendar" style="padding:4px 0;display:inline-block">‹ Calendar</a>' +
       '<div class="card"><div class="section-title">People <span class="small muted">admin</span></div>' +
-      '<p class="small" style="margin:-6px 0 10px">Seeker and Initiate are what people chose on their phone. Mark a seeker a <b>Seeker Friend</b> after a few visits so they can attend Satsang events.</p>' +
+      '<p class="small" style="margin:-6px 0 10px">Seeker and Initiate are what people chose on their phone. Mark a seeker a <b>Satsangi</b> after a few visits so they can attend Satsang events.</p>' +
       '<input type="search" id="ppFind" class="text-input" placeholder="Search by name or email" autocomplete="off"><div id="ppList" style="margin-top:8px"></div></div>';
     var t, list = $('ppList');
     function row(u) {

@@ -277,7 +277,7 @@ function publicEvent(ev, opts = {}) {
     access: ev.access || 'public', status: ev.status, going: ev.going || 0, checkedIn: ev.checked_in || 0,
     seriesId: ev.series_id || null, repeats: ev.series_freq || null, flyerId: ev.flyer_id || null,
     likes: ev.likes || 0, messages: ev.message_count || 0, hero: !!ev.is_hero,
-    kind: ev.kind || 'other', level: ev.level || 'all'
+    kind: ev.kind || 'workshop', children: !!ev.children
   };
   if (opts.signedIn) out.onlineUrl = ev.online_url || null;
   if (opts.admin) out.checkinCode = ev.checkin_code;
@@ -311,7 +311,14 @@ function normPhone(v) {
   throw bad('Please enter a valid phone number (e.g. 612-555-1234).');
 }
 function contactOf(u) {
-  return { email: u.email, phone: u.phone || null, smsOk: !!u.sms_ok, confirmedAt: u.contact_ack_at || null };
+  return { email: u.email, phone: u.phone || null, smsOk: !!u.sms_ok, confirmedAt: u.contact_ack_at || null,
+    name: u.name, providerName: u.provider_name || u.name, zip: u.zip || null, noMessages: !!u.declined_at };
+}
+function normZip(v) {
+  const z = String(v == null ? '' : v).trim();
+  if (!z) return null;
+  if (!/^\d{5}(-\d{4})?$/.test(z)) throw bad('ZIP code should be 5 digits, e.g. 55421');
+  return z.slice(0, 5);
 }
 // RSVP and check-in need the contact details confirmed once (shows the notice; email is required, phone optional)
 async function requireContact(db, uid) {
@@ -366,45 +373,63 @@ function validateEvent(b, partial) {
   if (b.timezone !== undefined) o.timezone = str(b.timezone, 60) || 'America/Chicago';
   if (b.access !== undefined) { if (!ACCESS_LEVELS.includes(b.access)) throw bad('Access must be public, satsang or initiates'); o.access = b.access; }
   if (b.kind !== undefined) { if (!EVENT_KINDS.includes(b.kind)) throw bad('Type must be one of: ' + EVENT_KINDS.join(', ')); o.kind = b.kind; }
-  if (b.level !== undefined) { if (!EVENT_AUDIENCE.includes(b.level)) throw bad('Mainly for must be one of: ' + EVENT_AUDIENCE.join(', ')); o.level = b.level; }
+  if (b.children !== undefined) o.children = b.children ? 1 : 0;
   return o;
 }
-/* ---------- v0.17 SRM: event types, journey levels (see SOSMN-SRM.md) ---------- */
-const EVENT_KINDS = ['intro', 'workshop', 'satsang', 'darshan', 'seva', 'community', 'other'];
-const EVENT_AUDIENCE = ['all', 'new', 'seeker', 'initiate'];
-const JOURNEY = ['new', 'l2', 'l3', 'l4', 'initiate'];
+/* ---------- SRM: event types, people stages and status (see SOSMN-SRM.md) ---------- */
+const EVENT_KINDS = ['intro', 'workshop', 'satsang', 'retreat', 'darshan', 'festival', 'celebration'];
+const STAGES = ['potential', 'new', 'seeker', 'satsangi', 'initiate'];
+const SET_STAGES = ['potential', 'new', 'seeker'];         // the stages an admin can hand-set; Satsangi / Initiate come from category
+const STATUSES = ['active', 'drifted', 'dropped', 'passive', 'declined'];
 const MILESTONES = ['challenge_done', 'questions_clear', 'met_master'];
+const ORIENTATION = { workshops: 5, challenges: 2 };        // a Seeker's orientation: 5 workshops and 2 challenges
+const SATSANGI_HINT = 6;                                     // satsangs in 90 days that suggest flagging someone as Satsangi
 const DAY_MS = 86400000;
-// Levels move up only (a long absence shows as "drifting", never as a lower level).
-//   New: no check-in yet · L2 Seeker: came at least once · L3: 6+ workshops or 2+ satsangs
-//   L4: 6+ satsangs, a Darshan/retreat, or "met Sant Rajinder Singh Ji in person" · Initiate: category initiate
-function calcJourney(r) {
+// Stage (only moves up): Potential = we only have their details · New = signed up for an event, not come yet ·
+// Seeker = has come · Satsangi = flagged by an admin (sees Community events) · Initiate = permanent
+function calcStage(r) {
   if (r.category === 'initiate') return 'initiate';
-  const ms = new Set(String(r.milestones || '').split(',').filter(Boolean));
-  if (!r.visits) return 'new';
-  if ((r.satsangs || 0) >= 6 || (r.darshans || 0) > 0 || ms.has('met_master')) return 'l4';
-  if ((r.workshops || 0) >= 6 || (r.satsangs || 0) >= 2) return 'l3';
-  return 'l2';
+  if (r.category === 'friend') return 'satsangi';
+  if (r.visits) return 'seeker';
+  if (r.rsvps) return 'new';
+  return 'potential';
 }
+// Status: Declined and Passive are chosen; the others follow the last visit
+function calcStatus(r, t) {
+  if (r.declinedAt) return 'declined';
+  if (r.passiveAt) return 'passive';
+  if (!r.lastVisitAt) return null;
+  if (r.lastVisitAt >= t - 60 * DAY_MS) return 'active';
+  if (r.lastVisitAt >= t - 365 * DAY_MS) return 'drifted';
+  return 'dropped';
+}
+const calcJourney = calcStage;   // older name, kept for tests and callers
 async function journeyRows(db, t, userId) {
   const res = await db.prepare(`SELECT u.id AS userId, u.name, u.email, u.phone, u.category, u.created_at AS createdAt, u.last_seen_at AS lastSeenAt,
       u.blocked_at AS blockedAt, u.journey_level AS override, u.mentor_id AS mentorId, (SELECT m.name FROM users m WHERE m.id = u.mentor_id) AS mentorName,
+      u.provider_name AS providerName, u.name_edited AS nameEdited, u.zip, u.declined_at AS declinedAt, u.passive_at AS passiveAt, u.passive_reason AS passiveReason, u.sevadar,
+      (SELECT COUNT(*) FROM challenge_shares cs WHERE cs.user_id = u.id) AS shares,
       COUNT(c.event_id) AS visits, MIN(c.checked_in_at) AS firstVisitAt, MAX(c.checked_in_at) AS lastVisitAt,
       COALESCE(SUM(c.guests), 0) AS guestsBrought,
       COALESCE(SUM(e.kind = 'intro'), 0) AS intros, COALESCE(SUM(e.kind = 'workshop'), 0) AS workshops,
       COALESCE(SUM(e.kind = 'workshop' AND c.checked_in_at >= ?1), 0) AS workshops90,
       COALESCE(SUM(e.kind = 'satsang'), 0) AS satsangs, COALESCE(SUM(e.kind = 'satsang' AND c.checked_in_at >= ?1), 0) AS satsangs90,
-      COALESCE(SUM(e.kind = 'darshan'), 0) AS darshans, COALESCE(SUM(e.kind = 'seva'), 0) AS seva,
+      COALESCE(SUM(e.kind = 'darshan'), 0) AS darshans, COALESCE(SUM(e.kind = 'retreat'), 0) AS retreats,
       (SELECT group_concat(ms.kind) FROM milestones ms WHERE ms.user_id = u.id) AS milestones,
       (SELECT COUNT(*) FROM rsvps r WHERE r.user_id = u.id AND r.status IN ('going', 'maybe')) AS rsvps,
       (SELECT COUNT(*) FROM event_views v WHERE v.user_id = u.id) AS viewed
     FROM users u LEFT JOIN checkins c ON c.user_id = u.id LEFT JOIN events e ON e.id = c.event_id
     ${userId ? 'WHERE u.id = ?2' : ''} GROUP BY u.id`).bind(...(userId ? [t - 90 * DAY_MS, userId] : [t - 90 * DAY_MS])).all();
   return res.results.map((r) => {
-    r.computed = calcJourney(r);
-    r.level = JOURNEY.includes(r.override) ? r.override : r.computed;
-    r.drifting = r.visits >= 2 && r.lastVisitAt < t - 60 * DAY_MS;
     r.milestones = String(r.milestones || '').split(',').filter(Boolean);
+    r.computed = calcStage(r);
+    // A hand-set Potential / New / Seeker is used until the calculated stage goes past it (stages only move up)
+    r.level = SET_STAGES.includes(r.override) && STAGES.indexOf(r.override) > STAGES.indexOf(r.computed) ? r.override : r.computed;
+    r.stage = r.level;
+    r.status = calcStatus(r, t);
+    r.drifting = r.status === 'drifted';
+    r.challenges = (r.shares || 0) + (r.milestones.includes('challenge_done') && !r.shares ? 1 : 0);
+    r.orientationDone = r.workshops >= ORIENTATION.workshops && r.challenges >= ORIENTATION.challenges;
     return r;
   });
 }
@@ -442,6 +467,80 @@ function challengeOut(r) {
     signup: !!r.signup, nextOf: r.next_of || null,
     audience: r.audience, points: r.points, priority: r.priority, active: !!r.active, updatedAt: r.updated_at };
 }
+/* ---------------- Library (v0.20): the center's approved articles, books and videos ---------------- */
+function validateLibrary(b, partial) {
+  const o = {};
+  const int = (v, lo, hi, name) => { const n = Math.round(Number(v)); if (!Number.isFinite(n) || n < lo || n > hi) throw bad(name + ' must be between ' + lo + ' and ' + hi); return n; };
+  if (!partial || b.kind !== undefined) { if (!['article', 'book', 'video'].includes(b.kind)) throw bad('Type must be article, book or video'); o.kind = b.kind; }
+  if (!partial || b.title !== undefined) { o.title = str(b.title, 200); if (!o.title) throw bad('Title is required'); }
+  if (b.author !== undefined) o.author = str(b.author, 120) || '';
+  if (b.url !== undefined) {
+    const u = str(b.url, 600) || '';
+    if (u && !/^https:\/\/[^\s]+$/i.test(u)) throw bad('Links must start with https://');
+    const yt = u && youtubeId(u); o.url = yt ? 'https://www.youtube.com/watch?v=' + yt : u;
+  }
+  if (b.summary !== undefined) o.summary = str(b.summary, 800) || '';
+  if (b.image !== undefined) { const im = (str(b.image, 600) || '').replace(/^http:\/\//i, 'https://'); if (im && !/^https:\/\//i.test(im)) throw bad('The picture link must start with https://'); o.image = im; }
+  if (b.isbn !== undefined) { const i = String(b.isbn || '').replace(/[^0-9Xx]/g, '').toUpperCase(); if (i && i.length !== 10 && i.length !== 13) throw bad('ISBN must have 10 or 13 digits'); o.isbn = i; }
+  if (b.chapters !== undefined) o.chapters = int(b.chapters || 0, 0, 300, 'Chapters');
+  if (b.minutes !== undefined) o.minutes = int(b.minutes || 0, 0, 1000, 'Minutes');
+  if (b.status !== undefined) { if (!['draft', 'approved'].includes(b.status)) throw bad('Status must be draft or approved'); o.status = b.status; }
+  if (b.priority !== undefined) o.priority = int(b.priority, 0, 10000, 'Priority');
+  return o;
+}
+function checkApproval(row) {   // what an item needs before seekers can see it
+  if (row.status !== 'approved') return;
+  if (row.kind === 'book' && !row.chapters) throw bad('Add the number of chapters before approving a book');
+  if (row.kind !== 'book' && !row.url) throw bad('Add the link before approving');
+}
+function libraryOut(r, admin) {
+  const o = { id: r.id, kind: r.kind, title: r.title, author: r.author || '', url: r.url || '', summary: r.summary || '', image: r.image || '',
+    isbn: r.isbn || '', chapters: r.chapters || 0, minutes: r.minutes || 0, priority: r.priority, updatedAt: r.updated_at };
+  if (admin) o.status = r.status;
+  return o;
+}
+// Book look-up: a purchase link (Amazon and others), an ISBN or a title → details from Google Books / Open Library.
+// Amazon pages can't be read automatically, but their links carry the ISBN-10 (the "/dp/" number) and usually the title.
+function isbn10ok(x) { if (!/^\d{9}[\dX]$/.test(x)) return false; let s = 0; for (let i = 0; i < 10; i++) s += (x[i] === 'X' ? 10 : Number(x[i])) * (10 - i); return s % 11 === 0; }
+function isbn13ok(x) { if (!/^97[89]\d{10}$/.test(x)) return false; let s = 0; for (let i = 0; i < 13; i++) s += Number(x[i]) * (i % 2 ? 3 : 1); return s % 10 === 0; }
+function bookRef(input) {
+  const raw = String(input || '').trim(), out = { isbn: '', title: '' };
+  const digits = raw.replace(/[-\s]/g, '').toUpperCase();
+  if (isbn13ok(digits) || isbn10ok(digits)) { out.isbn = digits; return out; }
+  let u = null; try { u = new URL(raw); } catch { /* not a link */ }
+  if (!u) { out.title = raw.slice(0, 200); return out; }
+  const p = decodeURIComponent(u.pathname);
+  const cands = [...p.matchAll(/(?:^|\/)(97[89]\d{10}|\d{9}[\dX])(?=\/|$|\?)/gi)].map((m) => m[1].toUpperCase())
+    .concat([...p.matchAll(/\/(?:dp|gp\/product|product|ASIN)\/([0-9X]{10})/gi)].map((m) => m[1].toUpperCase()));
+  const q = u.searchParams.get('isbn') || u.searchParams.get('ean'); if (q) cands.unshift(q.replace(/[^0-9X]/gi, '').toUpperCase());
+  out.isbn = cands.find((c) => isbn13ok(c) || isbn10ok(c)) || '';
+  const slug = p.split('/').filter(Boolean).find((x) => /[a-z].*-.*[a-z]/i.test(x) && !/^(dp|gp|product|books?|ref=)/i.test(x));
+  if (slug) out.title = slug.replace(/\.html?$/i, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+  return out;
+}
+function fromGoogleBooks(j) {
+  const v = j && j.items && j.items[0] && j.items[0].volumeInfo; if (!v) return null;
+  const ids = v.industryIdentifiers || [], isbn = ((ids.find((x) => x.type === 'ISBN_13') || ids.find((x) => x.type === 'ISBN_10') || {}).identifier) || '';
+  const img = (v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail)) || '';
+  return { title: [v.title, v.subtitle].filter(Boolean).join(': '), author: (v.authors || []).join(', '), isbn,
+    image: img.replace(/^http:\/\//, 'https://').replace(/&edge=curl/, ''), pages: v.pageCount || 0, about: String(v.description || '').replace(/<[^>]+>/g, '').slice(0, 600), source: 'Google Books' };
+}
+function fromOpenLibrary(j) {
+  const d = j && j.docs && j.docs[0]; if (!d) return null;
+  const isbn = (d.isbn || []).find((x) => x.length === 13) || (d.isbn || [])[0] || '';
+  return { title: d.title || '', author: (d.author_name || []).join(', '), isbn,
+    image: d.cover_i ? 'https://covers.openlibrary.org/b/id/' + d.cover_i + '-M.jpg' : '', pages: d.number_of_pages_median || 0, about: '', source: 'Open Library' };
+}
+async function lookupBook(input) {
+  const ref = bookRef(input);
+  if (!ref.isbn && !ref.title) throw bad('Paste a book link, an ISBN or a title');
+  const get = async (u) => { try { const r = await fetch(u, { headers: { 'User-Agent': 'sosmn.org library (MinneapolisCenter@sos.org)' } }); return r.ok ? await r.json() : null; } catch { return null; } };
+  const q = ref.isbn ? 'isbn:' + ref.isbn : 'intitle:' + ref.title;
+  let found = fromGoogleBooks(await get('https://www.googleapis.com/books/v1/volumes?maxResults=1&q=' + encodeURIComponent(q)));
+  if (!found) found = fromOpenLibrary(await get('https://openlibrary.org/search.json?limit=1&' + (ref.isbn ? 'isbn=' + ref.isbn : 'title=' + encodeURIComponent(ref.title))));
+  if (found && !found.image && (found.isbn || ref.isbn)) found.image = 'https://covers.openlibrary.org/b/isbn/' + (found.isbn || ref.isbn) + '-M.jpg';
+  return { ref, found };
+}
 const code4 = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, '0');
 // Which events an admin change applies to: this one, this and following in the series, or the whole series
 function scopeWhere(url, cur) {
@@ -473,8 +572,8 @@ async function handle(request, env) {
     else if (b.provider === 'dev' && env.DEV_LOGIN === 'true') u = { id: 'dev:' + String(b.email).toLowerCase(), provider: 'dev', email: String(b.email).toLowerCase(), name: str(b.name, 80) || String(b.email).split('@')[0] };
     else throw bad('Unknown provider');
     const t = now();
-    await db.prepare(`INSERT INTO users (id, provider, email, name, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)
-      ON CONFLICT(id) DO UPDATE SET email = ?3, name = ?4, last_seen_at = ?5`).bind(u.id, u.provider, u.email, u.name, t).run();
+    await db.prepare(`INSERT INTO users (id, provider, email, name, provider_name, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?5)
+      ON CONFLICT(id) DO UPDATE SET email = ?3, name = CASE WHEN name_edited = 1 THEN name ELSE ?4 END, provider_name = ?4, last_seen_at = ?5`).bind(u.id, u.provider, u.email, u.name, t).run();
     // An admin may have added this person by email before they ever signed in: move those RSVPs and check-ins over
     const manual = 'manual:' + u.email;
     if (u.id !== manual && await db.prepare('SELECT 1 FROM users WHERE id = ?1').bind(manual).first()) {
@@ -517,6 +616,16 @@ async function handle(request, env) {
     const next = (c === 'seeker' && u.category === 'friend') ? 'friend' : c;
     if (next !== u.category) await db.prepare('UPDATE users SET category = ?2, category_at = ?3 WHERE id = ?1').bind(s.uid, next, now()).run();
     return J({ category: next });
+  }
+
+  // Copilot: the person chose to let the center know they finished a challenge (title and date only)
+  if (path === '/api/me/challenge-done' && request.method === 'POST') {
+    const s = await requireUser(request, env);
+    const b = await body(request), ref = str(b.ref, 80), title = str(b.title, 100);
+    if (!ref || !title) throw bad('Which challenge?');
+    const on = /^\d{4}-\d{2}-\d{2}$/.test(String(b.finishedOn || '')) ? b.finishedOn : null;
+    await db.prepare('INSERT OR IGNORE INTO challenge_shares (user_id, ref, title, finished_on, at) VALUES (?1, ?2, ?3, ?4, ?5)').bind(s.uid, ref, title, on, now()).run();
+    return J({ ok: true });
   }
 
   /* ---- presence: counts only (names are never shown) ---- */
@@ -687,14 +796,22 @@ async function handle(request, env) {
     const s = await requireUser(request, env);
     const b = await body(request);
     const phone = normPhone(b.phone);
-    const smsOk = !!b.smsOk;
+    const noMessages = b.noMessages === undefined ? undefined : !!b.noMessages;
+    const smsOk = !!b.smsOk && !noMessages;
+    const zip = b.zip === undefined ? undefined : normZip(b.zip);
+    const name = b.name === undefined ? undefined : str(b.name, 80);
+    if (name !== undefined && !name) throw bad('Please enter your name');
     if (smsOk && !phone) throw bad('Add a phone number to get text reminders.');
     const u = await db.prepare('SELECT * FROM users WHERE id = ?1').bind(s.uid).first();
     if (!u) throw new HttpError(404, 'Please sign in again');
     const t = now();
     const consentAt = smsOk ? (u.sms_ok && u.phone === phone ? u.sms_consent_at : t) : null;
-    await db.prepare('UPDATE users SET phone = ?2, sms_ok = ?3, sms_consent_at = ?4, contact_ack_at = ?5 WHERE id = ?1')
-      .bind(s.uid, phone, smsOk ? 1 : 0, consentAt, u.contact_ack_at || t).run();
+    const st = [db.prepare('UPDATE users SET phone = ?2, sms_ok = ?3, sms_consent_at = ?4, contact_ack_at = ?5 WHERE id = ?1')
+      .bind(s.uid, phone, smsOk ? 1 : 0, consentAt, u.contact_ack_at || t)];
+    if (zip !== undefined) st.push(db.prepare('UPDATE users SET zip = ?2 WHERE id = ?1').bind(s.uid, zip));
+    if (noMessages !== undefined) st.push(db.prepare('UPDATE users SET declined_at = ?2 WHERE id = ?1').bind(s.uid, noMessages ? (u.declined_at || t) : null));
+    if (name !== undefined && name !== u.name) st.push(db.prepare('UPDATE users SET name = ?2, name_edited = CASE WHEN ?2 = COALESCE(provider_name, name) THEN 0 ELSE 1 END WHERE id = ?1').bind(s.uid, name));
+    await db.batch(st);
     const row = await db.prepare('SELECT * FROM users WHERE id = ?1').bind(s.uid).first();
     return J({ contact: contactOf(row) });
   }
@@ -703,7 +820,7 @@ async function handle(request, env) {
     const s = await requireUser(request, env);
     const name = str((await body(request)).name, 80);
     if (!name) throw bad('Name is required');
-    await db.prepare('UPDATE users SET name = ?2 WHERE id = ?1').bind(s.uid, name).run();
+    await db.prepare('UPDATE users SET name = ?2, name_edited = CASE WHEN ?2 = COALESCE(provider_name, name) THEN 0 ELSE 1 END WHERE id = ?1').bind(s.uid, name).run();
     const token = await signSession(env, { ...s, name });
     return J({ ok: true, token });
   }
@@ -862,12 +979,12 @@ async function handle(request, env) {
       occ.sort((a, z) => a.startsAt - z.startsAt);
       seriesId = crypto.randomUUID();
     }
-    const ins = db.prepare(`INSERT INTO events (id, center_id, title, description, format, venue, address, online_url, starts_at, ends_at, timezone, access, status, checkin_code, created_by, created_at, updated_at, series_id, flyer_id, kind, level)
+    const ins = db.prepare(`INSERT INTO events (id, center_id, title, description, format, venue, address, online_url, starts_at, ends_at, timezone, access, status, checkin_code, created_by, created_at, updated_at, series_id, flyer_id, kind, children)
       VALUES (?1, 'mpls', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'scheduled', ?12, ?13, ?14, ?14, ?15, ?16, ?17, ?18)`);
     const ids = occ.map(() => crypto.randomUUID());
     const flyerId = b.flyerId ? str(b.flyerId, 60) : null;
     const stmts = occ.map((x, i) => ins.bind(ids[i], o.title, o.description || null, o.format, o.venue || null, o.address || null, o.online_url || null,
-      x.startsAt, x.endsAt, o.timezone || 'America/Chicago', o.access || 'public', code4(), s.uid, t, seriesId, flyerId, o.kind || 'other', o.level || 'all'));
+      x.startsAt, x.endsAt, o.timezone || 'America/Chicago', o.access || 'public', code4(), s.uid, t, seriesId, flyerId, o.kind || 'workshop', o.children || 0));
     if (seriesId) stmts.unshift(db.prepare('INSERT INTO series (id, center_id, freq, until_at, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
       .bind(seriesId, 'mpls', b.repeat.freq, occ[occ.length - 1].startsAt, s.uid, t));
     await db.batch(stmts);
@@ -1090,6 +1207,7 @@ async function handle(request, env) {
     const s = await requireAdmin(request, env);
     const b = await body(request), t = now();
     const c = validateChallenge(b, request.method === 'PATCH');
+    if (c.kind === 'education' && !c.material) throw bad('Choose what is read or watched: quote, article, book or video');
     if (request.method === 'POST') {
       const id = crypto.randomUUID();
       await db.prepare(`INSERT INTO challenges (id, title, description, kind, days, minutes, minutes_choices, ramp_to, target, material, cadence, per_period, item_points,
@@ -1111,6 +1229,47 @@ async function handle(request, env) {
     const s = await requireAdmin(request, env);
     await db.prepare('DELETE FROM challenges WHERE id = ?1').bind(m[1]).run();
     await logAdmin(env, s, 'challenge_delete', m[1]);
+    return J({ ok: true });
+  }
+
+  /* ---- Library (v0.20): approved items for Copilot; admins manage and look up books ---- */
+  if (path === '/api/library' && request.method === 'GET') {
+    const rows = (await db.prepare("SELECT * FROM library WHERE status = 'approved' ORDER BY kind, priority, created_at").all()).results;
+    return J({ items: rows.map((r) => libraryOut(r)) });
+  }
+  if (path === '/api/admin/library' && request.method === 'GET') {
+    await requireAdmin(request, env);
+    const rows = (await db.prepare('SELECT * FROM library ORDER BY kind, priority, created_at').all()).results;
+    return J({ items: rows.map((r) => libraryOut(r, true)) });
+  }
+  if (path === '/api/admin/library/lookup' && request.method === 'POST') {
+    await requireAdmin(request, env);
+    const b = await body(request);
+    return J(await lookupBook(b.query || b.url || b.isbn || b.title));
+  }
+  if ((path === '/api/admin/library' && request.method === 'POST') || ((m = /^\/api\/admin\/library\/([\w-]+)$/.exec(path)) && request.method === 'PATCH')) {
+    const s = await requireAdmin(request, env);
+    const b = await body(request), t = now(), patch = request.method === 'PATCH';
+    if (patch) {
+      const cur = await db.prepare('SELECT * FROM library WHERE id = ?1').bind(m[1]).first();
+      if (!cur) throw new HttpError(404, 'Item not found');
+      const c = validateLibrary(b, true); checkApproval({ ...cur, ...c });
+      const keys = Object.keys(c);
+      if (keys.length) await db.prepare(`UPDATE library SET ${keys.map((k, i) => k + ' = ?' + (i + 2)).join(', ')}, updated_at = ?${keys.length + 2} WHERE id = ?1`).bind(m[1], ...keys.map((k) => c[k]), t).run();
+      await logAdmin(env, s, 'library_edit', m[1], keys.join(', '));
+      return J({ item: libraryOut(await db.prepare('SELECT * FROM library WHERE id = ?1').bind(m[1]).first(), true) });
+    }
+    const c = validateLibrary(b), id = crypto.randomUUID(); checkApproval({ chapters: 0, url: '', ...c });
+    await db.prepare(`INSERT INTO library (id, kind, title, author, url, summary, image, isbn, chapters, minutes, status, priority, created_by, created_at, updated_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14)`).bind(id, c.kind, c.title, c.author || '', c.url || '', c.summary || '', c.image || '', c.isbn || '',
+      c.chapters || 0, c.minutes || 0, c.status || 'draft', c.priority ?? 100, s.uid, t).run();
+    await logAdmin(env, s, 'library_create', id, c.title);
+    return J({ item: libraryOut(await db.prepare('SELECT * FROM library WHERE id = ?1').bind(id).first(), true) }, 201);
+  }
+  if ((m = /^\/api\/admin\/library\/([\w-]+)$/.exec(path)) && request.method === 'DELETE') {
+    const s = await requireAdmin(request, env);
+    await db.prepare('DELETE FROM library WHERE id = ?1').bind(m[1]).run();
+    await logAdmin(env, s, 'library_delete', m[1]);
     return J({ ok: true });
   }
 
@@ -1178,9 +1337,11 @@ async function handle(request, env) {
   }
 
   /* ---------------- v0.17: Seeker Relationship Management (admins only) ---------------- */
-  const pubJ = (r) => ({ userId: r.userId, name: r.name, email: r.email, phone: r.phone || null, category: r.category, level: r.level, computed: r.computed,
+  const pubJ = (r) => ({ userId: r.userId, name: r.name, providerName: r.nameEdited && r.providerName !== r.name ? r.providerName : null, email: r.email, phone: r.phone || null, zip: r.zip || null,
+    category: r.category, level: r.level, stage: r.stage, computed: r.computed, status: r.status, sevadar: !!r.sevadar, passiveReason: r.passiveReason || null, declined: !!r.declinedAt,
     override: r.override || null, drifting: r.drifting, visits: r.visits, firstVisitAt: r.firstVisitAt, lastVisitAt: r.lastVisitAt, guestsBrought: r.guestsBrought,
-    intros: r.intros, workshops: r.workshops, workshops90: r.workshops90, satsangs: r.satsangs, satsangs90: r.satsangs90, darshans: r.darshans, seva: r.seva,
+    intros: r.intros, workshops: r.workshops, workshops90: r.workshops90, satsangs: r.satsangs, satsangs90: r.satsangs90, darshans: r.darshans, retreats: r.retreats,
+    challenges: r.challenges, orientationDone: r.orientationDone, orientation: ORIENTATION,
     rsvps: r.rsvps, viewed: r.viewed, milestones: r.milestones, mentorId: r.mentorId || null, mentorName: r.mentorName || null,
     createdAt: r.createdAt, lastSeenAt: r.lastSeenAt, blocked: !!r.blockedAt });
 
@@ -1188,17 +1349,20 @@ async function handle(request, env) {
   if (path === '/api/admin/journey' && request.method === 'GET') {
     await requireAdmin(request, env);
     const t = now(), rows = (await journeyRows(db, t)).filter((r) => !r.blockedAt);
-    const counts = Object.fromEntries(JOURNEY.map((k) => [k, 0]));
-    rows.forEach((r) => { counts[r.level]++; });
+    const counts = Object.fromEntries(STAGES.map((k) => [k, 0])), statusCounts = Object.fromEntries(STATUSES.map((k) => [k, 0]));
+    rows.forEach((r) => { counts[r.level]++; if (r.status) statusCounts[r.status]++; });
     const monthStart = (() => { const d = centerDayStart(t); const dt = new Date(d + 12 * 3600000); return d - (Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', day: 'numeric' }).format(dt)) - 1) * DAY_MS; })();
-    const lv = url.searchParams.get('level') || '', q = (url.searchParams.get('q') || '').trim().toLowerCase(), dr = url.searchParams.get('drifting') === '1', nm = url.searchParams.get('nomentor') === '1';
+    const lv = url.searchParams.get('level') || url.searchParams.get('stage') || '', st = url.searchParams.get('status') || '', q = (url.searchParams.get('q') || '').trim().toLowerCase(),
+      dr = url.searchParams.get('drifting') === '1', nm = url.searchParams.get('nomentor') === '1', sv = url.searchParams.get('sevadar') === '1';
     let list = rows;
-    if (JOURNEY.includes(lv)) list = list.filter((r) => r.level === lv);
+    if (STAGES.includes(lv)) list = list.filter((r) => r.level === lv);
+    if (STATUSES.includes(st)) list = list.filter((r) => r.status === st);
+    if (sv) list = list.filter((r) => r.sevadar);
     if (dr) list = list.filter((r) => r.drifting);
     if (nm) list = list.filter((r) => !r.mentorId && r.level !== 'initiate');
-    if (q) list = list.filter((r) => (r.name || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q));
+    if (q) list = list.filter((r) => (r.name || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q) || (r.providerName || '').toLowerCase().includes(q) || (r.zip || '') === q);
     list.sort((a, b) => (b.lastVisitAt || b.createdAt || 0) - (a.lastVisitAt || a.createdAt || 0));
-    return J({ counts, total: rows.length, drifting: rows.filter((r) => r.drifting).length,
+    return J({ counts, statusCounts, total: rows.length, drifting: rows.filter((r) => r.drifting).length, sevadars: rows.filter((r) => r.sevadar).length,
       firstVisitsThisMonth: rows.filter((r) => r.firstVisitAt >= monthStart).length,
       noMentor: rows.filter((r) => !r.mentorId && r.visits >= 2 && r.level !== 'initiate').length,
       people: list.slice(0, 500).map(pubJ), at: t });
@@ -1213,12 +1377,13 @@ async function handle(request, env) {
     const ms = (await db.prepare('SELECT kind, at, by_email AS byEmail FROM milestones WHERE user_id = ?1').bind(uid).all()).results;
     const notes = (await db.prepare('SELECT id, body, by_email AS byEmail, at FROM person_notes WHERE user_id = ?1 AND deleted_at IS NULL ORDER BY at DESC LIMIT 100').bind(uid).all()).results;
     const ev = (sql) => db.prepare(sql).bind(uid).all().then((x) => x.results);
-    const [views, rsvps, checks] = await Promise.all([
+    const [views, rsvps, checks, shares] = await Promise.all([
       ev(`SELECT v.first_at AS at, v.views, e.id AS eventId, e.title, e.kind, e.starts_at AS startsAt FROM event_views v JOIN events e ON e.id = v.event_id WHERE v.user_id = ?1`),
       ev(`SELECT r.updated_at AS at, r.status, r.guests, e.id AS eventId, e.title, e.kind, e.starts_at AS startsAt FROM rsvps r JOIN events e ON e.id = r.event_id WHERE r.user_id = ?1`),
-      ev(`SELECT c.checked_in_at AS at, c.method, c.guests, e.id AS eventId, e.title, e.kind, e.starts_at AS startsAt FROM checkins c JOIN events e ON e.id = c.event_id WHERE c.user_id = ?1`)]);
+      ev(`SELECT c.checked_in_at AS at, c.method, c.guests, e.id AS eventId, e.title, e.kind, e.starts_at AS startsAt FROM checkins c JOIN events e ON e.id = c.event_id WHERE c.user_id = ?1`),
+      ev(`SELECT at, title, finished_on AS finishedOn FROM challenge_shares WHERE user_id = ?1`)]);
     const timeline = [{ type: 'joined', at: r.createdAt }]
-      .concat(views.map((x) => ({ type: 'viewed', ...x })), rsvps.map((x) => ({ type: 'rsvp', ...x })), checks.map((x) => ({ type: 'checkin', ...x })),
+      .concat(views.map((x) => ({ type: 'viewed', ...x })), rsvps.map((x) => ({ type: 'rsvp', ...x })), checks.map((x) => ({ type: 'checkin', ...x })), shares.map((x) => ({ type: 'challenge', ...x })),
         ms.map((x) => ({ type: 'milestone', kind: x.kind, at: x.at, byEmail: x.byEmail })))
       .filter((x) => x.at).sort((a, b) => b.at - a.at).slice(0, 300);
     return J({ journey: { ...pubJ(r), milestoneDetail: ms }, notes, timeline });
@@ -1229,9 +1394,22 @@ async function handle(request, env) {
     const s = await requireAdmin(request, env);
     const uid = decodeURIComponent(m[1]), b = await body(request), t = now(), stmts = [], what = [];
     if (!(await loadUser(db, uid))) throw new HttpError(404, 'Person not found');
-    if (b.level !== undefined) {
-      if (b.level !== null && !JOURNEY.includes(b.level)) throw bad('Level must be one of: ' + JOURNEY.join(', '));
-      stmts.push(db.prepare('UPDATE users SET journey_level = ?2, journey_set_by = ?3, journey_set_at = ?4 WHERE id = ?1').bind(uid, b.level, s.email, t)); what.push('level ' + (b.level || 'auto'));
+    const stage = b.stage !== undefined ? b.stage : b.level;
+    if (stage !== undefined) {
+      // Satsangi and Initiate are the person's category (they decide which events they see); the others are a hand-set stage
+      if (stage !== null && !STAGES.includes(stage)) throw bad('Stage must be one of: ' + STAGES.join(', '));
+      const cat = stage === 'satsangi' ? 'friend' : stage === 'initiate' ? 'initiate' : 'seeker';
+      stmts.push(db.prepare('UPDATE users SET category = ?2, category_at = ?3 WHERE id = ?1 AND category != ?2').bind(uid, cat, t));
+      stmts.push(db.prepare('UPDATE users SET journey_level = ?2, journey_set_by = ?3, journey_set_at = ?4 WHERE id = ?1').bind(uid, SET_STAGES.includes(stage) ? stage : null, s.email, t));
+      what.push('stage ' + (stage || 'auto'));
+    }
+    if (b.passive !== undefined) {
+      const reason = b.passive ? str(b.passiveReason || '', 200) : null;
+      stmts.push(db.prepare('UPDATE users SET passive_at = ?2, passive_reason = ?3 WHERE id = ?1').bind(uid, b.passive ? t : null, reason)); what.push(b.passive ? 'passive' : 'not passive');
+    }
+    if (b.sevadar !== undefined) { stmts.push(db.prepare('UPDATE users SET sevadar = ?2 WHERE id = ?1').bind(uid, b.sevadar ? 1 : 0)); what.push(b.sevadar ? 'sevadar' : 'not sevadar'); }
+    if (b.declined !== undefined) {   // e.g. they asked in person or by email to receive nothing
+      stmts.push(db.prepare('UPDATE users SET declined_at = ?2, sms_ok = CASE WHEN ?2 IS NULL THEN sms_ok ELSE 0 END WHERE id = ?1').bind(uid, b.declined ? t : null)); what.push(b.declined ? 'declined' : 'not declined');
     }
     if (b.mentorId !== undefined) {
       if (b.mentorId !== null) { if (b.mentorId === uid) throw bad('A person can’t be their own mentor'); if (!(await loadUser(db, b.mentorId))) throw bad('Mentor not found'); }
@@ -1275,7 +1453,8 @@ async function handle(request, env) {
     const handled = new Set((await db.prepare('SELECT user_id, kind, ref FROM followups').all()).results.map((x) => x.user_id + '|' + x.kind + '|' + x.ref));
     const items = [];
     const add = (kind, ref, uid, extra) => { const r = by[uid]; if (!r || handled.has(uid + '|' + kind + '|' + ref)) return;
-      items.push({ kind, ref: String(ref), userId: uid, name: r.name, email: r.email, phone: r.phone || null, level: r.level, visits: r.visits, lastVisitAt: r.lastVisitAt, mentorName: r.mentorName || null, ...extra }); };
+      items.push({ kind, ref: String(ref), userId: uid, name: r.name, email: r.email, phone: r.phone || null, level: r.level, status: r.status, visits: r.visits, lastVisitAt: r.lastVisitAt, mentorName: r.mentorName || null,
+        workshops: r.workshops, challenges: r.challenges, satsangs90: r.satsangs90, ...extra }); };
     // 1. First visit in the last 14 days → thank them
     (await db.prepare(`SELECT c.user_id, c.event_id, c.checked_in_at, e.title, e.kind FROM checkins c JOIN events e ON e.id = c.event_id
         WHERE c.checked_in_at >= ?1 AND c.checked_in_at = (SELECT MIN(c2.checked_in_at) FROM checkins c2 WHERE c2.user_id = c.user_id)`).bind(t - 14 * DAY_MS).all()).results
@@ -1286,14 +1465,17 @@ async function handle(request, env) {
         WHERE r.status = 'going' AND c.user_id IS NULL AND e.status != 'cancelled' AND e.ends_at < ?1 AND e.ends_at >= ?2`).bind(t, t - 14 * DAY_MS).all()).results
       .forEach((x) => add('no_show', x.event_id, x.user_id, { eventId: x.event_id, eventTitle: x.title, at: x.starts_at }));
     rows.forEach((r) => {
-      // 3. Drifting: came 2+ times, nothing for 60–180 days
-      if (r.drifting && r.lastVisitAt >= t - 180 * DAY_MS) add('drifting', r.lastVisitAt, r.userId, { at: r.lastVisitAt });
-      // 4. Reached a new level recently (active in the last 30 days)
-      if ((r.level === 'l3' || r.level === 'l4') && r.lastVisitAt >= t - 30 * DAY_MS) add('level_up', r.level, r.userId, { at: r.lastVisitAt });
-      // 5. Coming regularly but has no mentor yet
-      if (r.visits >= 2 && !r.mentorId && r.level !== 'initiate' && r.lastVisitAt >= t - 90 * DAY_MS) add('mentor', '', r.userId, { at: r.lastVisitAt });
+      // 3. Drifted: came 2+ times, nothing for 60 days to 12 months (Passive and Declined people are left alone)
+      if (r.status === 'drifted' && r.visits >= 2) add('drifting', r.lastVisitAt, r.userId, { at: r.lastVisitAt });
+      // 4. Finished the Seeker orientation (5 workshops, 2 challenges) → congratulate, talk about satsang
+      if (r.level === 'seeker' && r.orientationDone && r.status === 'active') add('orientation', '', r.userId, { at: r.lastVisitAt });
+      // 5. Comes to satsang regularly but isn't flagged Satsangi yet → an admin decides
+      if (r.level === 'seeker' && r.satsangs90 >= SATSANGI_HINT) add('satsangi', '', r.userId, { at: r.lastVisitAt });
+      // 6. Coming regularly but has no mentor yet
+      if (r.visits >= 2 && !r.mentorId && r.level !== 'initiate' && r.status === 'active') add('mentor', '', r.userId, { at: r.lastVisitAt });
     });
-    const order = { first_visit: 0, no_show: 1, level_up: 2, mentor: 3, drifting: 4 };
+    for (let i = items.length - 1; i >= 0; i--) { const r = by[items[i].userId]; if (r.declinedAt || (r.passiveAt && items[i].kind !== 'first_visit')) items.splice(i, 1); }
+    const order = { first_visit: 0, no_show: 1, orientation: 2, satsangi: 3, mentor: 4, drifting: 5 };
     items.sort((a, b) => order[a.kind] - order[b.kind] || (b.at || 0) - (a.at || 0));
     const counts = {}; items.forEach((x) => { counts[x.kind] = (counts[x.kind] || 0) + 1; });
     return J({ items, counts, at: t });
@@ -1301,7 +1483,7 @@ async function handle(request, env) {
   if (path === '/api/admin/followups' && (request.method === 'POST' || request.method === 'DELETE')) {
     const s = await requireAdmin(request, env);
     const b = request.method === 'POST' ? await body(request) : { userId: url.searchParams.get('userId'), kind: url.searchParams.get('kind'), ref: url.searchParams.get('ref') };
-    const kinds = ['first_visit', 'no_show', 'drifting', 'level_up', 'mentor'];
+    const kinds = ['first_visit', 'no_show', 'drifting', 'orientation', 'satsangi', 'mentor', 'level_up'];
     if (!kinds.includes(b.kind) || !b.userId) throw bad('Unknown follow-up');
     const ref = str(b.ref == null ? '' : String(b.ref), 100) || '';
     if (request.method === 'DELETE') { await db.prepare('DELETE FROM followups WHERE user_id = ?1 AND kind = ?2 AND ref = ?3').bind(b.userId, b.kind, ref).run(); return J({ ok: true }); }
@@ -1331,9 +1513,9 @@ async function handle(request, env) {
         (SELECT COUNT(DISTINCT c.user_id) FROM checkins c WHERE c.event_id = ?1 AND EXISTS (SELECT 1 FROM checkins c2 JOIN events e2 ON e2.id = c2.event_id
             WHERE c2.user_id = c.user_id AND e2.id != ?1 AND e2.starts_at > ?2 AND e2.starts_at <= ?2 + 30 * 86400000)) AS returned30`, e.starts_at);
     const attendees = new Set((await db.prepare('SELECT user_id FROM checkins WHERE event_id = ?1').bind(m[1]).all()).results.map((x) => x.user_id));
-    const byLevel = Object.fromEntries(JOURNEY.map((k) => [k, 0]));
+    const byLevel = Object.fromEntries(STAGES.map((k) => [k, 0]));
     if (attendees.size) (await journeyRows(db, t)).forEach((r) => { if (attendees.has(r.userId)) byLevel[r.level]++; });
-    return J({ insight: { ...f, byLevel, kind: e.kind, level: e.level, ended: e.ends_at < t, returnWindowOpen: t < e.starts_at + 30 * DAY_MS } });
+    return J({ insight: { ...f, byLevel, kind: e.kind, access: e.access, ended: e.ends_at < t, returnWindowOpen: t < e.starts_at + 30 * DAY_MS } });
   }
 
   // Team (owner only): admins and hosts
@@ -1381,4 +1563,4 @@ async function handle(request, env) {
 }
 
 // For unit tests (tests/unit). Not used by the Worker runtime.
-export { calcJourney, validateChallenge, challengeOut, validateEvent, centerDayStart, windowFor };
+export { calcJourney, calcStage, calcStatus, validateChallenge, challengeOut, validateEvent, centerDayStart, windowFor, validateLibrary, checkApproval, libraryOut, bookRef, fromGoogleBooks, fromOpenLibrary };
