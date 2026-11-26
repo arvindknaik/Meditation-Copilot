@@ -115,9 +115,10 @@ function parseNotes(txt, v) {
   for (const raw of txt.split('\n')) {
     const l = raw.trim(); if (!l || l.startsWith('# ')) continue;
     if (/^summary:/i.test(l)) { rel.summary = l.replace(/^summary:\s*/i, ''); continue; }
-    const h = l.match(/^##\s*(New|Improved|Fixed)/i); if (h) { type = h[1].toLowerCase(); continue; }
+    // Headings: "## New", "New", "**New**" or "New:" (Notepad's Markdown view can drop the ## when it saves)
+    const h = l.replace(/^#+\s*/, '').replace(/[*_:]/g, '').trim().match(/^(New|Improved|Fixed)$/i); if (h) { type = h[1].toLowerCase(); continue; }
     if (!type || l.startsWith('#')) continue;
-    const t = l.replace(/^[-*]\s*/, ''); const admin = /^admin:/i.test(t);
+    const t = l.replace(/^([-*•]|\d+[.)])\s*/, ''); const admin = /^admin:/i.test(t);
     rel.items.push({ type, text: t.replace(/^admin:\s*/i, ''), audience: admin ? 'admin' : 'all' });
   }
   return rel;
