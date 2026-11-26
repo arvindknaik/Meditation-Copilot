@@ -1,15 +1,82 @@
 {
   "releases": [
     {
+      "version": "0.19.0",
+      "date": "2026-11-25",
+      "summary": "A new 21-day meditation path in Copilot, and seeker-journey tools for the center team.",
+      "items": [
+        {
+          "type": "new",
+          "text": "21-Day Foundation in Copilot: sit 10, 15 or 20 minutes every day for 21 days. When you finish, continue or take the 21-Day Advance, growing to 30 minutes.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "When you start using Copilot, you choose your first challenge: the 21-Day Foundation or attending 6 sessions in 3 months.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "What's new page, and the version number in the footer.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Follow-ups: people to thank, check on or welcome back, with ready-to-edit messages.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Journey: everyone's level (New, Seeker L2–L4, Initiate), drifting, and a person page with timeline, mentor, notes and milestones.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Event type and \"mainly for\" on every event, and an Insight tab (opened → going → came, first-timers, came back).",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Challenge settings: minute choices, grow-to, next step, offered at sign-up.",
+          "audience": "admin"
+        },
+        {
+          "type": "improved",
+          "text": "Clearer \"How challenges work\" on the Roadmap: the 21-day path, missed days, attending sessions and points.",
+          "audience": "all"
+        }
+      ]
+    },
+    {
       "version": "0.16.0",
       "date": "2026-11-24",
       "summary": "Where we started: everything built before Nov 2026, summarized.",
       "items": [
-        { "type": "new", "text": "sosmn.org is the center's events site: upcoming events, a calendar, RSVP (with guests), add to your calendar, and check-in at the center.", "audience": "all" },
-        { "type": "new", "text": "Meditation Copilot lives at sosmn.org/copilot: meditation timer, your roadmap to 10,000 hours, challenges, insights, rewards, Learn and a Thought for today.", "audience": "all" },
-        { "type": "new", "text": "News & archive: 28 stories from the center since 2007, plus an About page with directions.", "audience": "all" },
-        { "type": "new", "text": "Sign in with Google or Microsoft. Phone and computer layouts, with a switch in the footer.", "audience": "all" },
-        { "type": "new", "text": "Admin site: events, RSVPs, check-in with door code and QR, invitations, people, challenges, team and activity log.", "audience": "admin" }
+        {
+          "type": "new",
+          "text": "sosmn.org is the center's events site: upcoming events, a calendar, RSVP (with guests), add to your calendar, and check-in at the center.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Meditation Copilot lives at sosmn.org/copilot: meditation timer, your roadmap to 10,000 hours, challenges, insights, rewards, Learn and a Thought for today.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "News & archive: 28 stories from the center since 2007, plus an About page with directions.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Sign in with Google or Microsoft. Phone and computer layouts, with a switch in the footer.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Admin site: events, RSVPs, check-in with door code and QR, invitations, people, challenges, team and activity log.",
+          "audience": "admin"
+        }
       ]
     }
   ]
