@@ -25,7 +25,7 @@ function prep(cmd, args) {
 export function run(cmd, args, opts = {}) {
   const [c, a, shell] = prep(cmd, args);
   const out = opts.capture ? 'pipe' : 'inherit';
-  const r = spawnSync(c, a, { cwd: opts.cwd || ROOT, stdio: [opts.input != null ? 'pipe' : 'inherit', out, out], shell, windowsHide: true, env: { ...process.env, ...(opts.env || {}) }, input: opts.input });
+  const r = spawnSync(c, a, { cwd: opts.cwd || ROOT, stdio: [opts.input != null ? 'pipe' : 'inherit', out, out], shell, env: { ...process.env, ...(opts.env || {}) }, input: opts.input });
   if (r.status !== 0 && !opts.allowFail) throw new Error(`Failed: ${cmd} ${args.join(' ')}${opts.capture ? '\n' + (r.stderr || '') : ''}`);
   return opts.capture ? String(r.stdout || '').trim() : r.status;
 }

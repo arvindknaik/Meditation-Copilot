@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { ROOT, run, git, wrangler, readJSON, writeJSON, ask } from './lib.mjs';
 import { seedSQL } from './seed.mjs';
 
@@ -131,7 +132,9 @@ async function toProd() {
   if (!fs.existsSync(notesFile)) fs.writeFileSync(notesFile, draftNotes(v));
   if (!YES) {
     say(`Release notes: ${path.relative(ROOT, notesFile)} — opening it for you to edit`);
-    try { run(process.platform === 'win32' ? 'notepad' : 'open', process.platform === 'win32' ? [notesFile] : ['-t', notesFile], { allowFail: true }); } catch { /* open it yourself */ }
+    // Open the editor in its own window and carry on (don't wait for it to close)
+    try { spawn(process.platform === 'win32' ? 'notepad.exe' : 'open', process.platform === 'win32' ? [notesFile] : ['-t', notesFile], { detached: true, stdio: 'ignore' }).unref(); }
+    catch { console.log('  Open ' + notesFile + ' in any text editor.'); }
     await ask('Press Enter when the notes are saved… ');
   }
   const rel = parseNotes(fs.readFileSync(notesFile, 'utf8'), v);
