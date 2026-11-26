@@ -1,12 +1,12 @@
-# Test report — v0.19-b1 — ❌ FAILED
+# Test report — v0.19-b2 — ✅ passed
 
-Nov 25, 2026, 6:57 PM · commit 9dd8664 · suites: unit, api, e2e
+Nov 25, 2026, 7:04 PM · commit 1bb3b1a · suites: unit, api, e2e
 
 | Suite | Passed | Failed | Time |
 |---|---|---|---|
 | unit | 15 | 0 | 2 s |
-| api | 8 | 0 | 19 s |
-| e2e | 3 | 1 | 52 s |
+| api | 8 | 0 | 22 s |
+| e2e | 4 | 0 | 31 s |
 
 | Feature | Passed | Failed |
 |---|---|---|
@@ -15,14 +15,9 @@ Nov 25, 2026, 6:57 PM · commit 9dd8664 · suites: unit, api, e2e
 | events | 2 | 0 |
 | release | 6 | 0 |
 | site | 1 | 0 |
-| srm | 4 | 1 |
+| srm | 5 | 0 |
 
-## Failures
-- **[srm] admin: local test sign-in, follow-ups and journey** (e2e)
 
-  ```
-  follow-ups are listed
-  ```
 
 <details><summary>All tests</summary>
 
@@ -51,7 +46,7 @@ Nov 25, 2026, 6:57 PM · commit 9dd8664 · suites: unit, api, e2e
 - ✅ [events] new events keep their type and audience (api)
 - ✅ [site] home page shows upcoming events on a phone (e2e)
 - ✅ [challenges] a new Copilot user must choose a first challenge (e2e)
-- ❌ [srm] admin: local test sign-in, follow-ups and journey (e2e)
+- ✅ [srm] admin: local test sign-in, follow-ups and journey (e2e)
 - ✅ [release] What’s new pages open on the site and the admin site (e2e)
 
 </details>
