@@ -129,7 +129,9 @@ function parseNotes(txt, v) {
 }
 
 async function toProd() {
-  if (!clean()) fail('You have uncommitted changes. Run `release build` first.');
+  // Release notes being written (releases/v*.md) are allowed; anything else must be built and tested first
+  const pending = git('status', '--porcelain').split('\n').filter((l) => l.trim() && !/\sreleases\/v[\d.]+\.md$/.test(l));
+  if (pending.length) fail('You have uncommitted changes. Run `release build` first.');
   const v = readJSON('version.json'), d = deployments();
   if (!d.test || d.test.build !== label(v)) fail(`${label(v)} has not been deployed to test yet. Run \`release test\` and check it first.`);
   const short = v.version.replace(/\.0$/, ''), notesFile = path.join(ROOT, 'releases', `v${short}.md`);
