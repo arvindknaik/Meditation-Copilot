@@ -27,11 +27,11 @@
       count: function (d) { return d.runs.reduce(function (a, L) { return a + Math.floor(L / 7) - Math.floor(L / 21); }, 0); } },
     { id: 'streak21', category: 'consistency', icon: '🌿', name: '21-Day Streak', desc: '21 days in a row meeting your target (again every 21 days)', points: 50, repeat: true,
       count: function (d) { return d.runs.reduce(function (a, L) { return a + Math.floor(L / 21); }, 0); } },
-    { id: 'challenge_p1', category: 'goals', icon: '🪷', name: 'Phase 1 Complete', desc: 'Reach day 21 of the 42-day challenge', points: 50, repeat: true,
+    { id: 'challenge_p1', category: 'goals', icon: '🪷', name: 'Phase 1 Complete', desc: 'Reach day 21 of the original 42-day challenge', points: 50, repeat: true, who: 'none',
       count: function (d) { return d.phase1Runs; } },
-    { id: 'challenge_42', category: 'goals', icon: '🏆', name: '42-Day Challenge Complete', desc: 'Complete all 42 days', points: 100, repeat: true,
+    { id: 'challenge_42', category: 'goals', icon: '🏆', name: '42-Day Challenge Complete', desc: 'Complete all 42 days of the original challenge', points: 100, repeat: true, who: 'none',
       count: function (d) { return d.challengesDone; } },
-    { id: 'challenge_med', category: 'goals', icon: '🌱', name: 'Meditation Challenges', desc: 'Complete a meditation challenge (21-Day Foundation, 21-Day Advance and others); points set by the center', points: 0, repeat: true,
+    { id: 'challenge_med', category: 'goals', icon: '🌱', name: 'Meditation Challenges', desc: 'Finish a meditation challenge such as the 21-Day Foundation or 21-Day Advance. Points are shown on each challenge', points: 0, repeat: true,
       count: function (d) { return d.planDone; }, total: function (d) { return d.planPoints; } }
   ].concat(HOURS.map(function (h) {
     return { id: 'hours_' + h[0], category: 'goals', icon: '⏳', name: h[0].toLocaleString() + ' Hours', desc: 'Log ' + h[0].toLocaleString() + ' hours of meditation in the app', points: h[1],

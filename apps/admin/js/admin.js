@@ -14,9 +14,9 @@
   var KIND = { intro: 'Introduction', workshop: 'Workshop', satsang: 'Satsang', darshan: 'Darshan / retreat', seva: 'Seva', community: 'Community / celebration', other: 'Other' };
   var AUD = { all: 'Everyone', 'new': 'New (introduction)', seeker: 'Seekers', initiate: 'Initiates' };
   var LEVEL = { 'new': 'New', l2: 'Seeker · L2', l3: 'Seeker · L3', l4: 'Seeker · L4', initiate: 'Initiate' };
-  var LEVEL_HINT = { 'new': 'Needs an introduction', l2: 'Going deeper: workshops, a 21/42-day challenge, questions answered', l3: 'Regular satsang, early-morning practice, toward 60 min daily',
+  var LEVEL_HINT = { 'new': 'Needs an introduction', l2: 'Going deeper: workshops, a 21-Day Foundation or Advance, questions answered', l3: 'Regular satsang, early-morning practice, toward 60 min daily',
     l4: 'The role of the Master, Darshan, seva', initiate: 'Steady progress in meditation and seva' };
-  var MILESTONE = { challenge_done: 'Completed a 21- or 42-day challenge', questions_clear: 'No open questions on the teachings', met_master: 'Met Sant Rajinder Singh Ji in person' };
+  var MILESTONE = { challenge_done: 'Completed a 21-day (or the original 42-day) challenge', questions_clear: 'No open questions on the teachings', met_master: 'Met Sant Rajinder Singh Ji in person' };
   var TABS = [['events', 'Events', 'host'], ['followups', 'Follow-ups', 'admin'], ['journey', 'Journey', 'admin'], ['people', 'People', 'admin'], ['invite', 'Invite', 'admin'], ['challenges', 'Challenges', 'admin'],
     ['overview', 'Overview', 'admin'], ['team', 'Team', 'admin'], ['log', 'Activity', 'admin']];
   var ACTIONS = {

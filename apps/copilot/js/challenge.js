@@ -318,12 +318,23 @@
     }
     return g + '</div></div></div>';
   }
+  // General explainer, shown on the Roadmap before and between challenges
+  var HOW_HTML =
+    '<details class="ch-rules"><summary>How challenges work</summary><ul class="small">' +
+    '<li>Every challenge has a finish line: a number of days or sessions, and an end date.</li>' +
+    '<li><b>21-Day Foundation:</b> sit the same 10, 15 or 20 minutes every day for 21 days. It builds the habit.</li>' +
+    '<li><b>21-Day Advance:</b> after the Foundation, your daily time grows about a minute a day, reaching 30 minutes by day 21. Or simply do another 21 days at the same time.</li>' +
+    '<li>All your sittings in a day are added together. A day counts once it is over (at midnight), so you can still sit later today.</li>' +
+    '<li>Life happens: you may miss up to 1 day in every 10 (2 days in a 21-day challenge). One more ends it, and you can start again whenever you like.</li>' +
+    '<li><b>Attend 6 sessions in 3 months:</b> check in at center sessions on sosmn.org. Sign in with Google or Microsoft so your check-ins count.</li>' +
+    '<li>Each challenge shows its points; you earn them when you finish.</li></ul></details>';
   function rulesPlan(c) {
     return '<details class="ch-rules"><summary>How this challenge works</summary><ul class="small">' +
       '<li>' + (c.run.rampTo ? 'Your daily time grows a little each day, from ' + c.run.base + ' to ' + c.run.rampTo + ' minutes by day ' + c.total + '.' : 'Meditate at least ' + c.run.base + ' minutes every day for ' + c.total + ' days.') + '</li>' +
       '<li>All your sittings in a day are added together. A day counts once it is over (at midnight).</li>' +
       '<li>Up to ' + c.allow + ' missed day' + (c.allow === 1 ? '' : 's') + ' allowed. One more ends the challenge; you can start again any time.</li>' +
-      '<li>Complete it to earn ' + (c.run.points || 0) + ' points.</li></ul></details>';
+      '<li>' + (c.run.rampTo ? 'Reaching ' + c.run.rampTo + ' minutes a day is worth celebrating. ' : 'When you finish, you can do another ' + c.total + ' days at the same time, or take the 21-Day Advance and grow to 30 minutes. ') + '</li>' +
+      '<li>Finish it to earn ' + (c.run.points || 0) + ' points.</li></ul></details>';
   }
   function nextOptions(last) {
     var list = catalog().filter(function (x) { return x.kind === 'daily_sitting'; }), out = [];
@@ -374,7 +385,7 @@
       opts = catalog().filter(function (x) { return x.kind === 'daily_sitting' && !x.nextOf; }).map(function (x, i) { return { x: x, o: { primary: i === 0, tag: i === 0 ? 'Recommended' : '' } }; });
     }
     var list = opts.map(function (o) { return o.x; });
-    el.innerHTML = intro + (opts.length ? '<div class="card"><div class="section-title">' + (c && c.done ? 'Choose your next challenge' : 'Choose a challenge') + '</div>' + opts.map(function (o) { return optionHTML(o.x, o.o); }).join('') + '</div>' : '');
+    el.innerHTML = intro + (opts.length ? '<div class="card"><div class="section-title">' + (c && c.done ? 'Choose your next challenge' : 'Choose a challenge') + '</div>' + opts.map(function (o) { return optionHTML(o.x, o.o); }).join('') + HOW_HTML + '</div>' : '<div class="card">' + HOW_HTML + '</div>');
     bindOptions(el, list, function () { render(); });
   }
 

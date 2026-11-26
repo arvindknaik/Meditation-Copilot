@@ -85,7 +85,7 @@
       body = '<b>Initiated Member</b><div class="small muted">Initiated ' + (p.start ? MC.esc(MC.fmtDate(MC.parseDate(p.start))) : '') +
         (p.initiatedBy ? ' by ' + MC.esc(p.initiatedBy) : '') + '</div>';
     } else if (p.userType === 'seeker') {
-      body = '<b>New Seeker</b><div class="small muted">42-day challenge on the Roadmap</div>';
+      body = '<b>New Seeker</b><div class="small muted">21-day challenges on the Roadmap</div>';
     } else {
       body = '<b>Not set yet</b>';
     }
