@@ -1,6 +1,118 @@
 {
   "releases": [
     {
+      "version": "0.20.0",
+      "date": "2026-11-26",
+      "summary": "Reading and video challenges, event type icons, and a simpler, steadier sosmn.org.",
+      "highlights": [
+        "Copilot: reading and video challenges, with books by the Masters and talks to watch.",
+        "Every event shows its type and says FREE; new visitor guidelines.",
+        "Your details: choose the name we use, add your ZIP code, or ask for no messages."
+      ],
+      "items": [
+        {
+          "type": "new",
+          "text": "Copilot reading and watching challenges: Daily Thought (30 days), an article a week, a book a chapter at a time, and talks (3 a week). Catching up is always allowed.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Copilot: \"✓ I read it\" on the Thought for today, \"Mark as read\" on Learn articles, book chapters with a finish celebration (+100 points), \"✓ Watched\" for talks, and \"Your reading\" in Learn.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Copilot: when you finish a challenge you can choose to let the center know (only its name and date are shared).",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "sosmn.org: an icon for each event type (Public Intro, Workshop, Satsang, Retreat, Darshan, Festival, Celebration), or a small picture of the flyer.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "sosmn.org: \"All our programs are free\" on the event lists, and FREE on every event.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "sosmn.org: each event says whether a children's program is offered.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "sosmn.org: Visitor guidelines page (video monitoring, photography, quiet during meditation, children, check-in).",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Your details: editable name, optional ZIP code, \"Please don't send me any messages\", and a short privacy note.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Library tab: books (look up details from an Amazon link or ISBN), talks and article links; only approved items appear in Copilot.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Challenges: new Education type (what to read or watch, pace, total, points each), and four starter reading/video challenges.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "People stages (Potential, New, Seeker, Satsangi, Initiate) and status (Active, Drifted, Dropped, Passive, Declined), Sevadar flag, ZIP code and both names on the person page.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Seeker orientation progress (5 workshops, 2 challenges); Follow-ups for \"orientation done\" and \"ready to be Satsangi?\".",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Events: one Audience (Public, Community, Initiates) instead of \"Who can see it\" and \"Mainly for\"; children's program checkbox; event types updated.",
+          "audience": "admin"
+        },
+        {
+          "type": "improved",
+          "text": "The header (logo and menu) stays in the same place on every page.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "A much shorter footer.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "The phone/computer layout switch is now a small icon in the header.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "About page: shorter, clearer directions; duplicate links removed.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "What's new in the apps shows a few highlights; full notes are on the admin site and GitHub.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "\"Seeker friend\" is now called Satsangi; Community events are for Satsangis and Initiates.",
+          "audience": "admin"
+        },
+        {
+          "type": "fixed",
+          "text": "the event's flyer now shows on its admin page.",
+          "audience": "admin"
+        }
+      ]
+    },
+    {
       "version": "0.19.0",
       "date": "2026-11-25",
       "summary": "A new 21-day meditation path in Copilot, and seeker-journey tools for the center team.",
