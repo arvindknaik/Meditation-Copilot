@@ -57,14 +57,21 @@ test('[challenges] a new Copilot user must choose a first challenge', async () =
 
 test('[srm] admin: local test sign-in, follow-ups and journey', async () => {
   const { p, ctx, errors } = await page(DESKTOP);
-  await p.goto(ADMIN + '/', { waitUntil: 'networkidle' }); await p.waitForTimeout(800);
-  await p.fill('#tEmail', 'owner@example.com'); await p.click('#tBtn'); await p.waitForTimeout(1500);
-  await p.goto(ADMIN + '/#followups'); await p.waitForTimeout(1500);
-  assert.ok((await p.$$('.fu-row')).length >= 3, 'follow-ups are listed');
-  await shot(p, 'admin-followups-desktop');
-  await p.goto(ADMIN + '/#journey'); await p.waitForTimeout(1500);
-  assert.match(await p.textContent('#app'), /Seeker · L3/);
-  await shot(p, 'admin-journey-desktop'); assert.deepEqual(errors, []); await ctx.close();
+  try {
+    await p.goto(ADMIN + '/', { waitUntil: 'networkidle' });
+    await p.waitForSelector('#tEmail', { timeout: 15000 });
+    await p.fill('#tEmail', 'owner@example.com'); await p.click('#tBtn');
+    await p.waitForFunction(() => !document.getElementById('tEmail'), null, { timeout: 15000 }).catch(() => {});
+    await p.goto(ADMIN + '/#followups');
+    // wait for the list rather than a fixed time (slower computers)
+    await p.waitForFunction(() => document.querySelectorAll('.fu-row').length >= 3, null, { timeout: 20000 }).catch(() => {});
+    assert.ok((await p.$$('.fu-row')).length >= 3, 'follow-ups are listed');
+    await shot(p, 'admin-followups-desktop');
+    await p.goto(ADMIN + '/#journey');
+    await p.waitForFunction(() => /Seeker · L3/.test(document.getElementById('app')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
+    assert.match(await p.textContent('#app'), /Seeker · L3/);
+    await shot(p, 'admin-journey-desktop'); assert.deepEqual(errors, []);
+  } catch (e) { await shot(p, 'FAILED-admin').catch(() => {}); throw e; } finally { await ctx.close(); }
 });
 
 test('[release] What’s new pages open on the site and the admin site', async () => {
