@@ -36,7 +36,7 @@
   /* ---------- evaluation ---------- */
   function evaluate(c) {
     var today = MC.today(), todayKey = MC.toISO(today), start = MC.parseDate(c.startOn), end = MC.parseDate(c.endOn);
-    var out = { c: c, kind: c.type === 'center' ? { icon: c.kind === 'education' ? ({ quote: '💭', article: '📰', book: '📖', video: '▶️' }[c.material] || '📚') : '🪷', name: c.title || 'Center challenge', unit: 'days' } : KINDS[c.type], points: pointsFor(c), status: c.status, done: 0, total: 0, misses: 0, allow: 0, note: '', pct: 0, earned: 0 };
+    var out = { c: c, kind: c.type === 'center' ? { icon: c.kind === 'education' ? ({ quote: '💭', article: '📰', book: '📖', video: '▶️', quiz: '🧩' }[c.material] || '📚') : '🪷', name: c.title || 'Center challenge', unit: 'days' } : KINDS[c.type], points: pointsFor(c), status: c.status, done: 0, total: 0, misses: 0, allow: 0, note: '', pct: 0, earned: 0 };
     if (c.status === 'dropped') { out.earned = 0; return finish(out); }
     if (today < start) { out.upcoming = true; out.total = c.type === 'hours' ? c.target : c.type === 'amrit' ? c.days : c.type === 'center' ? (c.kind === 'checkins' || c.kind === 'education' ? eduTotal(c) : c.days) : c.weeks; return finish(out); }
     var sessions = MC.sessions.all();
@@ -165,7 +165,7 @@
   function ccMeta(x) {
     if (x.kind === 'checkins') return 'Check in at ' + x.target + ' center events within ' + x.days + ' days · ' + x.points + ' points';
     if (x.kind === 'education') {
-      var u = { quote: ['thought', 'thoughts'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['talk', 'talks'] }[x.material] || ['item', 'items'];
+      var u = { quote: ['thought', 'thoughts'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['talk', 'talks'], quiz: ['quiz', 'quizzes'] }[x.material] || ['item', 'items'];
       var pace = x.perPeriod ? x.perPeriod + ' ' + u[x.perPeriod === 1 ? 0 : 1] + ' a ' + (x.cadence || 'week') : '';
       return (x.material === 'book' && !x.target ? 'A whole book' : x.target + ' ' + u[1]) + (pace ? ', ' + pace : '') + ' · within ' + x.days + ' days · ' + (x.itemPoints || 0) + ' points each + ' + x.points + ' bonus';
     }
@@ -182,7 +182,7 @@
     return '<div class="small" style="font-weight:700;margin:4px 0 6px">From the Minneapolis Center</div>' + list.map(function (x, i) {
       var on = is42(x) ? on42 && (c42.run.cid === x.id) : running[x.id];
       var later = is42(x) && on42 && !on;              // one meditation challenge at a time
-      return '<div class="goal"><div class="goal-head"><b>' + (x.kind === 'education' ? ({ quote: '💭', article: '📰', book: '📖', video: '▶️' }[x.material] || '📚') : '🪷') + ' ' + MC.esc(x.title) + (i === 0 ? ' <span class="badge" style="margin-left:4px">Recommended</span>' : '') + '</b>' +
+      return '<div class="goal"><div class="goal-head"><b>' + (x.kind === 'education' ? ({ quote: '💭', article: '📰', book: '📖', video: '▶️', quiz: '🧩' }[x.material] || '📚') : '🪷') + ' ' + MC.esc(x.title) + (i === 0 ? ' <span class="badge" style="margin-left:4px">Recommended</span>' : '') + '</b>' +
         (on ? '<span class="small">In progress</span>' : later ? '<span class="small muted">After your current challenge</span>' : '<button class="btn btn-soft btn-sm" data-cc="' + MC.esc(x.id) + '">Start</button>') + '</div>' +
         '<div class="goal-meta">' + MC.esc(ccMeta(x)) + '</div>' + (x.description ? '<div class="small muted" style="margin-top:4px">' + MC.esc(x.description) + '</div>' : '') + '</div>';
     }).join('') + '<div class="small" style="font-weight:700;margin:14px 0 6px">Your challenges</div>';

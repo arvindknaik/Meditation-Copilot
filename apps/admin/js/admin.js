@@ -791,7 +791,7 @@
       return c.rampTo ? 'Grow from their minutes to ' + c.rampTo + ' min over ' + c.days + ' days' : 'Sit ' + m + ' a day for ' + c.days + ' days';
     }
     if (c.kind === 'checkins') return 'Attend ' + c.target + ' center programs within ' + c.days + ' days';
-    var what = { quote: ['thought', 'thoughts'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['video', 'videos'] }[c.material] || ['item', 'items'];
+    var what = { quote: ['thought', 'thoughts'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['video', 'videos'], quiz: ['quiz', 'quizzes'] }[c.material] || ['item', 'items'];
     var per = c.perPeriod ? c.perPeriod + ' ' + what[c.perPeriod === 1 ? 0 : 1] + ' a ' + (c.cadence || 'week') : '';
     var total = c.material === 'book' && !c.target ? 'a whole book' : c.target + ' ' + what[1];
     return 'Read/watch ' + total + (per ? ' (' + per + ')' : '') + ' within ' + c.days + ' days · ' + (c.itemPoints || 0) + ' points each';
@@ -811,7 +811,7 @@
         '<div><label class="field" for="cRamp">Grow to (minutes, optional)</label><input class="input" id="cRamp" type="number" min="0" max="180" placeholder="e.g. 30" value="' + (c && c.rampTo ? c.rampTo : '') + '"></div></div>' +
         '<p class="small muted">With “grow to”, the daily target rises a little each day from their current minutes to this number by the last day (like 21-Day Advance). Missed days allowed: 1 for every 10 days.</p></div>' +
       '<div id="cTgtBox"><label class="field" for="cTgt">Programs to attend</label><input class="input" id="cTgt" type="number" min="1" max="100" value="' + (c ? c.target || 6 : 6) + '"><p class="small muted">Catch-up is allowed: any check-ins before the end date count.</p></div>' +
-      '<div id="cEduBox"><div class="grid2"><div><label class="field" for="cMat">Read or watch</label><select class="input" id="cMat"><option value="quote">Thought for today (quotes)</option><option value="article">Articles</option><option value="book">A book (chapters)</option><option value="video">Videos</option></select></div>' +
+      '<div id="cEduBox"><div class="grid2"><div><label class="field" for="cMat">Read or watch</label><select class="input" id="cMat"><option value="quote">Thought for today (quotes)</option><option value="article">Articles</option><option value="book">A book (chapters)</option><option value="video">Videos</option><option value="quiz">Quizzes (passed)</option></select></div>' +
         '<div><label class="field" for="cCad">Pace</label><select class="input" id="cCad"><option value="day">per day</option><option value="week">per week</option><option value="month">per month</option></select></div>' +
         '<div><label class="field" for="cPer">How many each time</label><input class="input" id="cPer" type="number" min="1" max="50" value="' + (c && c.perPeriod ? c.perPeriod : 1) + '"></div>' +
         '<div><label class="field" for="cTot">Total to finish</label><input class="input" id="cTot" type="number" min="0" max="1000" value="' + (c && c.kind === 'education' ? c.target : 12) + '"></div>' +
@@ -841,47 +841,104 @@
   /* =====================================================================
    * Library (v0.20): the center's reading and watching list for Copilot
    * ===================================================================== */
-  var libKind = 'book';
-  var LIBK = { book: ['Books', 'book'], video: ['Videos', 'video'], article: ['Articles', 'article'] };
+  var libKind = 'article';
+  var LIBK = { article: ['Articles', 'article', '📰'], video: ['Videos', 'video', '▶'], book: ['Books', 'book', '📖'], quiz: ['Quizzes', 'quiz', '🧩'] };
+  var LTOPICS = {};
   function drawLibrary() {
     loading();
     S.api('GET', '/api/admin/library').then(function (j) {
+      LTOPICS = j.topics || {};
       var all = j.items || [], list = all.filter(function (x) { return x.kind === libKind; });
       app.innerHTML = '<div class="sec-head page-head"><h1>Library</h1><button class="btn btn-primary" id="libNew" type="button">+ Add ' + LIBK[libKind][1] + '</button></div>' +
-        '<p class="small muted">Books, videos and articles recommended in Meditation Copilot, used by the reading and watching challenges. Seekers only see items marked <b>Approved</b>. Use books and talks authored or authorized by the SOS Masters.</p>' +
+        '<p class="small muted">Everything in Copilot’s Learn: articles, talks, books by the Masters, and quizzes. Seekers only see items marked <b>Approved</b>. ' +
+        '<b>Pinned</b> items always show in the top 5. Counts are anonymous (no names): opened · finished · passed.</p>' +
         '<div class="seg" role="group" aria-label="Show">' + Object.keys(LIBK).map(function (k) {
-          var c = all.filter(function (x) { return x.kind === k; }).length;
-          return '<button type="button" data-lk="' + k + '" class="' + (k === libKind ? 'on' : '') + '">' + LIBK[k][0] + ' (' + c + ')</button>'; }).join('') + '</div>' +
+          var c = all.filter(function (x) { return x.kind === k; }), d = c.filter(function (x) { return x.status !== 'approved'; }).length;
+          return '<button type="button" data-lk="' + k + '" class="' + (k === libKind ? 'on' : '') + '">' + LIBK[k][0] + ' (' + c.length + (d ? ', ' + d + ' draft' : '') + ')</button>'; }).join('') + '</div>' +
         '<div class="card" style="margin-top:12px">' + (list.length ? list.map(function (x, i) {
-          return '<div class="ad-row lib-row"><span class="lib-pic">' + (x.image ? '<img src="' + esc(x.image) + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + ({ book: '📖', video: '▶', article: '📰' }[x.kind]) + '</span>') + '</span>' +
-            '<span class="ag-main"><b>' + esc(x.title) + '</b>' + (x.status === 'approved' ? ' <span class="tag gold">Approved</span>' : ' <span class="tag">Draft</span>') +
-            '<small>' + esc([x.author, x.kind === 'book' ? (x.chapters ? x.chapters + ' chapters' : 'chapters not set') : '', x.minutes ? x.minutes + ' min' : '', x.url ? x.url.replace(/^https:\/\/(www\.)?/, '').slice(0, 48) : 'no link'].filter(Boolean).join(' · ')) + '</small></span>' +
-            '<span class="ck-act"><button class="btn btn-ghost btn-sm" data-le="' + i + '" type="button">Edit</button></span></div>';
+          var st = x.stats || {}, nq = x.quiz && x.quiz.questions ? x.quiz.questions.length : 0;
+          return '<div class="ad-row lib-row"><span class="lib-pic">' + (x.image ? '<img src="' + esc(x.image) + '" alt="" loading="lazy">' : '<span aria-hidden="true">' + esc(x.icon || LIBK[x.kind][2]) + '</span>') + '</span>' +
+            '<span class="ag-main"><b>' + esc(x.title) + '</b>' + (x.status === 'approved' ? ' <span class="tag gold">Approved</span>' : ' <span class="tag">Draft</span>') + (x.pinned ? ' <span class="tag">📌 Pinned</span>' : '') +
+            '<small>' + esc([x.kind === 'quiz' ? nq + ' questions · pass ' + x.passMark + ' · retry after ' + x.retryMinutes + ' min' : x.author,
+              x.kind === 'book' ? (x.chapters ? x.chapters + ' chapters' : 'chapters not set') : '', x.kind === 'article' ? (x.body ? 'full text' : x.url ? 'link' : 'no text or link') : '',
+              (x.topics || []).map(function (t) { return LTOPICS[t]; }).join(', ')].filter(Boolean).join(' · ')) + '</small>' +
+            '<small class="muted">👁 ' + n(st.open) + ' · ✓ ' + n(st.done) + (x.kind === 'quiz' ? ' · 🏅 ' + n(st.pass) : '') + '</small></span>' +
+            '<span class="ck-act">' + (x.kind === 'quiz' ? '<button class="btn btn-soft btn-sm" data-lr="' + i + '" type="button">Review</button>' : '') + '<button class="btn btn-ghost btn-sm" data-le="' + i + '" type="button">Edit</button></span></div>';
         }).join('') : '<p class="muted">No ' + LIBK[libKind][0].toLowerCase() + ' yet.</p>') + '</div>';
       app.querySelectorAll('[data-lk]').forEach(function (b) { b.onclick = function () { libKind = b.dataset.lk; drawLibrary(); }; });
       $('libNew').onclick = function () { libForm(null, list.length); };
       app.querySelectorAll('[data-le]').forEach(function (b) { b.onclick = function () { libForm(list[Number(b.dataset.le)], 0); }; });
+      app.querySelectorAll('[data-lr]').forEach(function (b) { b.onclick = function () { quizReview(list[Number(b.dataset.lr)]); }; });
     }).catch(fail);
   }
+  // A quiz as reviewers see it: every question, the correct answer, the explanation and the source
+  function quizReview(x) {
+    var z = x.quiz || { questions: [] };
+    sheet('<h2 class="sheet-title">' + esc(x.title) + '</h2><p class="small muted">' + (x.status === 'approved' ? 'Approved' : 'Draft') + ' · ' + z.questions.length + ' questions · pass with ' + x.passMark + '</p>' +
+      (z.reviewNote ? '<p class="notice warn small">' + esc(z.reviewNote) + '</p>' : '') +
+      '<ol class="q-rev">' + z.questions.map(function (q) {
+        return '<li><b>' + esc(q.q) + '</b><ul>' + q.options.map(function (o, k) { return '<li class="' + (k === q.answer ? 'ok' : '') + '">' + (k === q.answer ? '✓ ' : '') + esc(o) + '</li>'; }).join('') + '</ul>' +
+          (q.explain ? '<p class="small">' + esc(q.explain) + '</p>' : '') + (q.source ? '<p class="small muted">Source: ' + esc(q.source) + '</p>' : '') + '</li>';
+      }).join('') + '</ol>' +
+      '<div class="actions"><button class="btn btn-ghost" data-close type="button">Close</button><button class="btn btn-soft" id="qrEdit" type="button">Edit</button>' +
+      (x.status !== 'approved' ? '<button class="btn btn-primary" id="qrOk" type="button">Approve</button>' : '') + '</div>');
+    $('qrEdit').onclick = function () { closeSheet(); libForm(x, 0); };
+    if ($('qrOk')) $('qrOk').onclick = function () {
+      S.api('PATCH', '/api/admin/library/' + x.id, { status: 'approved' }).then(function () { closeSheet(); toast('Approved. It now shows in Copilot.'); drawLibrary(); }).catch(function (e) { toast(e.message); });
+    };
+  }
+  function qRowHTML(q, i) {
+    q = q || { q: '', options: ['', ''], answer: 0, explain: '', source: '' };
+    var opts = q.options.concat(['', '', '', '']).slice(0, 4);
+    return '<fieldset class="q-edit" data-qi="' + i + '"><legend>Question ' + (i + 1) + ' <button class="link small danger" type="button" data-qdel="' + i + '">Remove</button></legend>' +
+      '<input class="input" data-f="q" maxlength="300" placeholder="Question" value="' + esc(q.q) + '">' +
+      opts.map(function (o, k) { return '<label class="q-opt-row"><input type="radio" name="qa' + i + '" value="' + k + '"' + (q.answer === k ? ' checked' : '') + ' title="Correct answer"><input class="input" data-f="o' + k + '" maxlength="160" placeholder="Option ' + (k + 1) + (k > 1 ? ' (optional)' : '') + '" value="' + esc(o) + '"></label>'; }).join('') +
+      '<input class="input" data-f="explain" maxlength="400" placeholder="Short explanation (shown with the answer)" value="' + esc(q.explain) + '">' +
+      '<input class="input" data-f="source" maxlength="200" placeholder="Source (e.g. sos.org page)" value="' + esc(q.source) + '"></fieldset>';
+  }
+  function readQuestions() {
+    return [].map.call(document.querySelectorAll('.q-edit'), function (f) {
+      var g = function (k) { var el = f.querySelector('[data-f="' + k + '"]'); return el ? el.value.trim() : ''; };
+      var opts = [g('o0'), g('o1'), g('o2'), g('o3')], keep = [], map = {};
+      opts.forEach(function (o, k) { if (o) { map[k] = keep.length; keep.push(o); } });
+      var a = f.querySelector('input[type=radio]:checked');
+      return { q: g('q'), options: keep, answer: a && map[a.value] != null ? map[a.value] : -1, explain: g('explain'), source: g('source') };
+    }).filter(function (q) { return q.q || q.options.length; });
+  }
   function libForm(x, count) {
-    var kind = x ? x.kind : libKind, book = kind === 'book';
+    var kind = x ? x.kind : libKind, book = kind === 'book', quiz = kind === 'quiz', art = kind === 'article';
     var v = function (k, d) { return esc(x && x[k] != null && x[k] !== 0 ? x[k] : (d == null ? '' : d)); };
+    var topics = (x && x.topics) || [];
     sheet('<h2 class="sheet-title">' + (x ? 'Edit ' : 'Add ') + LIBK[kind][1] + '</h2><form id="lf">' +
-      '<label class="field" for="lUrl">' + (book ? 'Where to buy it (Amazon or any bookseller link)' : kind === 'video' ? 'Video link (YouTube or sos.org)' : 'Article link') + '</label>' +
-      '<div class="row-inline"><input class="input" id="lUrl" type="url" placeholder="https://" value="' + v('url') + '">' + (book ? '<button class="btn btn-soft" id="lLook" type="button">Look up</button>' : '') + '</div>' +
-      (book ? '<p class="small muted" id="lLookMsg">Paste the link (or type an ISBN or the title) and press Look up to fill in the title, author and cover. Always check them.</p>' : '') +
+      (quiz ? '' : '<label class="field" for="lUrl">' + (book ? 'Where to buy it (Amazon or any bookseller link)' : kind === 'video' ? 'Video link (YouTube or sos.org)' : 'Link (optional if you add the full text below)') + '</label>' +
+        '<div class="row-inline"><input class="input" id="lUrl" type="url" placeholder="https://" value="' + v('url') + '">' + (book ? '<button class="btn btn-soft" id="lLook" type="button">Look up</button>' : '') + '</div>' +
+        (book ? '<p class="small muted" id="lLookMsg">Paste the link (or type an ISBN or the title) and press Look up to fill in the title, author and cover. Always check them.</p>' : '')) +
       '<label class="field" for="lTitle">Title</label><input class="input" id="lTitle" required maxlength="200" value="' + v('title') + '">' +
-      '<label class="field" for="lAuthor">' + (kind === 'video' ? 'Speaker' : 'Author') + '</label><input class="input" id="lAuthor" maxlength="120" value="' + v('author') + '">' +
-      '<label class="field" for="lSum">Short summary, in your own words</label><textarea class="input" id="lSum" rows="3" maxlength="800">' + v('summary') + '</textarea>' +
+      (quiz ? '' : '<label class="field" for="lAuthor">' + (kind === 'video' ? 'Speaker' : 'Author') + '</label><input class="input" id="lAuthor" maxlength="120" value="' + v('author') + '">') +
+      '<label class="field" for="lSum">Short summary, in your own words</label><textarea class="input" id="lSum" rows="2" maxlength="800">' + v('summary') + '</textarea>' +
+      (art ? '<label class="field" for="lBody">Full text <span class="muted">(optional)</span></label><textarea class="input mono" id="lBody" rows="10">' + v('body') + '</textarea>' +
+        '<p class="small muted">Leave a blank line between paragraphs. <code>## Heading</code> · <code>- list item</code> · <code>**bold**</code> · <code>[link text](https://…)</code></p>' : '') +
       '<div id="lAbout"></div>' +
+      '<label class="field">Topics <span class="muted">(up to 3)</span></label><div class="topic-chks">' + Object.keys(LTOPICS).map(function (t) {
+        return '<label class="chk"><input type="checkbox" name="lTopic" value="' + t + '"' + (topics.indexOf(t) >= 0 ? ' checked' : '') + '> ' + esc(LTOPICS[t]) + '</label>'; }).join('') + '</div>' +
       '<div class="grid2">' + (book ? '<div><label class="field" for="lCh">Number of chapters</label><input class="input" id="lCh" type="number" min="0" max="300" value="' + v('chapters') + '"></div>' +
         '<div><label class="field" for="lIsbn">ISBN</label><input class="input" id="lIsbn" maxlength="17" value="' + v('isbn') + '"></div>' : '') +
-        '<div><label class="field" for="lMin">' + (kind === 'video' ? 'Length (minutes)' : 'Reading time (minutes)') + '</label><input class="input" id="lMin" type="number" min="0" max="1000" value="' + v('minutes') + '"></div>' +
+        (quiz ? '<div><label class="field" for="lPass">Correct answers to pass</label><input class="input" id="lPass" type="number" min="1" max="20" value="' + (x ? x.passMark : 8) + '"></div>' +
+          '<div><label class="field" for="lRetry">Minutes before trying again</label><input class="input" id="lRetry" type="number" min="0" max="1440" value="' + (x ? x.retryMinutes : 10) + '"></div>' :
+          '<div><label class="field" for="lMin">' + (kind === 'video' ? 'Length (minutes)' : 'Reading time (minutes)') + '</label><input class="input" id="lMin" type="number" min="0" max="1000" value="' + v('minutes') + '"></div>') +
+        (book || kind === 'video' ? '' : '<div><label class="field" for="lIcon">Icon (one emoji)</label><input class="input" id="lIcon" maxlength="8" value="' + v('icon', quiz ? '🧩' : '') + '"></div>') +
         '<div><label class="field" for="lPri">Order (lower shows first)</label><input class="input" id="lPri" type="number" min="0" max="10000" value="' + (x ? x.priority : (count + 1) * 10) + '"></div></div>' +
-      '<label class="field" for="lImg">Picture link (cover or thumbnail, optional)</label><input class="input" id="lImg" type="url" placeholder="https://" value="' + v('image') + '">' +
+      (quiz ? '' : '<label class="field" for="lImg">Picture link (cover or thumbnail, optional)</label><input class="input" id="lImg" type="url" placeholder="https://" value="' + v('image') + '">') +
+      (quiz ? '<h3 class="h-sm" style="margin-top:16px">Questions <span class="muted small">(10 recommended; 2–4 options each; tick the correct one. For yes/no, use “Yes” and “No”.)</span></h3>' +
+        '<div id="qList">' + ((x && x.quiz && x.quiz.questions) || []).map(qRowHTML).join('') + '</div><button class="btn btn-soft btn-sm" id="qAdd" type="button">+ Add a question</button>' : '') +
+      '<label class="check"><input type="checkbox" id="lPin"' + (x && x.pinned ? ' checked' : '') + '> 📌 Pin: always in the top 5 of ' + LIBK[kind][0].toLowerCase() + '</label>' +
       '<label class="check"><input type="checkbox" id="lApp"' + (x && x.status === 'approved' ? ' checked' : '') + '> Approved: show it in Copilot</label>' +
       '<p class="error" id="lErr"></p><div class="actions">' + (x ? '<button class="btn btn-ghost danger" id="lDel" type="button">Remove</button>' : '') +
       '<button class="btn btn-ghost" data-close type="button">Cancel</button><button class="btn btn-primary" type="submit">Save</button></div></form>');
+    if (quiz) {
+      $('qAdd').onclick = function () { var l = $('qList'), n = l.querySelectorAll('.q-edit').length; l.insertAdjacentHTML('beforeend', qRowHTML(null, n)); };
+      $('qList').addEventListener('click', function (e) { var d = e.target.closest('[data-qdel]'); if (d && window.confirm('Remove this question?')) d.closest('.q-edit').remove(); });
+    }
     if ($('lLook')) $('lLook').onclick = function () {
       var q = $('lUrl').value.trim() || $('lIsbn').value.trim() || $('lTitle').value.trim();
       if (!q) { $('lLookMsg').textContent = 'Paste a link, an ISBN or a title first.'; return; }
@@ -899,9 +956,19 @@
     if ($('lDel')) $('lDel').onclick = function () { if (!window.confirm('Remove “' + x.title + '” from the library? People who read it keep their points.')) return; S.api('DELETE', '/api/admin/library/' + x.id).then(function () { closeSheet(); drawLibrary(); }).catch(function (e) { $('lErr').textContent = e.message; }); };
     $('lf').onsubmit = function (ev) {
       ev.preventDefault();
-      var b = { kind: kind, title: $('lTitle').value, author: $('lAuthor').value, url: $('lUrl').value.trim(), summary: $('lSum').value, image: $('lImg').value.trim(),
-        minutes: Number($('lMin').value || 0), priority: Number($('lPri').value || 100), status: $('lApp').checked ? 'approved' : 'draft' };
+      var tp = [].map.call(document.querySelectorAll('input[name=lTopic]:checked'), function (c) { return c.value; });
+      if (tp.length > 3) { $('lErr').textContent = 'Choose up to 3 topics.'; return; }
+      var b = { kind: kind, title: $('lTitle').value, summary: $('lSum').value, topics: tp, pinned: $('lPin').checked, priority: Number($('lPri').value || 100), status: $('lApp').checked ? 'approved' : 'draft' };
+      if (!quiz) { b.url = $('lUrl').value.trim(); b.author = $('lAuthor').value; b.image = $('lImg').value.trim(); b.minutes = Number($('lMin').value || 0); }
+      if ($('lIcon')) b.icon = $('lIcon').value.trim();
+      if (art) b.body = $('lBody').value;
       if (book) { b.chapters = Number($('lCh').value || 0); b.isbn = $('lIsbn').value; }
+      if (quiz) {
+        var qs = readQuestions(), badQ = qs.findIndex(function (q) { return q.answer < 0; });
+        if (badQ >= 0) { $('lErr').textContent = 'Question ' + (badQ + 1) + ': tick the correct option.'; return; }
+        b.quiz = { questions: qs, related: (x && x.quiz && x.quiz.related) || [], reviewNote: (x && x.quiz && x.quiz.reviewNote) || '' };
+        b.passMark = Number($('lPass').value || 8); b.retryMinutes = Number($('lRetry').value || 0);
+      }
       S.api(x ? 'PATCH' : 'POST', '/api/admin/library' + (x ? '/' + x.id : ''), b).then(function () { closeSheet(); toast('Saved.'); drawLibrary(); }).catch(function (e) { $('lErr').textContent = e.message; });
     };
   }

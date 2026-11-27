@@ -51,6 +51,8 @@ export function seedSQL(now = Date.now()) {
   lib('t-article', 'article', 'A Test Article', 'https://example.com/test-article');
   lib('t-video1', 'video', 'Test Talk One', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
   lib('t-video2', 'video', 'Test Talk Two', 'https://www.youtube.com/watch?v=9bZkp7q19f0');
+  // Made-up environment only: one quiz approved with no waiting, so Learn and the quiz can be tried locally
+  sql.push(`UPDATE library SET status = 'approved', retry_minutes = 0 WHERE id = 'q-center';`);
   return sql.join('\n') + '\n';
 }
 

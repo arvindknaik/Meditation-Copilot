@@ -1,19 +1,19 @@
-# Test report — v0.21-b1 — ✅ passed
+# Test report — v0.22-b0 — ✅ passed
 
-Nov 26, 2026, 12:40 PM · commit d890018 · suites: unit, api, e2e
+Nov 27, 2026, 6:32 PM · commit c22b8d6 · suites: unit, api, e2e
 
 | Suite | Passed | Failed | Time |
 |---|---|---|---|
-| unit | 22 | 0 | 3 s |
-| api | 11 | 0 | 13 s |
-| e2e | 9 | 0 | 48 s |
+| unit | 22 | 0 | 2 s |
+| api | 12 | 0 | 11 s |
+| e2e | 10 | 0 | 53 s |
 
 | Feature | Passed | Failed |
 |---|---|---|
 | admin | 1 | 0 |
 | challenges | 13 | 0 |
 | events | 2 | 0 |
-| library | 10 | 0 |
+| library | 12 | 0 |
 | release | 6 | 0 |
 | site | 3 | 0 |
 | srm | 7 | 0 |
@@ -55,6 +55,7 @@ Nov 26, 2026, 12:40 PM · commit d890018 · suites: unit, api, e2e
 - ✅ [events] new events keep their type, audience and children’s program (api)
 - ✅ [library] only approved items reach Copilot; admins add, approve and remove (api)
 - ✅ [challenges] education challenges need something to read or watch (api)
+- ✅ [library] knowledge: Learn articles moved in, quizzes arrive as drafts, anonymous counts (api)
 - ✅ [site] home page shows upcoming events on a phone (e2e)
 - ✅ [site] the header stays in the same place on every page (e2e)
 - ✅ [site] event page says FREE and explains children and guidelines (e2e)
@@ -62,9 +63,10 @@ Nov 26, 2026, 12:40 PM · commit d890018 · suites: unit, api, e2e
 - ✅ [srm] admin: local test sign-in, follow-ups and journey (e2e)
 - ✅ [library] Daily Thought: read today’s thought and it counts toward the challenge (e2e)
 - ✅ [library] books: choose a book, tick chapters, finish it; mark an article as read (e2e)
+- ✅ [library] Learn hub: top 5 of each type, search with quotes, Saved, and a quiz (e2e)
 - ✅ [library] admin: Library tab lists books and opens the form (e2e)
 - ✅ [release] What’s new pages open on the site and the admin site (e2e)
 
 </details>
 
-Screenshots: reports/artifacts/ (9 files, kept on this computer).
+Screenshots: reports/artifacts/ (17 files, kept on this computer).

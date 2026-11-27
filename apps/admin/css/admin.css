@@ -132,3 +132,14 @@ html.mc-desktop .sheet { width: min(680px, calc(100% - 48px)); }
 .h-sm { font-size: 1rem; margin: 0 0 8px; }
 .flags { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
 @media (max-width: 560px) { .adm-flyer img { width: 84px; } }
+/* v0.22: library quizzes and articles */
+.topic-chks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.textarea.mono, textarea.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .88rem; }
+.q-edit { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 12px; margin: 10px 0; display: grid; gap: 6px; }
+.q-edit legend { font-weight: 700; font-size: .9rem; padding: 0 4px; }
+.q-opt-row { display: flex; align-items: center; gap: 8px; }
+.q-opt-row input[type=radio] { width: 18px; height: 18px; flex: 0 0 auto; }
+.q-rev { padding-left: 20px; }
+.q-rev > li { margin-bottom: 14px; }
+.q-rev ul { margin: 4px 0; padding-left: 18px; }
+.q-rev li.ok { color: #2f7d4f; font-weight: 700; }

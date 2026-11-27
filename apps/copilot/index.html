@@ -395,21 +395,16 @@
     <section class="view" id="v-learn" aria-label="Learn">
       <div id="learnHome">
         <h1 class="greet">Learn</h1>
-        <p class="greet-sub">Guidance for your practice, with links to Science of Spirituality.</p>
+        <p class="greet-sub">Articles, talks, books and quizzes from Science of Spirituality.</p>
         <form class="search" id="learnForm" role="search">
-          <label class="sr-only" for="learnQ">Ask a question or search</label>
-          <input type="search" id="learnQ" placeholder="Ask a question or search…" autocomplete="off" enterkeyhint="search">
+          <label class="sr-only" for="learnQ">Search articles, videos, books, quizzes and quotes</label>
+          <input type="search" id="learnQ" placeholder="Search articles, videos, books, quotes…" autocomplete="off" enterkeyhint="search">
           <button class="btn btn-primary" type="submit" aria-label="Search">Search</button>
         </form>
         <div id="learnResults" hidden></div>
-        <div id="learnBrowse">
-          <div class="section-title" style="margin-top:6px">Start here</div>
-          <div class="topic-grid" id="featuredGrid"></div>
-          <div class="section-title" style="margin-top:20px">More topics</div>
-          <div id="moreTopics"></div>
-          <div id="learnLibrary"></div>
-        </div>
+        <div id="learnBrowse"></div>
       </div>
+      <div id="learnList" hidden></div>
       <article id="learnArticle" hidden></article>
       <div class="card help-card" style="margin-top:18px">
         <div class="section-title" style="margin-bottom:6px">Need help?</div>
@@ -791,6 +786,7 @@
 <script src="js/home.js?v=26"></script>
 <script src="js/knowledge.js?v=26"></script>
 <script src="js/learn.js?v=26"></script>
+<script src="js/quiz.js?v=26"></script>
 <script src="js/calendar.js?v=26"></script>
 <script src="js/vendor/qrcode.js?v=26"></script>
 <script src="js/events.js?v=26"></script>

@@ -445,7 +445,7 @@ function validateChallenge(b, partial) {
     o.minutes_choices = [...new Set(ch)].sort((a, c) => a - c).join(',');
   }
   if (b.rampTo !== undefined) o.ramp_to = int(b.rampTo || 0, 0, 180, 'Grow to (minutes)');
-  if (b.material !== undefined) { if (!['', 'quote', 'article', 'book', 'video'].includes(b.material)) throw bad('Material must be quote, article, book or video'); o.material = b.material; }
+  if (b.material !== undefined) { if (!['', 'quote', 'article', 'book', 'video', 'quiz'].includes(b.material)) throw bad('Material must be quote, article, book, video or quiz'); o.material = b.material; }
   if (b.cadence !== undefined) { if (!['', 'day', 'week', 'month'].includes(b.cadence)) throw bad('How often must be day, week or month'); o.cadence = b.cadence; }
   if (b.perPeriod !== undefined) o.per_period = int(b.perPeriod || 0, 0, 50, 'Items per period');
   if (b.itemPoints !== undefined) o.item_points = int(b.itemPoints || 0, 0, 1000, 'Points per item');
@@ -468,10 +468,28 @@ function challengeOut(r) {
     audience: r.audience, points: r.points, priority: r.priority, active: !!r.active, updatedAt: r.updated_at };
 }
 /* ---------------- Library (v0.20): the center's approved articles, books and videos ---------------- */
+// Topics for the knowledge library (Learn): filters, related items and search
+const TOPICS = { basics: 'Meditation basics', science: 'The science of meditation', masters: 'The Masters', satsang: 'Satsang & community', ethics: 'Ethical living',
+  health: 'Health & wellbeing', peace: 'Inner & outer peace', seva: 'Seva', family: 'Family & youth' };
+// A quiz: 5–20 questions (10 recommended), each with 2–4 options (yes/no is just two options), the right answer and a short explanation
+function validateQuiz(raw) {
+  let z = raw; if (typeof z === 'string') { try { z = JSON.parse(z || '{}'); } catch { throw bad('The quiz could not be read'); } }
+  const qs = Array.isArray(z && z.questions) ? z.questions : [];
+  if (qs.length > 20) throw bad('A quiz can have up to 20 questions');
+  const questions = qs.map((x, i) => {
+    const q = str(x && x.q, 300), options = (Array.isArray(x && x.options) ? x.options : []).map((o) => str(o, 160)).filter(Boolean), answer = Number(x && x.answer);
+    if (!q) throw bad('Question ' + (i + 1) + ' has no text');
+    if (options.length < 2 || options.length > 4) throw bad('Question ' + (i + 1) + ' needs 2 to 4 options');
+    if (!Number.isInteger(answer) || answer < 0 || answer >= options.length) throw bad('Question ' + (i + 1) + ': choose the correct option');
+    return { q, options, answer, explain: str(x.explain, 400) || '', source: str(x.source, 200) || '' };
+  });
+  const related = (Array.isArray(z && z.related) ? z.related : []).map((r) => str(r, 80)).filter(Boolean).slice(0, 6);
+  return { questions, related, reviewNote: str(z && z.reviewNote, 300) || '' };
+}
 function validateLibrary(b, partial) {
   const o = {};
   const int = (v, lo, hi, name) => { const n = Math.round(Number(v)); if (!Number.isFinite(n) || n < lo || n > hi) throw bad(name + ' must be between ' + lo + ' and ' + hi); return n; };
-  if (!partial || b.kind !== undefined) { if (!['article', 'book', 'video'].includes(b.kind)) throw bad('Type must be article, book or video'); o.kind = b.kind; }
+  if (!partial || b.kind !== undefined) { if (!['article', 'book', 'video', 'quiz'].includes(b.kind)) throw bad('Type must be article, book, video or quiz'); o.kind = b.kind; }
   if (!partial || b.title !== undefined) { o.title = str(b.title, 200); if (!o.title) throw bad('Title is required'); }
   if (b.author !== undefined) o.author = str(b.author, 120) || '';
   if (b.url !== undefined) {
@@ -486,17 +504,37 @@ function validateLibrary(b, partial) {
   if (b.minutes !== undefined) o.minutes = int(b.minutes || 0, 0, 1000, 'Minutes');
   if (b.status !== undefined) { if (!['draft', 'approved'].includes(b.status)) throw bad('Status must be draft or approved'); o.status = b.status; }
   if (b.priority !== undefined) o.priority = int(b.priority, 0, 10000, 'Priority');
+  if (b.body !== undefined) o.body = String(b.body == null ? '' : b.body).replace(/\r\n/g, '\n').slice(0, 30000);
+  if (b.icon !== undefined) o.icon = str(b.icon, 8) || '';
+  if (b.topics !== undefined) {
+    const t = (Array.isArray(b.topics) ? b.topics : String(b.topics || '').split(',')).map((x) => String(x).trim()).filter(Boolean);
+    const badT = t.find((x) => !TOPICS[x]); if (badT) throw bad('Unknown topic: ' + badT);
+    o.topics = [...new Set(t)].slice(0, 3).join(',');
+  }
+  if (b.pinned !== undefined) o.pinned = b.pinned ? 1 : 0;
+  if (b.quiz !== undefined) o.quiz = JSON.stringify(validateQuiz(b.quiz));
+  if (b.passMark !== undefined) o.pass_mark = int(b.passMark, 1, 20, 'Pass mark');
+  if (b.retryMinutes !== undefined) o.retry_minutes = int(b.retryMinutes, 0, 1440, 'Minutes before trying again');
   return o;
 }
 function checkApproval(row) {   // what an item needs before seekers can see it
   if (row.status !== 'approved') return;
   if (row.kind === 'book' && !row.chapters) throw bad('Add the number of chapters before approving a book');
-  if (row.kind !== 'book' && !row.url) throw bad('Add the link before approving');
+  if (row.kind === 'video' && !row.url) throw bad('Add the link before approving');
+  if (row.kind === 'article' && !row.url && !String(row.body || '').trim()) throw bad('Add the article text or a link before approving');
+  if (row.kind === 'quiz') {
+    const n = (validateQuiz(row.quiz || '{}').questions || []).length;
+    if (n < 5) throw bad('A quiz needs at least 5 questions before approving (10 recommended)');
+    if ((row.pass_mark || 8) > n) throw bad('The pass mark is higher than the number of questions');
+  }
 }
-function libraryOut(r, admin) {
+function libraryOut(r, admin, stats) {
+  let quiz = null; if (r.kind === 'quiz') { try { quiz = JSON.parse(r.quiz || '{}'); } catch { quiz = { questions: [] }; } }
   const o = { id: r.id, kind: r.kind, title: r.title, author: r.author || '', url: r.url || '', summary: r.summary || '', image: r.image || '',
-    isbn: r.isbn || '', chapters: r.chapters || 0, minutes: r.minutes || 0, priority: r.priority, updatedAt: r.updated_at };
-  if (admin) o.status = r.status;
+    isbn: r.isbn || '', chapters: r.chapters || 0, minutes: r.minutes || 0, priority: r.priority, updatedAt: r.updated_at,
+    body: r.body || '', icon: r.icon || '', topics: String(r.topics || '').split(',').filter(Boolean), pinned: !!r.pinned };
+  if (quiz) { o.quiz = admin ? quiz : { questions: quiz.questions || [], related: quiz.related || [] }; o.passMark = r.pass_mark || 8; o.retryMinutes = r.retry_minutes ?? 10; }
+  if (admin) { o.status = r.status; o.stats = stats || { open: 0, done: 0, pass: 0 }; }
   return o;
 }
 // Book look-up: a purchase link (Amazon and others), an ISBN or a title → details from Google Books / Open Library.
@@ -1234,13 +1272,23 @@ async function handle(request, env) {
 
   /* ---- Library (v0.20): approved items for Copilot; admins manage and look up books ---- */
   if (path === '/api/library' && request.method === 'GET') {
-    const rows = (await db.prepare("SELECT * FROM library WHERE status = 'approved' ORDER BY kind, priority, created_at").all()).results;
-    return J({ items: rows.map((r) => libraryOut(r)) });
+    const rows = (await db.prepare("SELECT * FROM library WHERE status = 'approved' ORDER BY kind, pinned DESC, priority, created_at").all()).results;
+    return J({ items: rows.map((r) => libraryOut(r)), topics: TOPICS });
+  }
+  // Anonymous counts (no person, device or address is stored): opened, finished, quiz passed
+  if (path === '/api/library/hit' && request.method === 'POST') {
+    const b = await body(request), id = str(b.id, 80), action = String(b.action || '');
+    if (!id || !['open', 'done', 'pass'].includes(action)) throw bad('Which item and what happened?');
+    const ok = await db.prepare("SELECT 1 FROM library WHERE id = ?1 AND status = 'approved'").bind(id).first();
+    if (ok) await db.prepare('INSERT INTO library_stats (item_id, action, day, n) VALUES (?1, ?2, ?3, 1) ON CONFLICT(item_id, action, day) DO UPDATE SET n = n + 1').bind(id, action, centerDay(now())).run();
+    return J({ ok: true });
   }
   if (path === '/api/admin/library' && request.method === 'GET') {
     await requireAdmin(request, env);
-    const rows = (await db.prepare('SELECT * FROM library ORDER BY kind, priority, created_at').all()).results;
-    return J({ items: rows.map((r) => libraryOut(r, true)) });
+    const rows = (await db.prepare('SELECT * FROM library ORDER BY kind, pinned DESC, priority, created_at').all()).results;
+    const st = {}; (await db.prepare('SELECT item_id, action, SUM(n) AS n FROM library_stats GROUP BY item_id, action').all()).results
+      .forEach((x) => { (st[x.item_id] = st[x.item_id] || { open: 0, done: 0, pass: 0 })[x.action] = x.n; });
+    return J({ items: rows.map((r) => libraryOut(r, true, st[r.id])), topics: TOPICS });
   }
   if (path === '/api/admin/library/lookup' && request.method === 'POST') {
     await requireAdmin(request, env);
@@ -1260,9 +1308,10 @@ async function handle(request, env) {
       return J({ item: libraryOut(await db.prepare('SELECT * FROM library WHERE id = ?1').bind(m[1]).first(), true) });
     }
     const c = validateLibrary(b), id = crypto.randomUUID(); checkApproval({ chapters: 0, url: '', ...c });
-    await db.prepare(`INSERT INTO library (id, kind, title, author, url, summary, image, isbn, chapters, minutes, status, priority, created_by, created_at, updated_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14)`).bind(id, c.kind, c.title, c.author || '', c.url || '', c.summary || '', c.image || '', c.isbn || '',
-      c.chapters || 0, c.minutes || 0, c.status || 'draft', c.priority ?? 100, s.uid, t).run();
+    await db.prepare(`INSERT INTO library (id, kind, title, author, url, summary, image, isbn, chapters, minutes, status, priority, created_by, created_at, updated_at,
+      body, icon, topics, pinned, quiz, pass_mark, retry_minutes)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)`).bind(id, c.kind, c.title, c.author || '', c.url || '', c.summary || '', c.image || '', c.isbn || '',
+      c.chapters || 0, c.minutes || 0, c.status || 'draft', c.priority ?? 100, s.uid, t, c.body || '', c.icon || '', c.topics || '', c.pinned || 0, c.quiz || '', c.pass_mark || 8, c.retry_minutes ?? 10).run();
     await logAdmin(env, s, 'library_create', id, c.title);
     return J({ item: libraryOut(await db.prepare('SELECT * FROM library WHERE id = ?1').bind(id).first(), true) }, 201);
   }
@@ -1563,4 +1612,4 @@ async function handle(request, env) {
 }
 
 // For unit tests (tests/unit). Not used by the Worker runtime.
-export { calcJourney, calcStage, calcStatus, validateChallenge, challengeOut, validateEvent, centerDayStart, windowFor, validateLibrary, checkApproval, libraryOut, bookRef, fromGoogleBooks, fromOpenLibrary };
+export { calcJourney, calcStage, calcStatus, validateChallenge, challengeOut, validateEvent, centerDayStart, windowFor, validateLibrary, validateQuiz, checkApproval, libraryOut, TOPICS, bookRef, fromGoogleBooks, fromOpenLibrary };

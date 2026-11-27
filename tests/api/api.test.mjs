@@ -15,7 +15,7 @@ test('[release] health check answers with a version', async () => {
 });
 test('[challenges] starter program is listed in priority order', async () => {
   const r = await c.call('GET', '/api/challenges');
-  assert.equal(JSON.stringify(r.challenges.map((x) => x.id)), JSON.stringify(['c21-foundation', 'c21-advance', 'c-attend6', 'e-quote30', 'e-article12', 'e-book', 'e-video4']));
+  assert.equal(JSON.stringify(r.challenges.map((x) => x.id)), JSON.stringify(['c21-foundation', 'c21-advance', 'c-attend6', 'e-quote30', 'e-article12', 'e-book', 'e-video4', 'e-quiz5']));
   assert.equal(r.challenges[0].signup, true); assert.equal(r.challenges[1].rampTo, 30);
 });
 test('[challenges] admins can change a challenge; others are refused', async () => {
@@ -99,4 +99,21 @@ test('[challenges] education challenges need something to read or watch', async 
   const r = await c.call('POST', '/api/admin/challenges', owner, { title: 'Read', kind: 'education', days: 28, target: 4, material: 'article', cadence: 'week', perPeriod: 1, itemPoints: 10 });
   assert.equal(r.status, 201); assert.equal(r.challenge.material, 'article'); assert.equal(r.challenge.perPeriod, 1);
   await c.call('DELETE', '/api/admin/challenges/' + r.challenge.id, owner);
+});
+
+test('[library] knowledge: Learn articles moved in, quizzes arrive as drafts, anonymous counts', async () => {
+  let pub = (await c.call('GET', '/api/library')).items;
+  const art = pub.find((x) => x.id === 'learn-to-meditate');
+  assert.ok(art && art.kind === 'article' && art.body.length > 100, 'built-in Learn articles are now in the library, same id');
+  assert.ok(!pub.some((x) => x.kind === 'quiz' && x.id !== 'q-center'), 'quizzes start as drafts (the made-up test data approves one)');
+  const all = (await c.call('GET', '/api/admin/library', owner)).items, qz = all.filter((x) => x.kind === 'quiz');
+  assert.equal(qz.length, 11); assert.ok(qz.every((x) => x.quiz.questions.length === 10));
+  assert.equal((await c.call('PATCH', '/api/admin/library/q-benefits', owner, { status: 'approved', retryMinutes: 1 })).status, 200);
+  pub = (await c.call('GET', '/api/library')).items;
+  const q = pub.find((x) => x.id === 'q-benefits'); assert.equal(q.retryMinutes, 1); assert.equal(q.quiz.questions.length, 10); assert.equal(q.quiz.reviewNote, undefined);
+  assert.equal((await c.call('PATCH', '/api/admin/library/q-tips', owner, { quiz: { questions: [{ q: 'x', options: ['a'], answer: 0 }] } })).status, 400, 'each question needs 2–4 options');
+  await c.call('POST', '/api/library/hit', null, { id: 'q-benefits', action: 'pass' });
+  await c.call('POST', '/api/library/hit', null, { id: 'q-benefits', action: 'open' });
+  const st = (await c.call('GET', '/api/admin/library', owner)).items.find((x) => x.id === 'q-benefits').stats;
+  assert.equal(st.pass, 1); assert.equal(st.open, 1);
 });

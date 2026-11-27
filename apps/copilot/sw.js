@@ -22,6 +22,7 @@ const ASSETS = [
   './js/home.js',
   './js/knowledge.js',
   './js/learn.js',
+  './js/quiz.js',
   './js/calendar.js',
   './js/vendor/qrcode.js',
   './js/events.js',

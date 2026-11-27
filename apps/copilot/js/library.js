@@ -16,7 +16,7 @@
   var LIB_KEY = 'meditation-copilot:library', PENDING_KEY = 'meditation-copilot:open-link', libAt = 0;
   var PTS = { quote: 2, article: 10, chapter: 15, video: 10, book_done: 100 };
   var ICON = { quote: '💭', article: '📰', book: '📖', chapter: '📖', video: '▶️' };
-  var UNIT = { quote: ['thought', 'thoughts'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['talk', 'talks'] };
+  var UNIT = { quote: ['thought', 'thoughts'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['talk', 'talks'], quiz: ['quiz', 'quizzes'] };
 
   /* ---------- the center's Library ---------- */
   function items(kind) { var l = (MC.store.get(LIB_KEY, null) || {}).items || []; return kind ? l.filter(function (x) { return x.kind === kind; }) : l; }
@@ -46,6 +46,11 @@
     MC.emit('data');
     return r;
   }
+  // Anonymous counts for the admin site (opened / finished / quiz passed): only the item's id is sent, never who
+  function hit(id, action) {
+    if (!(MC.events && MC.events.enabled()) || !id || /^(quote|chapter)/.test(id)) return;
+    try { MC.events.api('POST', '/api/library/hit', { id: id, action: action }).catch(function () {}); } catch (e) { /* offline */ }
+  }
   function unmark(kind, ref) { if (has(kind, ref)) { reads.remove(key(kind, ref)); MC.emit('data'); } }
   function all(kind) { return reads.all().filter(function (r) { return !kind || r.kind === kind; }); }
 
@@ -58,7 +63,7 @@
   function finishBook(id) {
     var s = bookState(id);
     if (s.finished) return;
-    mark('book_done', id, { title: s.book.title || '', pts: PTS.book_done });
+    mark('book_done', id, { title: s.book.title || '', pts: PTS.book_done }); hit(id, 'done');
     MC.toast('🎉 You finished “' + (s.book.title || 'the book') + '”! +' + PTS.book_done + ' points', 5000);
     MC.track('book_finished', {});
   }
@@ -73,6 +78,7 @@
       // The thoughts of the challenge's own days; reading an earlier day's thought later still counts (catch-up)
       return all('quote').filter(function (r) { return r.ref >= c.startOn && r.ref <= c.endOn && r.at < to; }).length;
     }
+    if (c.material === 'quiz') return MC.quiz ? MC.quiz.passesBetween(from, to) : 0;
     if (c.material === 'book') return all('chapter').filter(function (r) { return r.bookId === c.bookId && r.at >= from && r.at < to; }).length;
     return all(c.material).filter(function (r) { return r.at >= from && r.at < to; }).length;
   }
@@ -141,7 +147,7 @@
     askDlg.innerHTML = '<div class="sheet-body"><h2 class="sheet-title">' + (v ? 'Did you watch it?' : 'Did you read it?') + '</h2><p>“' + MC.esc(p.title) + '”</p>' +
       '<div class="actions"><button type="button" class="btn btn-ghost" id="askNo">Not yet</button><button type="button" class="btn btn-primary" id="askYes">' + (v ? '✓ Watched' : '✓ I read it') + '</button></div></div>';
     $('askNo').addEventListener('click', function () { askDlg.close(); });
-    $('askYes').addEventListener('click', function () { mark(v ? 'video' : 'article', p.id, { title: p.title, lib: true }); askDlg.close(); if (MC.current === 'learn') MC.views.learn.show(); });
+    $('askYes').addEventListener('click', function () { mark(v ? 'video' : 'article', p.id, { title: p.title, lib: true }); hit(p.id, 'done'); askDlg.close(); if (MC.current === 'learn') MC.views.learn.show(); });
     if (askDlg.showModal) askDlg.showModal(); else askDlg.setAttribute('open', '');
   }
   document.addEventListener('visibilitychange', askOnReturn);
@@ -149,10 +155,11 @@
 
   /* ---------- Learn: reading list, books, videos ---------- */
   function readingSummary() {
-    var n = { quote: all('quote').length, article: all('article').length, chapter: all('chapter').length, video: all('video').length, book: all('book_done').length };
-    if (!n.quote && !n.article && !n.chapter && !n.video) return '';
-    return '<div class="card reading-card"><div class="section-title" style="margin-bottom:6px">Your reading</div><div class="rd-grid">' +
-      [['💭', n.quote, 'thoughts'], ['📰', n.article, 'articles'], ['📖', n.chapter, 'chapters'], ['▶️', n.video, 'videos']].map(function (x) {
+    var n = { quote: all('quote').length, article: all('article').length, chapter: all('chapter').length, video: all('video').length, book: all('book_done').length,
+      quiz: MC.quiz ? MC.quiz.passedCount() : 0 };
+    if (!n.quote && !n.article && !n.chapter && !n.video && !n.quiz) return '';
+    return '<div class="card reading-card"><div class="section-title" style="margin-bottom:6px">Your reading</div><div class="rd-grid rd-5">' +
+      [['💭', n.quote, 'thoughts'], ['📰', n.article, 'articles'], ['📖', n.chapter, 'chapters'], ['▶️', n.video, 'talks'], ['🧩', n.quiz, 'quizzes']].map(function (x) {
         return '<span><b>' + x[0] + ' ' + x[1] + '</b><small>' + x[2] + '</small></span>'; }).join('') + '</div>' +
       (n.book ? '<p class="small" style="margin:8px 0 0">🎉 Books finished: ' + n.book + '</p>' : '') +
       '<p class="small muted" style="margin:8px 0 0">Kept with your own data, like your sittings. The center doesn’t see it.</p></div>';
@@ -180,7 +187,7 @@
     el.querySelectorAll('[data-book]').forEach(function (b) { b.addEventListener('click', function () { location.hash = 'learn?b=' + encodeURIComponent(b.dataset.book); }); });
     el.querySelectorAll('[data-link]').forEach(function (b) { b.addEventListener('click', function () { var x = item(b.dataset.link); if (x) openLink(x); }); });
   }
-  function bookHTML(id) {
+  function bookHTML(id, saveBtn) {
     var s = bookState(id), b = s.book;
     if (!b.id) return '<button class="link" id="artBack" style="padding:6px 0">‹ Back</button><div class="card"><p>This book is no longer on the reading list.</p></div>';
     var grid = '';
@@ -188,7 +195,7 @@
     var allDone = s.chapters && s.done.length >= s.chapters;
     return '<button class="link" id="artBack" style="padding:6px 0">‹ Back</button>' +
       '<div class="card article book">' + (b.image ? '<img class="book-cover" src="' + MC.esc(b.image) + '" alt="Cover of ' + MC.esc(b.title) + '">' : '') +
-      '<span class="cat">📖 Book</span><h1>' + MC.esc(b.title) + '</h1><p class="muted" style="margin-top:-4px">' + MC.esc(b.author || '') + '</p>' +
+      '<div class="k-head"><span class="cat">📖 Book</span>' + (saveBtn ? saveBtn(b) : '') + '</div><h1>' + MC.esc(b.title) + '</h1><p class="muted" style="margin-top:-4px">' + MC.esc(b.author || '') + '</p>' +
       (b.summary ? '<p>' + MC.esc(b.summary) + '</p>' : '') +
       (b.url ? '<a class="btn btn-soft btn-sm" href="' + MC.esc(b.url) + '" target="_blank" rel="noopener">Get the book ↗</a>' : '') +
       (s.finished ? '<div class="book-done">🎉 Finished. Beautiful work.</div>' :
@@ -197,7 +204,7 @@
         '<div class="ch-grid-btns">' + grid + '</div><p class="small muted">Tick each chapter when you’ve read it. A chapter or two a week is a lovely pace.</p>' +
         (allDone ? '<button class="btn btn-gold btn-block btn-xl" id="bkFinish" style="margin-top:12px">🎉 I finished the book</button>' : '')) + '</div>';
   }
-  function bindBook(el, id) {
+  function bindBook(el, id, saveBtn) {
     $('artBack').addEventListener('click', function () { history.length > 1 ? history.back() : MC.go('learn'); });
     if ($('bkStart')) $('bkStart').addEventListener('click', function () { reads.add({ id: key('book_start', id), kind: 'book_start', ref: id, at: Date.now(), pts: 0 }); MC.emit('data'); render(); });
     el.querySelectorAll('[data-ch]').forEach(function (b) {
@@ -209,9 +216,9 @@
       });
     });
     if ($('bkFinish')) $('bkFinish').addEventListener('click', function () { finishBook(id); render(); });
-    function render() { el.innerHTML = bookHTML(id); bindBook(el, id); }
+    function render() { el.innerHTML = bookHTML(id, saveBtn) + (MC.learn && bookState(id).book.id ? MC.learn.related(bookState(id).book) : ''); bindBook(el, id, saveBtn); }
   }
-  function renderBook(el, id) { el.innerHTML = bookHTML(id); bindBook(el, id); }
+  function renderBook(el, id, saveBtn) { el.innerHTML = bookHTML(id, saveBtn) + (MC.learn && bookState(id).book.id ? MC.learn.related(bookState(id).book) : ''); bindBook(el, id, saveBtn); }
 
   // Choose a book for the book challenge
   var bkDlg = null;
@@ -236,8 +243,9 @@
     var behind = Math.max(0, expectedBy(c, o.total) - o.done);
     if (c.material === 'quote') return behind && missedQuoteDays(c).length > (has('quote', MC.toISO(MC.today())) ? 0 : 1) ? '<button class="btn btn-soft btn-sm" data-eact="catchup" data-gid="' + MC.esc(c.id) + '">Catch up</button>' : '<a class="btn btn-soft btn-sm" href="#home">Today’s thought</a>';
     if (c.material === 'book') return '<a class="btn btn-soft btn-sm" href="#learn?b=' + encodeURIComponent(c.bookId || '') + '">Open the book</a>';
-    if (c.material === 'video') return '<a class="btn btn-soft btn-sm" href="#learn">Talks</a>';
-    return '<a class="btn btn-soft btn-sm" href="#learn">Read an article</a>';
+    if (c.material === 'video') return '<a class="btn btn-soft btn-sm" href="#learn?list=video">Talks</a>';
+    if (c.material === 'quiz') return '<a class="btn btn-soft btn-sm" href="#learn?list=quiz">Take a quiz</a>';
+    return '<a class="btn btn-soft btn-sm" href="#learn?list=article">Read an article</a>';
   }
   function bindActions(card) {
     card.querySelectorAll('[data-eact="catchup"]').forEach(function (b) {
@@ -258,7 +266,7 @@
 
   MC.library = { load: load, items: items, item: item, has: has, mark: mark, unmark: unmark, all: all, bookState: bookState, finishBook: finishBook,
     countFor: countFor, expectedBy: expectedBy, unit: unit, quoteButton: quoteButton, openCatchUp: openCatchUp, missedQuoteDays: missedQuoteDays,
-    browseHTML: browseHTML, bindBrowse: bindBrowse, renderBook: renderBook, chooseBook: chooseBook, actionsFor: actionsFor, bindActions: bindActions, openLink: openLink, PTS: PTS };
+    browseHTML: browseHTML, bindBrowse: bindBrowse, readingSummary: readingSummary, hit: hit, renderBook: renderBook, chooseBook: chooseBook, actionsFor: actionsFor, bindActions: bindActions, openLink: openLink, PTS: PTS };
   MC.on('view', function (n) { if (n === 'learn' || n === 'roadmap') load(); });
   setTimeout(function () { load(); }, 1500);
 })();

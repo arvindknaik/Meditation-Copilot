@@ -340,3 +340,29 @@ Rule: **time-bound** tasks (sitting on a given day) allow misses; **count** task
 - **Step 1 built 2026-11-25 (v0.18):** 21-Day Foundation / Advance engine, "choose your first challenge" at sign-up, attendance challenge, admin challenge form (minute choices, grow-to, next step, offered at sign-up, bonus points). Migration `0009_challenge_program.sql`. Ships in v0.19.
 - **Step 2 built 2026-11-26 (v0.20):** admin **Library** tab (books with look-up from a purchase link/ISBN via Google Books and Open Library, talks, article links; approval before Copilot shows them); Education challenge type in the admin form; starter challenges Daily Thought · 30 days, An article a week · 12 weeks, Read a book · a chapter a week, Talks · 3 a week for 4 weeks; Copilot "✓ I read it" on the Thought for today with catch-up, "Mark as read" on Learn articles, books with chapter ticks and a finish celebration (+100), "✓ Watched" on return from a talk, "Your reading" card in Learn, reading points in Rewards. Reading history is kept in the person's own data (synced to their own cloud drive), never on the center's server. Migration `0010_library.sql`.
 - Next: step 3 (Book Club).
+
+---
+
+## 11. Knowledge library: Learn (decided 2026-11-27, v0.22)
+
+One **Learn** section in Copilot for all knowledge content, managed in admin → Library.
+
+| Type | What | "Done" |
+|---|---|---|
+| **Articles** | Full text written in admin, or a link (e.g. sos.org). The 12 Learn articles built into Copilot moved here (same ids, so ✓ marks stay). | Mark as read (at the end) |
+| **Talks & videos** | YouTube or other links, with a picture | ✓ I watched it, or "Did you watch it?" on return |
+| **Books** | By the Masters; chapters ticked | Finished (+100) |
+| **Quizzes** | 10 questions (2–4 options or yes/no) | Passed |
+| **Quotes** | The approved quotes; **search only**, no browsing | — |
+
+- **Hub:** search · Continue (books in progress, quizzes tried, saved not done) · top 5 of each type (📌 pinned first, then the center's order, not-done before done) · "See all" lists with topic/status filters, sort (Recommended, Newest, A–Z), 20 at a time.
+- **Search:** "All" shows the best 3–5 of each type **and quotes**; chips narrow to one type (quotes can't be chosen).
+- **Marks:** ✓ done · ◐ in progress · ★ **Saved**: one personal list (save for later and favourites) that stays until the person unsaves it.
+- **Topics** (up to 3 per item): Meditation basics · The science of meditation · The Masters · Satsang & community · Ethical living · Health & wellbeing · Inner & outer peace · Seva · Family & youth.
+- **Quizzes:** shuffled every attempt; pass mark 8 (per quiz); passing shows all answers with explanations. Not passing: score + the questions to review (no answers) + related reading, and **Try again after 10 minutes** (per quiz; 0 for testing). After **3 tries** all answers are shown.
+  - **Points:** trying 5 (1st) then 2 · passing +25 (1st try), +15 (2nd), +10 (3rd); nothing more after the answers are shown or after passing once.
+  - Challenge: **Pass 5 quizzes in 60 days**.
+  - Content: 11 draft quizzes written from published SOS sources, each question with its source, approved by Arvind before publishing: Benefits of Meditation · Why Meditation Is a Science · Tips for Better Meditation · Sant Rajinder Singh Ji Maharaj · Benefits of Weekly Satsang · The Inner Light and Sound · The Masters of SOS · Ethical Living and the Introspection Diary · Seva · Meditation for Stress, Health and Peace · Your Meditation Center.
+- **Privacy:** reading, watching, quiz results and Saved stay with the person's own data. The center gets **anonymous counts only** (opened · finished · quiz passed per item, per day; no person, device or address). A fuller "what is tracked and what is off-limits" policy is to come.
+- **Not in scope:** a public sosmn.org/learn. Visitor information (about the center, SOS, visiting, family) stays on the sosmn.org About page.
+- Migration `0012_knowledge.sql`.

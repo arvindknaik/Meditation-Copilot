@@ -144,12 +144,52 @@ test('[library] books: choose a book, tick chapters, finish it; mark an article 
     await shot(p, 'copilot-learn-library-phone'); assert.deepEqual(errors, []);
   } catch (e) { await shot(p, 'FAILED-books').catch(() => {}); throw e; } finally { await ctx.close(); }
 });
+test('[library] Learn hub: top 5 of each type, search with quotes, Saved, and a quiz', async () => {
+  const QZ = JSON.parse((await import('node:fs')).readFileSync(new URL('../../content/quizzes.json', import.meta.url), 'utf8')).quizzes.find((q) => q.id === 'q-center');
+  const { p, ctx, errors } = await page(PHONE);
+  p.on('dialog', (d) => d.accept());
+  try {
+    await newGuest(p);
+    await p.goto(SITE + '/copilot/#learn'); await p.waitForFunction(() => /Quizzes/.test(document.getElementById('learnBrowse')?.textContent || ''), null, { timeout: 15000 });
+    const t = await p.textContent('#learnBrowse');
+    for (const h of ['Articles', 'Talks & videos', 'Books', 'Quizzes']) assert.ok(t.includes(h), h + ' section');
+    assert.ok((await p.$$('#learnBrowse .k-list')).length >= 4);
+    await shot(p, 'copilot-learn-hub-phone');
+    // search: grouped results including quotes; narrowing by type
+    await p.fill('#learnQ', 'meditation'); await p.waitForSelector('#learnResults .k-chips');
+    const r = await p.textContent('#learnResults'); assert.match(r, /Articles/); assert.match(r, /Quotes/);
+    await p.click('#learnResults [data-type="article"]'); await p.waitForTimeout(200);
+    assert.ok(!(await p.textContent('#learnResults')).includes('Quotes'), 'narrowing hides quotes');
+    await p.click('#clearSearch');
+    // save an article, then find it under Saved
+    await p.goto(SITE + '/copilot/#learn?a=benefits'); await p.waitForSelector('#learnArticle [data-save]');
+    await p.click('#learnArticle [data-save]'); await p.goto(SITE + '/copilot/#learn?list=saved'); await p.waitForTimeout(300);
+    assert.match(await p.textContent('#learnList'), /Benefits of Meditation/);
+    // quiz: answer everything correctly and pass
+    await p.goto(SITE + '/copilot/#learn?q=q-center'); await p.waitForSelector('#qStart'); await p.click('#qStart');
+    for (let i = 0; i < 10; i++) {
+      const qtext = (await p.textContent('.q-q')).trim(), z = QZ.questions.find((x) => x.q === qtext);
+      await p.click(`.q-opt:text-is("${z.options[z.answer].replace(/"/g, '\\"')}")`);
+      await p.click('#qNext');
+    }
+    await p.waitForSelector('.q-result.ok'); assert.match(await p.textContent('.q-result'), /10/); assert.match(await p.textContent('.q-result'), /\+30 points/);
+    await shot(p, 'copilot-quiz-passed-phone');
+    await p.goto(SITE + '/copilot/#learn?list=quiz'); await p.waitForTimeout(300); assert.ok(await p.$('#learnList .mk.done'), 'passed quiz shows ✓');
+    assert.deepEqual(errors, []);
+  } catch (e) { await shot(p, 'FAILED-learn').catch(() => {}); throw e; } finally { await ctx.close(); }
+});
+
 test('[library] admin: Library tab lists books and opens the form', async () => {
   const { p, ctx, errors } = await page(DESKTOP);
   try {
     await p.goto(ADMIN + '/', { waitUntil: 'networkidle' }); await p.waitForSelector('#tEmail', { timeout: 15000 });
     await p.fill('#tEmail', 'owner@example.com'); await p.click('#tBtn'); await p.waitForTimeout(800);
     await p.goto(ADMIN + '/#library'); await p.waitForSelector('.lib-row', { timeout: 15000 });
+    assert.match(await p.textContent('#app'), /Learn to Meditate/, 'Learn articles are in the library');
+    await p.click('[data-lk="quiz"]'); await p.waitForSelector('[data-lr]');
+    await p.click('[data-lr]'); await p.waitForSelector('.q-rev'); assert.ok((await p.$$('.q-rev > li')).length === 10, 'quiz review lists 10 questions');
+    await shot(p, 'admin-quiz-review-desktop'); await p.click('[data-close]');
+    await p.click('[data-lk="book"]'); await p.waitForSelector('.lib-row');
     const t = await p.textContent('#app');
     assert.match(t, /Empowering Your Soul through Meditation/); assert.match(t, /Draft/); assert.match(t, /Approved/);
     await p.click('.lib-row [data-le]'); await p.waitForSelector('#lf'); assert.ok(await p.$('#lLook'), 'books have Look up');
