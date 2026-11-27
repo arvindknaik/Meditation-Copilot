@@ -1,6 +1,83 @@
 {
   "releases": [
     {
+      "version": "0.22.0",
+      "date": "2026-11-27",
+      "summary": "One Learn section for articles, talks, books and quizzes, with search and your own Saved list.",
+      "highlights": [
+        "Learn: articles, talks, books and quizzes in one place, with one search (quotes too).",
+        "New quizzes to check your understanding, with points for trying and passing.",
+        "✓ marks what you've finished, ◐ what's in progress, and ★ Save keeps your own list."
+      ],
+      "items": [
+        {
+          "type": "new",
+          "text": "Learn shows the top 5 articles, talks, books and quizzes, with \"See all\" lists you can filter by topic and status and sort.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Search finds the best articles, talks, books, quizzes and quotes; narrow to one type with the chips.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Quizzes: 10 questions, shuffled each time; pass with 8. Passing shows every answer; otherwise review the questions you missed and try again after a short wait. After 3 tries all answers are shown.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Quiz points: 5 for the first try and 2 for each try after; passing adds 25 (1st try), 15 (2nd) or 10 (3rd).",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "★ Save for later: your own list that stays until you unsave it (also for favourites).",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Continue: books you're reading, quizzes you're working on and saved things not yet done.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Talks have their own page with a picture, \"Watch\" and \"✓ I watched it\"; Related items under every article, talk and book.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "New challenge: Pass 5 quizzes in 60 days.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Library: full article text editor, topics (up to 3), 📌 Pin to the top 5, quizzes with a question editor and a Review screen to approve them.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Eleven draft quizzes written from published SOS sources, each question with its source, ready for review.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Anonymous counts per item (opened, finished, passed). No names are recorded.",
+          "audience": "admin"
+        },
+        {
+          "type": "improved",
+          "text": "The Learn articles that were built into Copilot are now in the Library, so admins can edit them; everything you read keeps its ✓.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "The app's own help articles moved to \"Help with the app\".",
+          "audience": "all"
+        }
+      ]
+    },
+    {
       "version": "0.21.0",
       "date": "2026-11-26",
       "summary": "A quick fix for the News page.",
