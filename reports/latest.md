@@ -1,12 +1,12 @@
-# Test report — v0.22-b0 — ✅ passed
+# Test report — v0.22-b1 — ✅ passed
 
-Nov 27, 2026, 6:32 PM · commit c22b8d6 · suites: unit, api, e2e
+Nov 27, 2026, 2:06 PM · commit 11fa625 · suites: unit, api, e2e
 
 | Suite | Passed | Failed | Time |
 |---|---|---|---|
-| unit | 22 | 0 | 2 s |
-| api | 12 | 0 | 11 s |
-| e2e | 10 | 0 | 53 s |
+| unit | 22 | 0 | 3 s |
+| api | 12 | 0 | 13 s |
+| e2e | 10 | 0 | 63 s |
 
 | Feature | Passed | Failed |
 |---|---|---|
@@ -69,4 +69,4 @@ Nov 27, 2026, 6:32 PM · commit c22b8d6 · suites: unit, api, e2e
 
 </details>
 
-Screenshots: reports/artifacts/ (17 files, kept on this computer).
+Screenshots: reports/artifacts/ (12 files, kept on this computer).
