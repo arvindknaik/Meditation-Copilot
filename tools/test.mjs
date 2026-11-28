@@ -7,6 +7,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, run, readJSON, git } from './lib.mjs';
 
+// The local dev server (npm run dev) rebuilds dist/ whenever files change, which breaks the build and browser tests mid-run
+{
+  const lock = path.join(ROOT, '.dev-running');
+  let pid = 0; try { pid = Number(fs.readFileSync(lock, 'utf8')); } catch { /* not running */ }
+  let alive = false; if (pid) { try { process.kill(pid, 0); alive = true; } catch { /* gone */ } }
+  if (alive) {
+    console.error('\n✖ The local dev server (npm run dev) is running. It rebuilds the same files the tests use.\n  Stop it first (Ctrl+C in its window), then run the tests or the release again.\n');
+    process.exit(1);
+  }
+  if (pid) fs.rmSync(lock, { force: true });   // left over from a closed window
+}
 const ALL = ['unit', 'api', 'e2e'];
 const suites = process.argv.slice(2).filter((a) => ALL.includes(a));
 const pick = suites.length ? suites : ALL;

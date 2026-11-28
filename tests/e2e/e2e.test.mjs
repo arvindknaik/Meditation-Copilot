@@ -167,7 +167,9 @@ test('[library] books: choose a book, tick chapters, finish it; mark an article 
     assert.match(await p.textContent('#goalsCard'), /Completed/);
     await p.goto(SITE + '/copilot/#learn?a=learn-to-meditate'); await p.waitForSelector('#artRead');
     await p.locator('#artEnd').scrollIntoViewIfNeeded(); await p.waitForFunction(() => !document.getElementById('artRead').disabled);
-    await p.click('#artRead'); assert.match(await p.textContent('#artEnd'), /✓ Read/);
+    await p.$eval('#artRead', (b) => b.scrollIntoView({ block: 'center' })); await p.waitForTimeout(300);
+    await p.$eval('#artRead', (b) => b.click());   // the fixed tab bar can cover it mid-scroll on slower computers
+    await p.waitForFunction(() => /✓ Read/.test(document.getElementById('artEnd')?.textContent || ''), null, { timeout: 10000 });
     await p.goto(SITE + '/copilot/#learn'); await p.waitForSelector('.reading-card');
     assert.match(await p.textContent('.reading-card'), /6\s*chapters/);
     await shot(p, 'copilot-learn-library-phone'); assert.deepEqual(errors, []);

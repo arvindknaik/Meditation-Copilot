@@ -8,6 +8,10 @@ import { ROOT, start, stop, run, waitFor, serveStatic, ensureDevVars } from './l
 import { applyMigrations } from './seed.mjs';
 
 ensureDevVars();
+// Tests and releases rebuild dist/ too: they check this file and ask you to stop the dev server first
+const LOCK = path.join(ROOT, '.dev-running');
+fs.writeFileSync(LOCK, String(process.pid));
+process.on('exit', () => { try { fs.rmSync(LOCK, { force: true }); } catch { /* ignore */ } });
 applyMigrations();
 const build = () => { try { run(process.execPath, ['tools/build.mjs', 'local'], { capture: true }); console.log(`[${new Date().toLocaleTimeString()}] rebuilt`); } catch (e) { console.error(e.message); } };
 build();
@@ -20,5 +24,5 @@ let timer;
 for (const dir of ['apps', 'content', 'centers']) {
   fs.watch(path.join(ROOT, dir), { recursive: true }, () => { clearTimeout(timer); timer = setTimeout(build, 300); });
 }
-const quit = () => { stop(api); site.close(); admin.close(); process.exit(0); };
+const quit = () => { try { fs.rmSync(LOCK, { force: true }); } catch { /* ignore */ } stop(api); site.close(); admin.close(); process.exit(0); };
 process.on('SIGINT', quit); process.on('SIGTERM', quit);
