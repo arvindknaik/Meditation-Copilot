@@ -117,3 +117,86 @@ test('[library] knowledge: Learn articles moved in, quizzes arrive as drafts, an
   const st = (await c.call('GET', '/api/admin/library', owner)).items.find((x) => x.id === 'q-benefits').stats;
   assert.equal(st.pass, 1); assert.equal(st.open, 1);
 });
+
+test('[visitors] v0.23: several featured events, favourites, one note per check-in, visitor log and suggestions', async () => {
+  // featured: several at a time, an admin sets and clears them
+  const up = (await c.call('GET', '/api/events?from=' + Date.now() + '&to=' + (Date.now() + 30 * 86400000), seeker)).events;
+  const a = up[0].id, b = up[up.length - 1].id;
+  assert.equal((await c.call('POST', '/api/admin/events/' + a + '/hero', owner)).status, 200);
+  assert.equal((await c.call('POST', '/api/admin/events/' + b + '/hero', owner)).status, 200);
+  const feat = (await c.call('GET', '/api/events?from=' + (Date.now() - 30 * 86400000) + '&to=' + (Date.now() + 30 * 86400000), seeker)).events.filter((e) => e.hero).map((e) => e.id);
+  assert.ok(feat.includes(a) && feat.includes(b) && feat.includes('seed-20'), 'several featured, including a past one: ' + feat);
+  assert.equal((await c.call('POST', '/api/admin/events/' + a + '/hero', seeker)).status, 403);
+  await c.call('DELETE', '/api/admin/events/' + a + '/hero', owner);
+
+  // favourites: an event and a whole series
+  const st = Date.now() + 2 * 86400000, H = 3600000;
+  const sr = await c.call('POST', '/api/admin/events', owner, { title: 'Weekly Satsang (test)', format: 'in_person', kind: 'satsang', startsAt: st, endsAt: st + H, timezone: 'America/Chicago',
+    repeat: { freq: 'weekly' }, occurrences: [0, 7, 14].map((d) => ({ startsAt: st + d * 86400000, endsAt: st + d * 86400000 + H })) });
+  const sid = sr.event.seriesId; assert.ok(sid);
+  assert.equal((await c.call('PUT', '/api/me/favorites/event/' + b, seeker)).status, 200);
+  assert.equal((await c.call('PUT', '/api/me/favorites/series/' + sid, seeker)).status, 200);
+  assert.equal((await c.call('PUT', '/api/me/favorites/event/nope', seeker)).status, 404);
+  let f = await c.call('GET', '/api/me/favorites', seeker);
+  assert.equal(f.series.length, 1); assert.equal(f.events.filter((e) => e.seriesId === sid).length, 3, 'every date of the series');
+  assert.ok(f.events.some((e) => e.id === b && e.fav === 'event'));
+  assert.equal((await c.call('GET', '/api/events/' + sr.event.id, seeker)).event.myFav, 'series');
+  await c.call('DELETE', '/api/me/favorites/series/' + sid, seeker);
+  f = await c.call('GET', '/api/me/favorites', seeker); assert.equal(f.series.length, 0);
+  assert.equal((await c.call('GET', '/api/me/favorites')).status, 401);
+
+  // visitor note: only after checking in, until 7 days after the event; one per event (updates replace it)
+  assert.equal((await c.call('PUT', '/api/events/seed-27/note', seeker, { body: 'hi' })).status, 403, 'not checked in');
+  const mark = await c.login('mark@example.com', 'Mark Test');
+  assert.equal((await c.call('PUT', '/api/events/seed-21/note', mark, { body: 'late' })).status, 400, 'more than 7 days after the event');
+  let n = await c.call('GET', '/api/events/seed-23/note', seeker); assert.equal(n.canWrite, true); assert.ok(n.note, 'seeded note');
+  assert.equal((await c.call('PUT', '/api/events/seed-23/note', seeker, { body: 'Updated: thank you! (test)', shareOk: false })).status, 200);
+  assert.equal((await c.call('PUT', '/api/events/seed-23/note', seeker, { body: 'x'.repeat(501) })).status, 400);
+  n = await c.call('GET', '/api/events/seed-23/note', seeker); assert.equal(n.note.body, 'Updated: thank you! (test)'); assert.equal(n.note.shareOk, false);
+  assert.equal((await c.call('POST', '/api/events/seed-23/messages', seeker, { body: 'old reflections are retired' })).status, 410);
+
+  // visitor log (admins): review; public only when the person allowed sharing
+  assert.equal((await c.call('GET', '/api/admin/visitor-log', seeker)).status, 403);
+  const log = await c.call('GET', '/api/admin/visitor-log', owner);
+  const mine = log.notes.find((x) => x.eventId === 'seed-23'); assert.ok(mine && !mine.reviewedAt);
+  assert.equal((await c.call('PATCH', '/api/admin/visitor-log/' + mine.id, owner, { public: true })).status, 400, 'not shareable');
+  assert.equal((await c.call('PATCH', '/api/admin/visitor-log/' + mine.id, owner, { reviewed: true })).status, 200);
+  await c.call('PUT', '/api/events/seed-23/note', seeker, { body: 'Updated again (test)', shareOk: true });
+  const again = (await c.call('GET', '/api/admin/visitor-log?show=new', owner)).notes.find((x) => x.id === mine.id);
+  assert.ok(again, 'an edited note needs reviewing again');
+  assert.equal((await c.call('PATCH', '/api/admin/visitor-log/' + mine.id, owner, { public: true })).status, 200);
+  assert.equal((await c.call('GET', '/api/admin/visitor-log?show=public', owner)).notes.length, 1);
+  assert.ok((await c.call('GET', '/api/me', seeker)).noteEvents.includes('seed-23'));
+
+  // suggestions: reviewed mark
+  const sg = (await c.call('GET', '/api/admin/feedback', owner)).feedback.find((x) => x.id === 'seed-sug-1');
+  assert.ok(sg && !sg.reviewedAt);
+  await c.call('PATCH', '/api/admin/feedback/seed-sug-1', owner, { reviewed: true });
+  assert.ok((await c.call('GET', '/api/admin/feedback', owner)).feedback.find((x) => x.id === 'seed-sug-1').reviewedAt);
+});
+
+test('[visitors] v0.23: Initiate is one way; an admin confirms or revokes it', async () => {
+  const lena = await c.login('lena@example.com', 'Lena Test');
+  assert.equal((await c.call('PUT', '/api/me/category', lena, { category: 'initiate' })).category, 'initiate');
+  assert.equal((await c.call('PUT', '/api/me/category', lena, { category: 'seeker' })).category, 'initiate', 'the phone can’t switch back');
+  const me = (await c.call('GET', '/api/me', lena)).user; assert.equal(me.initiateConfirmed, false);
+  await c.call('PATCH', '/api/admin/users/' + encodeURIComponent('dev:lena@example.com') + '/journey', owner, { confirmInitiate: true });
+  assert.equal((await c.call('GET', '/api/me', lena)).user.initiateConfirmed, true);
+  // revoke: back to Seeker, and the phone can't declare it again
+  await c.call('PATCH', '/api/admin/users/' + encodeURIComponent('dev:lena@example.com') + '/journey', owner, { stage: 'seeker' });
+  const u = (await c.call('GET', '/api/me', lena)).user; assert.equal(u.category, 'seeker'); assert.equal(u.initiateRevoked, true);
+  assert.equal((await c.call('PUT', '/api/me/category', lena, { category: 'initiate' })).status, 403);
+  // setting Initiate again (admin) clears the revoke
+  await c.call('PATCH', '/api/admin/users/' + encodeURIComponent('dev:lena@example.com') + '/journey', owner, { stage: 'initiate' });
+  const v = (await c.call('GET', '/api/me', lena)).user; assert.equal(v.category, 'initiate'); assert.equal(v.initiateRevoked, false); assert.equal(v.initiateConfirmed, true);
+});
+
+test('[calendar] v0.24: the next and previous event around a window (for "Show more")', async () => {
+  const t = Date.now(), D = 86400000;
+  const j = await c.call('GET', '/api/events?from=' + (t - D) + '&to=' + (t + 2 * D) + '&edges=1');
+  assert.ok('next' in j && 'prev' in j);
+  assert.ok(j.prev < t - D, 'previous is before the window');
+  if (j.next) assert.ok(j.next > t + 2 * D, 'next is after the window');
+  const none = await c.call('GET', '/api/events?from=' + (t - D) + '&to=' + (t + 2 * D));
+  assert.ok(!('next' in none), 'only when asked');
+});

@@ -232,7 +232,25 @@
   }
 
   /* ======================= Sync engine ======================= */
-  var providers = { google: G, microsoft: M };
+  /* ======================= Local test (this computer only) =======================
+   * Only when the app talks to an events server on this computer (npm run dev, tests). No cloud: the "drive"
+   * is a key in this browser, and the events server accepts the email as a test sign-in (DEV_LOGIN, never in production). */
+  var LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(String(MC.store.get('meditation-copilot:api-override', null) || CFG.apiBase || '').replace(/\/+$/, ''));
+  var X = {
+    id: 'test', name: 'Local test', storeName: 'this browser (local test)', ready: LOCAL,
+    email: function () { return (tokens.test && tokens.test.email) || ''; },
+    canSync: function () { return !!(tokens.test && tokens.test.email); },
+    signIn: function (opts) {
+      var e = String((opts && opts.email) || '').trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return Promise.reject(err('Type an email for the test user, e.g. priya@example.com'));
+      tokens.test = { email: e }; saveTokens(); return Promise.resolve();
+    },
+    signOut: function () { delete tokens.test; saveTokens(); return Promise.resolve(); },
+    pull: function () { return Promise.resolve({ data: MC.store.get('meditation-copilot:test-drive:' + X.email(), null), ref: null }); },
+    push: function (snap) { MC.store.set('meditation-copilot:test-drive:' + X.email(), snap); return Promise.resolve(); }
+  };
+
+  var providers = { google: G, microsoft: M, test: X };
   function current() { return providers[MC.account.mode()] || null; }
   function setStatus(s, e) { state.status = s; state.error = e || ''; MC.emit('sync', state); }
 
@@ -295,23 +313,24 @@
     run: run,
     schedule: schedule,
     // Interactive sign-in from the welcome screen or Account sheet (must be called from a tap)
-    signIn: function (id) {
+    signIn: function (id, opts) {
       var p = providers[id];
       if (!p || !p.ready) return Promise.reject(err('This sign-in option is not available yet.'));
       setStatus('connecting');
-      return p.signIn().then(function () {
+      return p.signIn(opts).then(function () {
         MC.account.setMode(id, p.email());
         MC.track('signin', { provider: id });
         return run();
       }).catch(function (e) { setStatus(current() ? 'needs-auth' : 'idle'); throw e; });
     },
     // "Reconnect" after a token expired (Google ~1 hour; Microsoft after about a day)
-    reconnect: function () { var p = current(); return p ? MC.sync.signIn(p.id) : Promise.resolve(); },
+    reconnect: function () { var p = current(); return p && p.id !== 'test' ? MC.sync.signIn(p.id) : Promise.resolve(); },
     // Token our events server can verify: Google access token (audience-checked) or Microsoft ID token.
     // Returns a promise; for Microsoft it renews silently with the refresh token if needed.
     identityToken: function () {
       var p = current();
       if (!p) return Promise.reject(err('Please sign in with Google or Microsoft.', { needsAuth: true }));
+      if (p.id === 'test') return Promise.resolve({ provider: 'dev', email: X.email(), name: X.email().split('@')[0] });
       if (p.id === 'google') {
         return G.canSync() ? Promise.resolve({ provider: 'google', accessToken: tokens.google.access })
           : Promise.reject(err('Please reconnect Google.', { needsAuth: true }));
@@ -337,7 +356,7 @@
     },
     // Start-up: finish a Microsoft redirect if present, then sync
     init: function () {
-      if (MC.account.mode() === 'google' || MC.account.mode() === 'none' || MC.account.mode() === 'guest') G.prepare().catch(function () {});
+      if (MC.account.mode() === 'google' || !MC.account.signedIn()) G.prepare().catch(function () {});
       return M.handleRedirect().then(function (didSignIn) {
         if (didSignIn) {
           MC.account.setMode('microsoft', M.email());

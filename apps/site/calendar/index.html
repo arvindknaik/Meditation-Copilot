@@ -10,11 +10,13 @@
 {{header}}
 <main id="main" class="site-inner">
   <div class="sec-head page-head"><h1>Calendar</h1>
-    <div class="seg" role="group" aria-label="View"><button type="button" data-cv="month" class="on">Month</button><button type="button" data-cv="list">List</button></div></div>
+    <div class="cal-tools"><a class="btn btn-ghost btn-sm" href="/calendar/?fav=1">★ Favourites</a>
+    <div class="seg" role="group" aria-label="View"><button type="button" data-cv="up" class="on">Upcoming</button><button type="button" data-cv="recent">Recent</button><button type="button" data-cv="month">Month</button></div></div></div>
   <p class="free-banner"><span class="tag free">FREE</span> <span>All our programs are free of charge and open to everyone. No fees, no donations expected.</span></p>
-  <div class="cal-bar"><button class="btn btn-ghost btn-sm" id="calPrev" aria-label="Previous month">‹</button><h2 id="calTitle" aria-live="polite"></h2><button class="btn btn-ghost btn-sm" id="calNext" aria-label="Next month">›</button><button class="btn btn-ghost btn-sm" id="calToday">Today</button></div>
+  <div class="cal-bar" hidden><button class="btn btn-ghost btn-sm" id="calPrev" aria-label="Previous month">‹</button><h2 id="calTitle" aria-live="polite"></h2><button class="btn btn-ghost btn-sm" id="calNext" aria-label="Next month">›</button><button class="btn btn-ghost btn-sm" id="calToday">Today</button></div>
   <div id="calMonth" class="cal-month"></div>
   <div id="calList" class="cal-list"></div>
+  <div id="calMore" class="cal-more"></div>
 </main>
 {{footer}}
 </body>

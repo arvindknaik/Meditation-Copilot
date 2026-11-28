@@ -1,4 +1,4 @@
-/* Meditation Copilot — master quote file for "Thought for today"
+/* Meditation Copilot — master quote file for "Quote of the day" (called "Thought for today" until v0.24)
  *
  * Approved by Arvind on 15 Nov 2026 from the review sheet "Thought for Today — Quote Review".
  * Each entry: text (exactly as published), author, source. The app shows one quote a day and

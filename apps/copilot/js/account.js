@@ -1,5 +1,5 @@
-/* Meditation Copilot — account: welcome / sign-in choice, guest mode, signed-in state,
-   Account & settings sheet, reconnect and backup reminders */
+/* Meditation Copilot — account: welcome / sign-in (required from v0.23; guest mode was retired: data already on
+   a phone in guest mode is added to the account at the first sign-in), Account & settings sheet, reconnect */
 (function () {
   'use strict';
   var MC = window.MC, $ = MC.$, CFG = window.MC_CONFIG || {};
@@ -9,13 +9,14 @@
   function save() { MC.store.set(MC.KEYS.account, acct); }
   function open(d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
   function close(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
-  function signedIn() { return acct.mode === 'google' || acct.mode === 'microsoft'; }
+  function signedIn() { return acct.mode === 'google' || acct.mode === 'microsoft' || acct.mode === 'test'; }
   function prov(id) { return MC.sync && MC.sync.providers[id]; }
 
   MC.account = {
     mode: function () { return acct.mode || 'none'; },
     email: function () { return acct.email || ''; },
     isGuest: function () { return acct.mode === 'guest'; },
+    signedIn: signedIn,
     setMode: function (mode, email) {
       acct.mode = mode; acct.email = email || ''; save();
       hideWelcome(); renderBadge(); renderBanner();
@@ -32,13 +33,16 @@
       return '<button class="btn btn-signin" data-provider="' + k + '"' + (ready ? '' : ' disabled aria-disabled="true"') + '>' +
         (k === 'google' ? '<span class="g-logo" aria-hidden="true">G</span>' : '<span class="ms-logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>') +
         'Continue with ' + (k === 'google' ? 'Google' : 'Microsoft') + (ready ? '' : ' <small>coming soon</small>') + '</button>';
-    }).join('');
+    }).join('') +
+      (prov('test') && prov('test').ready ? '<div class="small test-signin"><b>Local test sign-in</b> (this computer only)<input type="email" class="text-input" data-test-email placeholder="any email, e.g. priya@example.com" style="margin:6px 0">' +
+        '<button class="btn btn-ghost btn-sm btn-block" data-provider="test" type="button">Sign in as test user</button></div>' : '');
   }
   function onProvider(e) {
     var b = e.target.closest('[data-provider]'); if (!b || b.disabled) return;
     var id = b.dataset.provider, wasGuest = acct.mode === 'guest' && MC.sessions.count() > 0;
+    var opts = id === 'test' ? { email: (b.parentNode.querySelector('[data-test-email]') || {}).value } : undefined;
     b.disabled = true;
-    MC.sync.signIn(id).then(function () {
+    MC.sync.signIn(id, opts).then(function () {
       close($('accountDlg'));
       MC.toast('Signed in. ' + (wasGuest ? 'Your guest data was added to ' : 'Your data is saved in ') + prov(id).storeName + '.', 4000);
       MC.route();
@@ -49,45 +53,24 @@
     }).then(function () { b.disabled = false; });
   }
 
-  /* ---------- Welcome (first launch) ---------- */
+  /* ---------- Welcome: sign-in is required (v0.23) ---------- */
   function showWelcome() {
     $('welcomeProviders').innerHTML = providerButtons();
+    var g = acct.mode === 'guest';
+    $('welcomeLead').innerHTML = g
+      ? '<b>Copilot now asks everyone to sign in.</b> Your sittings and roadmap on this phone are kept and added to your account when you sign in. Your data is saved privately in your own Google Drive or OneDrive.'
+      : 'Sign in to start. Your sittings and reflections are saved privately in your own Google Drive or OneDrive, in a folder only this app can use.';
     $('welcome').hidden = false;
     document.body.classList.add('welcome-open');
   }
   function hideWelcome() { $('welcome').hidden = true; document.body.classList.remove('welcome-open'); }
   $('welcomeProviders').addEventListener('click', onProvider);
 
-  /* ---------- Guest ---------- */
-  $('guestBtn').addEventListener('click', function () {
-    $('guestAck').checked = false; $('guestGo').disabled = true;
-    open($('guestDlg'));
-  });
-  $('guestAck').addEventListener('change', function () { $('guestGo').disabled = !$('guestAck').checked; });
-  $('guestCancel').addEventListener('click', function () { close($('guestDlg')); });
-  $('guestForm').addEventListener('submit', function (e) {
-    e.preventDefault();
-    if (!$('guestAck').checked) return;
-    acct.mode = 'guest'; acct.email = ''; acct.guestAckAt = Date.now(); save();
-    close($('guestDlg')); hideWelcome(); renderBadge();
-    MC.track('account_guest');
-    requestPersist();
-    MC.route();
-    MC.maybeAskUserType();
-  });
-  function requestPersist() {
-    if (!navigator.storage || !navigator.storage.persist) return;
-    navigator.storage.persist().then(function (granted) {
-      acct.persisted = !!granted; save();
-      MC.diag.add('storage_persist', { granted: !!granted });
-    }).catch(function () {});
-  }
-
   /* ---------- Header badge ---------- */
   var ICON = { ok: '✓', syncing: '⟳', connecting: '⟳', 'needs-auth': '!', error: '⚠', offline: '⦸', idle: '' };
   function renderBadge() {
     var b = $('accountBtn'), st = MC.sync ? MC.sync.state().status : 'idle';
-    var label = acct.mode === 'guest' ? 'Guest' : acct.mode === 'google' ? 'Google' : acct.mode === 'microsoft' ? 'Microsoft' : 'Account';
+    var label = acct.mode === 'google' ? 'Google' : acct.mode === 'microsoft' ? 'Microsoft' : acct.mode === 'test' ? 'Test' : 'Account';
     var icon = signedIn() ? (ICON[st] || '') : '';
     var dot = needsBackup() || (signedIn() && (st === 'needs-auth' || st === 'error'));
     b.innerHTML = '<span aria-hidden="true">👤</span> ' + label +
@@ -151,8 +134,8 @@
       var p = prov(acct.mode);
       html += '<div class="signed-card"><div><b>Signed in with ' + MC.esc(p.name) + '</b>' +
         (acct.email ? '<div class="small muted">' + MC.esc(acct.email) + '</div>' : '') + '</div>' +
-        '<div class="small" style="margin-top:8px">Saved privately in your ' + MC.esc(p.storeName) +
-        (acct.mode === 'microsoft' ? ' (Apps › Meditation Copilot)' : ' (hidden app folder)') + '.</div>' +
+        '<div class="small" style="margin-top:8px">' + (acct.mode === 'test' ? 'Local test only: saved in this browser.' : 'Saved privately in your ' + MC.esc(p.storeName) +
+        (acct.mode === 'microsoft' ? ' (Apps › Meditation Copilot)' : ' (hidden app folder)') + '.') + '</div>' +
         '<div class="small" style="margin-top:4px"><b>Sync:</b> ' + MC.esc(STATUS_TEXT[st.status] || st.status) + ' · last synced ' + ago(MC.sync.lastSyncAt()) + '</div>' +
         (st.status === 'error' && st.error ? '<div class="small" style="color:var(--danger);margin-top:4px">' + MC.esc(st.error) + '</div>' : '') +
         '<div class="tool-row two" style="margin-top:12px">' +
@@ -161,16 +144,12 @@
           : '<button class="btn btn-soft btn-sm" id="acSync">⟳ Sync now</button>') +
         '<button class="btn btn-ghost btn-sm" id="acSignOut">Sign out</button></div></div>';
     } else {
-      if (acct.mode === 'guest') {
-        html += '<div class="guest-warn"><b>Guest mode · data on this device only</b><p class="small" style="margin:6px 0 0">Your sittings and reflections can be lost if browser data is cleared, the app is removed, or you change phones. Sign in to keep them safe in your own Google Drive or OneDrive. Your guest data comes with you.</p></div>';
-      }
       html += '<div class="section-title" style="margin-top:16px">Sign in to keep your data safe</div>' +
         '<p class="small muted" style="margin:-6px 0 10px">Your data is saved privately in your own drive, in a folder only this app can use. We never see it.</p>' +
         '<div class="stack" style="margin-top:0" id="sheetProviders">' + providerButtons() + '</div>';
     }
 
     html += MC.nameSheetHTML ? MC.nameSheetHTML() : '';
-    html += MC.profileSheetHTML();
     if (MC.events && MC.events.accountHTML) html += MC.events.accountHTML();
     if (MC.buddiesAccountHTML) html += MC.buddiesAccountHTML();
 
@@ -189,7 +168,7 @@
     html += '<div class="section-title" style="margin-top:20px">Privacy &amp; support</div>' +
       '<div class="toggle" style="border-top:0;margin-top:0;padding-top:0"><div><b>Share anonymous usage statistics</b><div class="small muted">Counts like "sitting saved". No personal data. Helps improve the app.</div></div>' +
       '<label class="switch"><input type="checkbox" id="acStats"' + (MC.settings.analyticsOptOut ? '' : ' checked') + ' aria-label="Share anonymous usage statistics"><span></span></label></div>' +
-      (MC.openFeedback ? '<div class="tool-row two" style="margin:0 0 10px"><button class="btn btn-soft btn-sm" id="acSuggest">💡 Suggest an idea</button><button class="btn btn-soft btn-sm" id="acRate">⭐ Rate the app</button></div>' : '') +
+      (MC.openFeedback ? '<button class="btn btn-soft btn-sm btn-block" id="acSuggest" style="margin:0 0 10px">💡 Send a suggestion to the center</button><div class="tool-row two" style="margin:0 0 10px"><button class="btn btn-ghost btn-sm" id="acTour" type="button">🧭 Take the tour</button><button class="btn btn-ghost btn-sm" id="acStart" type="button">✓ Getting started</button></div>' : '') +
       '<button class="btn btn-soft btn-sm btn-block" id="acDiag">🩺 Send diagnostics to support</button>' +
       '<p class="small muted" style="margin:8px 0 0">Shares a technical log (' + MC.diag.all().length + ' events, no reflections or personal details) only when you tap this.</p>' +
       '<p class="small" style="margin:14px 0 0"><a href="' + MC.esc(CFG.privacyPolicyUrl || 'privacy.html') + '" target="_blank" rel="noopener">Privacy notice</a> · ' +
@@ -198,9 +177,9 @@
     $('accountBody').innerHTML = html;
 
     if ($('sheetProviders')) $('sheetProviders').addEventListener('click', onProvider);
-    $('acProfile').addEventListener('click', function () { close($('accountDlg')); MC.askUserType(true); });
     if ($('acSuggest')) $('acSuggest').addEventListener('click', function () { close($('accountDlg')); MC.openFeedback('suggestion'); });
-    if ($('acRate')) $('acRate').addEventListener('click', function () { close($('accountDlg')); MC.openFeedback('rating'); });
+    if ($('acTour')) $('acTour').addEventListener('click', function () { close($('accountDlg')); MC.tour(); });
+    if ($('acStart')) $('acStart').addEventListener('click', function () { close($('accountDlg')); MC.gettingStarted.show(); });
     if ($('acName')) $('acName').addEventListener('click', function () { var n = window.prompt('What should we call you?', MC.displayName() || ''); if (n === null) return; MC.profile.name = n.trim().slice(0, 40); MC.saveProfile(); close($('accountDlg')); MC.toast(n.trim() ? 'Nice to meet you, ' + MC.firstName() + ' 🙏' : 'Name cleared.'); });
     if (MC.events && MC.events.bindAccount) MC.events.bindAccount(function () { close($('accountDlg')); });
     if (MC.bindBuddiesAccount) MC.bindBuddiesAccount(function () { close($('accountDlg')); });

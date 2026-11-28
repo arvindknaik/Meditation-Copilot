@@ -82,18 +82,21 @@
   /* ---------- Today screen line ---------- */
   MC.nextSittingHTML = function () {
     var o = nextOcc();
-    if (!o) return active().length ? '' : '<a class="next-sit muted" href="#calendar">⏰ Set your daily sitting times ›</a>';
+    if (!o) return active().length ? '' : '<button class="next-sit muted" type="button" data-add-sit>⏰ Set your daily sitting time ›</button>';
     var when = o.date === MC.toISO(MC.today()) ? 'Today' : MC.relDay(o.at);
     var label = MC.esc(o.item.title || 'Meditation') + ' · ' + MC.esc(when) + ' ' + MC.esc(fmtClockTime(o.item.time)) + ' · ' + o.item.minutes + ' min';
-    if (o.status === 'now') {
-      return '<div class="next-sit now"><span>⏰ <b>Now:</b> ' + label + '</span><button class="btn btn-gold btn-sm" data-start="' + o.item.minutes + '">Start</button></div>';
-    }
-    return '<a class="next-sit" href="#calendar">⏰ <span><b>Next:</b> ' + label + '</span></a>';
+    // v0.24: a simple commitment (no challenge): the next sitting, with a button straight to the Timer
+    return '<div class="next-sit' + (o.status === 'now' ? ' now' : '') + '"><span>⏰ <b>' + (o.status === 'now' ? 'Now' : 'Your sitting') + ':</b> ' + label + '</span>' +
+      '<button class="btn ' + (o.status === 'now' ? 'btn-gold' : 'btn-soft') + ' btn-sm" data-start="' + o.item.minutes + '">▶ Start timer</button></div>';
   };
   document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-add-sit]')) { MC.addSittingTime(); return; }
     var b = e.target.closest('[data-start]'); if (!b) return;
     MC.startPreset(Number(b.dataset.start));
   });
+  // "Set your daily sitting time" (Today, Getting started): open the Add form directly, wherever you are
+  MC.addSittingTime = function () { openSheet(null); };
+  MC.hasSittingTimes = function () { return active().length > 0; };
 
   /* ---------- Calendar view ---------- */
   var viewMonth = null, selected = null;   // the day agenda shows once a day is tapped (Today's plan is on the Today screen)

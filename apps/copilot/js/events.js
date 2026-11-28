@@ -24,7 +24,7 @@
   var FORMAT = { in_person: '📍 In person', online: '💻 Online', hybrid: '📍💻 In person & online' };
   var ACCESS = { public: '🌍 Public', satsang: '🪷 Satsang', initiates: '🔒 Initiates' };
   var CATEGORY = { seeker: 'Seeker', friend: 'Satsangi', initiate: 'Initiate' };
-  var MSG_KEY = 'meditation-copilot:event-messages';      // events I've posted a message on (for the +5 reward)
+  var MSG_KEY = 'meditation-copilot:event-messages';      // events I've left a note on for the center (for the +5 reward; was: public reflections)
   var SETTINGS_KEY = 'meditation-copilot:center-settings';
   function badge(e) { var a = e.access || 'public'; return a === 'public' ? '' : '<span class="badge ' + a + '">' + ACCESS[a] + '</span>'; }
   function flyerUrl(id, thumb) { return base() + '/api/flyers/' + encodeURIComponent(id) + (thumb ? '?size=thumb' : ''); }
@@ -53,7 +53,7 @@
       });
     }, function () { throw err('Can\u2019t reach the events server. Check your connection.', { offline: true }); });
   }
-  function signedInMode() { var m = MC.account && MC.account.mode(); return m === 'google' || m === 'microsoft'; }
+  function signedInMode() { return !!(MC.account && MC.account.signedIn()); }
   function ensureSession() {
     if (valid()) return Promise.resolve(session);
     if (!signedInMode()) return Promise.reject(err('Please sign in with Google or Microsoft first.', { needsSignIn: true }));
@@ -139,19 +139,32 @@
     return api('GET', '/api/me').then(function (j) {
       session.user = j.user; if (j.contact) session.contact = j.contact; MC.store.set(SESSION_KEY, session); markRole();
       MC.store.set(CK_KEY, j.checkins || []);
-      MC.store.set(MSG_KEY, j.messageEvents || []);
+      MC.store.set(MSG_KEY, j.noteEvents || j.messageEvents || []);
       MC.emit('data');                          // re-evaluate rewards
     }).then(syncCategory).catch(function () {});
   }
   // Tell the server only the word 'seeker' or 'initiate' (never the initiation details). Seeker Friend is set by an admin.
+  // v0.23: Initiate is one way. If the center set someone as Initiate, the phone follows; if an admin revoked it, the phone goes
+  // back to Seeker and can't declare it again (MC.profile.initiateRevoked) until an admin sets it.
   function syncCategory() {
     if (!valid() || !MC.profile.userType) return Promise.resolve();
-    var mine = MC.profile.userType === 'initiated' ? 'initiate' : 'seeker';
-    var have = session.user && session.user.category;
+    var u = session.user || {}, have = u.category, local = MC.profile.userType;
+    if (u.initiateRevoked && have !== 'initiate') {
+      if (local === 'initiated' || !MC.profile.initiateRevoked) {
+        MC.profile.userType = 'seeker'; MC.profile.initiateRevoked = true; MC.saveProfile(); MC.emit('profile');
+        if (local === 'initiated') MC.toast('The center has updated your details. Please speak with the center team if this isn’t right.', 6000);
+      }
+      return Promise.resolve();
+    }
+    if (MC.profile.initiateRevoked) { delete MC.profile.initiateRevoked; MC.saveProfile(); }
+    if (have === 'initiate' && local !== 'initiated') { MC.profile.userType = 'initiated'; MC.saveProfile(); MC.emit('profile'); return Promise.resolve(); }
+    var mine = local === 'initiated' ? 'initiate' : 'seeker';
     if (have === mine || (mine === 'seeker' && have === 'friend')) return Promise.resolve();
     return api('PUT', '/api/me/category', { category: mine }).then(function (j) {
       session.user.category = j.category; MC.store.set(SESSION_KEY, session);
-    }).catch(function () {});
+    }).catch(function (x) {
+      if (x && x.status === 403) { session.user.initiateRevoked = true; MC.store.set(SESSION_KEY, session); return syncCategory(); }
+    });
   }
   MC.on('profile', function () { if (valid()) syncCategory(); });
 
@@ -165,17 +178,12 @@
     // Account & settings: event contact details
     accountHTML: function () {
       if (!MC.events.enabled() || !valid()) return '';
-      var cat = session.user && session.user.category;
-      return '<div class="section-title" style="margin-top:20px">SOS events</div>' +
-        (MC.events.isStaff() ? '<a class="btn btn-primary btn-sm btn-block" href="#admin" id="acAdmin" style="margin:0 0 10px">🛡 Open Admin</a>' : '') +
-        (cat ? '<p class="small" style="margin:-6px 0 6px">Events status: <b>' + MC.esc(CATEGORY[cat] || cat) + '</b>' +
-          (cat === 'seeker' ? ' <span class="muted">· the center can mark you a Satsangi once you come to satsang regularly</span>' : '') + '</p>' : '') +
+      return '<div class="section-title" style="margin-top:20px">Contact details</div>' +
         (session.user && session.user.blocked ? '<p class="small" style="margin:0 0 6px;color:var(--danger,#b00)">Your account can\u2019t take part in center events. Contact MinneapolisCenter@sos.org.</p>' : '') +
-        '<p class="small" style="margin:0 0 10px">Contact details: ' + contactSummary() + '</p>' +
+        '<p class="small" style="margin:-6px 0 10px">' + contactSummary() + '</p>' +
         '<button class="btn btn-ghost btn-sm btn-block" id="acContact">✎ Edit contact details</button>';
     },
     bindAccount: function (close) {
-      if ($('acAdmin')) $('acAdmin').addEventListener('click', function () { close(); });
       if (!$('acContact')) return;
       $('acContact').addEventListener('click', function () { close(); askContact().then(function () { MC.toast('Contact details saved.'); }, function () {}); });
     }
@@ -188,7 +196,7 @@
       count: function () { return MC.events.hostedCheckins().filter(function (c) { return !isInPerson(c); }).length; } });
     MC.rewards.addRule({ id: 'hosted_in_person', category: 'community', icon: '📍', name: 'Attended an SOS Event in Person', desc: 'Check in at an SOS-hosted event in person', points: 50, repeat: true,
       count: function () { return MC.events.hostedCheckins().filter(isInPerson).length; } });
-    MC.rewards.addRule({ id: 'event_message', category: 'community', icon: '💬', name: 'Shared a Reflection on an Event', desc: 'Post your first message on an SOS event', points: 5, repeat: true,
+    MC.rewards.addRule({ id: 'event_message', category: 'community', icon: '💬', name: 'Left a Note for the Center', desc: 'After checking in, leave a note about the event (on its sosmn.org page)', points: 5, repeat: true,
       count: function () { return (MC.store.get(MSG_KEY, []) || []).length; } });
   }
 
@@ -246,37 +254,65 @@
     var pre = valid() ? Promise.resolve() : ensureSession();
     pre.then(function () { if (valid() && Date.now() - meAt > 60000) return refreshMe(); }).catch(function () {});
   }
+  // Calendar tab: the center link and the person's ★ favourite events (saved on sosmn.org: an event or a whole series)
+  var favAt = 0, favs = MC.store.get('meditation-copilot:favorites', null);
+  function favHTML() {
+    if (!signedInMode()) return '';
+    var t = Date.now(), up = ((favs && favs.events) || []).filter(function (e) { return e.endsAt > t && e.status !== 'cancelled'; }).slice(0, 5);
+    return '<div class="card home-evs"><div class="section-title">★ Your favourites <a class="link" href="' + MC.esc(siteHref('/calendar/?fav=1')) + '" style="padding:0">All ›</a></div>' +
+      (up.length ? up.map(function (e) { return homeRow(e); }).join('') : '<p class="small muted" style="margin:-4px 0 0">Save events, or a whole series like weekly satsang, with ☆ on their page on sosmn.org. They appear here.</p>') + '</div>';
+  }
   function renderCard() {
     var el = $('calEvents'); if (!el) return;
     el.classList.remove('card');
-    el.innerHTML = centerLinkHTML(false);
+    el.innerHTML = centerLinkHTML(false) + favHTML();
+    if (!signedInMode() || Date.now() - favAt < 5 * 60000) return;
+    favAt = Date.now();
+    withQuietSession(function () { return api('GET', '/api/me/favorites'); }).then(function (j) {
+      if (!j) return;
+      favs = { events: j.events || [], series: j.series || [], at: Date.now() }; MC.store.set('meditation-copilot:favorites', favs);
+      if ($('calEvents')) $('calEvents').innerHTML = centerLinkHTML(false) + favHTML();
+    }).catch(function () { favAt = 0; });
   }
+  function withQuietSession(fn) { return (valid() ? Promise.resolve() : ensureSession()).then(fn); }
   MC.renderEventsCard = function () { renderCard(); syncMe(); };
 
-  /* ---------- Today screen: upcoming events (hero + next two) ---------- */
-  var homeLoadAt = 0;
-  // The next three events that are still on (cancelled ones are skipped). The hero is the one an admin starred, else the soonest.
-  MC.topEvents = function () {
-    var up = (cache.events || []).filter(function (e) { return e.status !== 'cancelled' && e.endsAt > Date.now(); })
-      .sort(function (a, b) { return a.startsAt - b.startsAt; }).slice(0, 3);
-    var hero = up.filter(function (e) { return e.hero; })[0] || up[0] || null;
-    return { hero: hero, rest: up.filter(function (e) { return e !== hero; }), all: up };
+  /* ---------- Today screen (v0.23): 4 upcoming events (★ featured first, then by date) and 2 recent ones, linking to sosmn.org ----------
+   * Same rules as the sosmn.org home page (apps/site/js/types.js homeUpcoming / homeRecent). */
+  var homeAt = 0, homeList = MC.store.get('meditation-copilot:home-events', null) || { events: [] };
+  function byStart(a, b) { return a.startsAt - b.startsAt; }
+  MC.topEvents = function (t) {
+    t = t || Date.now();
+    var ev = homeList.events || [], ok = function (e) { return e.status !== 'cancelled'; };
+    var up = ev.filter(function (e) { return ok(e) && e.endsAt > t; }).sort(byStart);
+    var past = ev.filter(function (e) { return ok(e) && e.endsAt <= t; }).sort(byStart).reverse();
+    var featured = function (l) { return l.filter(function (e) { return e.hero; }).concat(l.filter(function (e) { return !e.hero; })); };
+    return { upcoming: featured(up).slice(0, 4), recent: featured(past).slice(0, 2) };
   };
-  function heroEventHTML(e) {
-    var tag = e.myCheckin ? '<span class="ag-st ok">✓ Checked in</span>' : e.myRsvp === 'going' ? '<span class="ag-st now">You’re going</span>' : e.myRsvp === 'maybe' ? '<span class="ag-st up">Maybe</span>' : '';
-    return '<a class="card hero-ev" href="#event?e=' + encodeURIComponent(e.id) + '">' +
-      (e.flyerId ? '<span class="he-img"><img src="' + MC.esc(flyerUrl(e.flyerId, false)) + '" alt="" loading="lazy"></span>' : '<span class="he-img he-ph" aria-hidden="true">🪷</span>') +
-      '<span class="he-body"><span class="he-kicker">' + (e.hero ? '★ Featured event' : 'Next event') + '</span>' +
-      '<b class="he-title">' + MC.esc(e.title) + '</b>' +
-      '<span class="he-when">' + MC.esc(fmtWhen(e)) + '</span>' +
-      '<span class="he-meta">' + MC.esc(FORMAT[e.format] || '') + (e.venue && e.format !== 'online' ? ' · ' + MC.esc(e.venue) : '') + (e.going ? ' · ' + e.going + ' going' : '') + ' ' + badge(e) + '</span>' +
-      (e.description ? '<span class="he-desc">' + MC.esc(e.description.slice(0, 180)) + (e.description.length > 180 ? '…' : '') + '</span>' : '') +
-      '<span class="he-cta">' + (tag || '<span class="btn btn-primary btn-sm">View &amp; RSVP</span>') + '</span></span></a>';
+  function homeRow(e, past) {
+    var tag = e.myCheckin ? '<span class="ag-st ok">✓ Checked in</span>' : !past && e.myRsvp === 'going' ? '<span class="ag-st now">Going</span>' : '';
+    return '<a class="ev-row' + (past ? ' past' : '') + '" href="' + MC.esc(siteHref('/event/?id=' + encodeURIComponent(e.id))) + '"><span class="ev-date"><b>' + new Date(e.startsAt).getDate() + '</b>' +
+      new Date(e.startsAt).toLocaleDateString(undefined, { month: 'short' }) + '</span>' +
+      (e.flyerId ? '<img class="ev-thumb" src="' + MC.esc(flyerUrl(e.flyerId, true)) + '" alt="" loading="lazy">' : '') +
+      '<span class="ag-main"><b>' + (e.hero ? '★ ' : '') + MC.esc(e.title) + '</b> ' + badge(e) + '<small>' + MC.esc(fmtWhen(e).split(' · ')[1]) + ' · ' + MC.esc(FORMAT[e.format] || '') + '</small></span>' + tag + '</a>';
+  }
+  function homeEventsHTML() {
+    var top = MC.topEvents();
+    return centerLinkHTML(true) + (top.upcoming.length ? '<div class="card home-evs"><div class="section-title">Upcoming events</div>' + top.upcoming.map(function (e) { return homeRow(e); }).join('') + '</div>' : '') +
+      (top.recent.length ? '<div class="card home-evs"><div class="section-title">Recent events</div>' + top.recent.map(function (e) { return homeRow(e, true); }).join('') + '</div>' : '');
   }
   MC.renderHomeEvents = function () {
     var el = $('homeEvents'); if (!el) return;
-    el.innerHTML = MC.events.enabled() ? centerLinkHTML(true) : '';
+    if (!MC.events.enabled()) { el.innerHTML = ''; return; }
+    el.innerHTML = homeEventsHTML();
     syncMe();
+    if (Date.now() - homeAt < 5 * 60000) return;
+    homeAt = Date.now();
+    var t = Date.now();
+    api('GET', '/api/events?from=' + (t - 120 * 86400000) + '&to=' + (t + 180 * 86400000)).then(function (j) {
+      homeList = { events: j.events || [], at: Date.now() }; MC.store.set('meditation-copilot:home-events', homeList);
+      if (MC.current === 'home' && $('homeEvents')) $('homeEvents').innerHTML = homeEventsHTML();
+    }).catch(function () { homeAt = 0; });
   };
 
   /* ---------- Today screen: hero article (chosen by an admin in Admin → Today screen) ---------- */
@@ -366,13 +402,8 @@
     }
     html += '<div class="tool-row two"><button class="btn btn-ghost btn-sm" id="evIcs">📅 Add to calendar</button><button class="btn btn-ghost btn-sm" id="evShare">↗ Share</button></div>';
 
-    // Likes and messages (signed-in members)
-    html += '<div class="card" id="evSocial" style="margin-top:16px"><div class="section-title">Reflections</div>' +
-      (signedInMode() ? '<div class="social-row"><button class="like-btn' + (e.myLike ? ' on' : '') + '" id="evLike" aria-pressed="' + !!e.myLike + '">🙏 ' + (e.likes || 0) + '</button>' +
-          '<span class="small muted">' + (e.messages || 0) + ' message' + ((e.messages || 0) === 1 ? '' : 's') + '</span></div>' +
-        '<form class="msg-form" id="msgForm"><textarea id="msgText" maxlength="280" rows="2" placeholder="Share a brief reflection or a kind word… (+5 points for your first)" aria-label="Message"></textarea>' +
-          '<button class="btn btn-soft btn-sm" type="submit">Post</button></form><div class="msg-count" id="msgCount">0 / 280</div><div id="msgList" class="small muted">Loading…</div>'
-        : '<p class="small muted" style="margin:-6px 0 0">Sign in to see and share reflections on this event.</p>') + '</div>';
+    // v0.23: public reflections are retired; after checking in, people leave a private note for the center on sosmn.org
+    if (e.myCheckin) html += '<p class="small" style="margin-top:12px"><a href="' + MC.esc(siteHref('/event/?id=' + encodeURIComponent(e.id))) + '">Leave a note for the center ›</a></p>';
 
     // Admin tools
     if (MC.events.isAdmin()) html += '<div class="card admin-card" id="evAdmin" style="margin-top:16px"></div>';
@@ -421,7 +452,6 @@
       setTimeout(function () { if (w && !w.closed && w.location.href === 'about:blank' && !valid()) w.close(); }, 15000);
     });
     $('evIcs').addEventListener('click', function () { downloadIcs(e); });
-    if ($('msgForm')) bindSocial(e);
     $('evShare').addEventListener('click', function () {
       var text = '🙏 Join me at "' + e.title + '" · ' + fmtWhen(e) + (e.format === 'online' ? ' (online)' : e.venue ? ' at ' + e.venue : '') + '\n' + linkFor(e);
       MC.track('event_share');
@@ -443,50 +473,6 @@
     a.href = url; a.download = 'sos-event.ics'; document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1000);
     MC.toast('Calendar file downloaded. Open it to add the event.');
-  }
-
-  /* ---------- Likes and messages ---------- */
-  function bindSocial(e) {
-    var list = $('msgList');
-    function row(mg) {
-      return '<div class="msg" data-id="' + MC.esc(mg.id) + '"><div class="msg-head"><span><b>' + MC.esc(mg.name || 'Member') + '</b> · ' + MC.esc(MC.fmtDate(new Date(mg.createdAt), { month: 'short', day: 'numeric' })) + ' ' + MC.esc(MC.fmtTime(mg.createdAt)) + '</span>' +
-        (mg.mine || MC.events.isAdmin() ? '<button class="link small" data-del="' + MC.esc(mg.id) + '" style="padding:0">Delete</button>' : '') + '</div><p class="msg-body">' + MC.esc(mg.body) + '</p></div>';
-    }
-    function load() {
-      if (!valid()) { list.innerHTML = '<p class="small muted">Connect to SOS events to see reflections.</p>'; return; }
-      api('GET', '/api/events/' + encodeURIComponent(e.id) + '/messages').then(function (j) {
-        $('evLike').textContent = '🙏 ' + j.likes; $('evLike').classList.toggle('on', !!j.myLike); $('evLike').setAttribute('aria-pressed', String(!!j.myLike));
-        list.className = ''; list.innerHTML = (j.messages || []).length ? j.messages.map(row).join('') : '<p class="small muted">No reflections yet. Be the first 🙏</p>';
-      }).catch(function (x) { list.innerHTML = '<p class="small muted">' + MC.esc(x.message) + '</p>'; });
-    }
-    $('msgText').addEventListener('input', function () { $('msgCount').textContent = $('msgText').value.length + ' / 280'; });
-    $('evLike').addEventListener('click', function () {
-      var on = $('evLike').classList.contains('on');
-      withSession(function () {
-        return api(on ? 'DELETE' : 'PUT', '/api/events/' + encodeURIComponent(e.id) + '/like').then(function (j) {
-          $('evLike').textContent = '🙏 ' + j.likes; $('evLike').classList.toggle('on', !!j.myLike); $('evLike').setAttribute('aria-pressed', String(!!j.myLike));
-          MC.track('event_like', { on: !on });
-        });
-      }).catch(function () {});
-    });
-    $('msgForm').addEventListener('submit', function (ev) {
-      ev.preventDefault();
-      var text = $('msgText').value.trim(); if (!text) return;
-      withSession(function () {
-        return api('POST', '/api/events/' + encodeURIComponent(e.id) + '/messages', { body: text }).then(function (j) {
-          $('msgText').value = ''; $('msgCount').textContent = '0 / 280';
-          if (j.firstOnEvent) { var m = MC.store.get(MSG_KEY, []) || []; if (m.indexOf(e.id) < 0) { m.push(e.id); MC.store.set(MSG_KEY, m); MC.emit('data'); } MC.toast('Thank you for sharing 🙏 +5 points'); }
-          else MC.toast('Posted.');
-          MC.track('event_message'); load();
-        });
-      }).catch(function () {});
-    });
-    list.addEventListener('click', function (ev) {
-      var b = ev.target.closest('[data-del]'); if (!b) return;
-      if (!window.confirm('Delete this message?')) return;
-      api('DELETE', '/api/events/' + encodeURIComponent(e.id) + '/messages/' + encodeURIComponent(b.dataset.del)).then(function () { refreshMe(); load(); }).catch(function (x) { MC.toast(x.message); });
-    });
-    load();
   }
 
   /* ---------- Featured video on Today (everyone) ---------- */
@@ -523,39 +509,6 @@
     api('GET', '/api/centers/' + CENTER + '/settings?v=' + ((cached && cached.at) || 0)).then(function (j) { MC.store.set(SETTINGS_KEY, { settings: j.settings || {}, at: Date.now() }); paint(j.settings); if (MC.renderHeroArticle) MC.renderHeroArticle(); })
       .catch(function () { settingsAt = 0; });
   };
-  var vidDlg = $('vidDlg');
-  function featuredList() { var st = (MC.store.get(SETTINGS_KEY, null) || {}).settings || {}; return st.featuredVideos || (st.featuredVideo ? [st.featuredVideo] : []); }
-  function renderVidList() {
-    var list = featuredList();
-    $('vidList').innerHTML = list.length ? list.map(function (v, i) {
-      return '<div class="vid-row">' + (v.videoId ? '<img src="https://i.ytimg.com/vi/' + MC.esc(v.videoId) + '/default.jpg" alt="">' : '<span style="width:64px;text-align:center">🪷</span>') +
-        '<span class="ag-main"><b>' + MC.esc(v.title) + '</b><small>' + MC.esc(v.caption || v.url) + '</small></span><button type="button" class="link small" data-vrm="' + i + '">Remove</button></div>';
-    }).join('') : '<p class="small muted">Nothing featured yet.</p>';
-  }
-  function openVideoForm() {
-    $('vidUrl').value = ''; $('vidTitle').value = ''; $('vidCaption').value = ''; $('vidErr').textContent = '';
-    renderVidList();
-    if (vidDlg.showModal) vidDlg.showModal(); else vidDlg.setAttribute('open', '');
-  }
-  function saveFeatured(list, msg) {
-    return api('PUT', '/api/admin/centers/' + CENTER + '/settings', { featuredVideos: list }).then(function (j) {
-      MC.store.set(SETTINGS_KEY, { settings: j.settings || {}, at: Date.now() }); settingsAt = 0;
-      renderVidList(); MC.toast(msg); if (MC.renderFeatured) MC.renderFeatured();
-    }).catch(function (x) { $('vidErr').textContent = x.message; });
-  }
-  $('vidCancel').addEventListener('click', function () { vidDlg.close(); });
-  $('vidList').addEventListener('click', function (ev) {
-    var b = ev.target.closest('[data-vrm]'); if (!b) return;
-    var list = featuredList().slice(); list.splice(Number(b.dataset.vrm), 1); saveFeatured(list, 'Removed.');
-  });
-  $('vidForm').addEventListener('submit', function (ev) {
-    ev.preventDefault();
-    var url = $('vidUrl').value.trim();
-    if (!url) { $('vidErr').textContent = 'Paste a YouTube link or a sos.org page.'; return; }
-    var list = featuredList().slice(); list.push({ url: url, title: $('vidTitle').value.trim() || 'Featured today', caption: $('vidCaption').value.trim() });
-    saveFeatured(list, 'Added.').then(function () { $('vidUrl').value = ''; $('vidTitle').value = ''; $('vidCaption').value = ''; });
-  });
-
   /* ---------- Feedback: suggestions and ratings ---------- */
   var fbDlg = $('fbDlg'), fbKind = 'suggestion', fbStar = 0, FB_KEY = 'meditation-copilot:feedback-ask';
   function openFeedback(kind) {
@@ -593,88 +546,6 @@
   });
   if ($('fbSuggest')) $('fbSuggest').addEventListener('click', function () { openFeedback('suggestion'); });
   MC.openFeedback = openFeedback;
-  // Ask for a rating once, after about a week of real use; "Later" asks again in 30 days
-  function maybeAskRating() {
-    if (!MC.events.enabled() || MC.current !== 'home') return;
-    var st = MC.store.get(FB_KEY, null);
-    if (st && (st.state === 'never' || st.state === 'done')) return;
-    if (st && st.state === 'later' && Date.now() - st.at < 30 * 86400000) return;
-    var days = {}; MC.sessions.all().forEach(function (s) { days[MC.dayKey(s.start)] = 1; });
-    if (Object.keys(days).length < 7) return;
-    if (document.querySelector('dialog[open]')) return;
-    setTimeout(function () { if (!document.querySelector('dialog[open]')) openFeedback('rating'); }, 1500);
-  }
-  MC.on('view', function (n) { if (n === 'home') maybeAskRating(); });
-
-  /* ---------- Feedback (admin) ---------- */
-  function showFeedbackAdmin() {
-    var view = $('v-feedback');
-    if (!MC.events.isAdmin()) { view.innerHTML = '<div class="card">Admins only.</div>'; return; }
-    view.innerHTML = '<a class="link" href="#calendar" style="padding:4px 0;display:inline-block">‹ Calendar</a><div class="card"><div class="section-title">Feedback <span class="small muted">admin</span></div><div id="fbaList" class="small muted">Loading…</div></div>';
-    api('GET', '/api/admin/feedback').then(function (j) {
-      var rows = j.feedback || [];
-      $('fbaList').className = '';
-      $('fbaList').innerHTML = '<p class="small" style="margin:-6px 0 10px">' + (j.ratings ? '<b>' + j.averageRating + ' ★</b> average from ' + j.ratings + ' rating' + (j.ratings === 1 ? '' : 's') + ' · ' : '') + rows.length + ' item' + (rows.length === 1 ? '' : 's') +
-        ' · <button class="link small" id="fbaCsv" style="padding:0">⬇ CSV</button></p>' +
-        (rows.length ? rows.map(function (r) {
-          return '<div class="msg"><div class="msg-head"><span>' + (r.kind === 'rating' ? '<b>' + '★'.repeat(r.rating || 0) + '</b> ' : '💡 ') + MC.esc(r.name || 'Guest') + (r.email ? ' · ' + MC.esc(r.email) : r.contact ? ' · ' + MC.esc(r.contact) : '') + '</span><span>' +
-            MC.esc(MC.fmtDate(new Date(r.createdAt), { month: 'short', day: 'numeric' })) + ' · v' + MC.esc(r.version || '?') + ' · ' + MC.esc(r.platform || '') + '</span></div>' + (r.body ? '<p class="msg-body">' + MC.esc(r.body) + '</p>' : '') + '</div>';
-        }).join('') : '<p class="small muted">Nothing yet.</p>');
-      $('fbaCsv').addEventListener('click', function () {
-        raw('GET', '/api/admin/feedback?format=csv').then(function (r) { if (!r.ok) throw err('Could not download'); return r.blob(); }).then(function (b) {
-          var url = URL.createObjectURL(b), a = document.createElement('a'); a.href = url; a.download = 'feedback.csv'; document.body.appendChild(a); a.click();
-          setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1000);
-        }).catch(function (x) { MC.toast(x.message); });
-      });
-    }).catch(function (x) { $('fbaList').textContent = x.message; });
-  }
-  MC.views.feedback = { show: showFeedbackAdmin };
-
-  /* ---------- People (admin): categories and blocking ---------- */
-  function showPeople() {
-    var view = $('v-people');
-    if (!MC.events.isAdmin()) { view.innerHTML = '<div class="card">Admins only.</div>'; return; }
-    view.innerHTML = '<a class="link" href="#calendar" style="padding:4px 0;display:inline-block">‹ Calendar</a>' +
-      '<div class="card"><div class="section-title">People <span class="small muted">admin</span></div>' +
-      '<p class="small" style="margin:-6px 0 10px">Seeker and Initiate are what people chose on their phone. Mark a seeker a <b>Satsangi</b> after a few visits so they can attend Satsang events.</p>' +
-      '<input type="search" id="ppFind" class="text-input" placeholder="Search by name or email" autocomplete="off"><div id="ppList" style="margin-top:8px"></div></div>';
-    var t, list = $('ppList');
-    function row(u) {
-      var blocked = !!u.blockedAt;
-      return '<div class="pp-row' + (blocked ? ' blocked' : '') + '" data-uid="' + MC.esc(u.userId) + '"><span class="ag-main"><b>' + MC.esc(u.name || '') + '</b><small>' + MC.esc(u.email || '') +
-        (u.phone ? ' · ' + MC.esc(fmtPhone(u.phone)) : '') + ' · ' + (u.visits || 0) + ' visit' + (u.visits === 1 ? '' : 's') +
-        (u.lastVisitAt ? ', last ' + MC.esc(MC.fmtDate(new Date(u.lastVisitAt), { month: 'short', day: 'numeric' })) : '') +
-        (blocked ? ' · <b>Blocked</b>' + (u.blockReason ? ' (' + MC.esc(u.blockReason) + ')' : '') : '') + '</small></span>' +
-        '<select data-cat aria-label="Category">' + ['seeker', 'friend', 'initiate'].map(function (c) { return '<option value="' + c + '"' + (u.category === c ? ' selected' : '') + '>' + CATEGORY[c] + '</option>'; }).join('') + '</select>' +
-        '<button class="btn btn-ghost btn-sm" data-block="' + (blocked ? '0' : '1') + '">' + (blocked ? 'Unblock' : 'Block') + '</button></div>';
-    }
-    function search() {
-      var q = $('ppFind').value.trim();
-      if (q.length < 2) { list.innerHTML = '<p class="small muted">Type at least two letters.</p>'; return; }
-      api('GET', '/api/admin/users?q=' + encodeURIComponent(q)).then(function (j) {
-        list.innerHTML = (j.users || []).length ? j.users.map(row).join('') : '<p class="small muted">No one found. They need to sign in to the app first.</p>';
-      }).catch(function (x) { list.innerHTML = '<p class="small muted">' + MC.esc(x.message) + '</p>'; });
-    }
-    $('ppFind').addEventListener('input', function () { clearTimeout(t); t = setTimeout(search, 300); });
-    list.addEventListener('change', function (ev) {
-      var sel = ev.target.closest('[data-cat]'); if (!sel) return;
-      var uid = sel.closest('.pp-row').dataset.uid;
-      api('PATCH', '/api/admin/users?user=' + encodeURIComponent(uid), { category: sel.value }).then(function (j) { MC.toast(MC.esc(j.user.name) + ' is now ' + CATEGORY[j.user.category] + '.'); })
-        .catch(function (x) { MC.toast(x.message); search(); });
-    });
-    list.addEventListener('click', function (ev) {
-      var b = ev.target.closest('[data-block]'); if (!b) return;
-      var uid = b.closest('.pp-row').dataset.uid, block = b.dataset.block === '1', reason = '';
-      if (block) { reason = window.prompt('Block this person from center events? Add a short note for admins (optional):'); if (reason === null) return; }
-      else if (!window.confirm('Unblock this person?')) return;
-      api('PATCH', '/api/admin/users?user=' + encodeURIComponent(uid), { blocked: block, reason: reason }).then(function () { MC.toast(block ? 'Blocked.' : 'Unblocked.'); search(); })
-        .catch(function (x) { MC.toast(x.message); });
-    });
-    list.innerHTML = '<p class="small muted">Type at least two letters.</p>';
-    setTimeout(function () { $('ppFind').focus(); }, 50);
-  }
-  MC.views.people = { show: showPeople };
-
   /* ---------- Flyer images: resized on the phone, uploaded as JPEG ---------- */
   function readImage(file) {
     return new Promise(function (resolve, reject) {
@@ -709,11 +580,10 @@
     var door = e.format !== 'online' ? '<div class="door"><div class="small muted">Check-in code</div><div class="door-code">' + MC.esc(e.checkinCode || '----') + '</div>' +
       '<div class="door-qr">' + qrSvg(linkFor(e) + '&c=' + (e.checkinCode || '')) + '</div><div class="small muted">Show this at the door: people scan the QR code or type the code.</div>' +
       '<button class="link" id="adNewCode">Generate a new code</button></div>' : '';
-    var top = MC.topEvents ? MC.topEvents().all : [], inTop = top.some(function (x) { return x.id === e.id; });
     var adminOnly = MC.events.isAdmin();
     var heroBox = adminOnly ? '<div class="hero-toggle">' + (e.hero
-        ? '<span>★ Featured on Today' + (inTop ? '' : ' <small class="muted">(shows once it is among the next 3 events)</small>') + '</span><button class="btn btn-ghost btn-sm" id="adHero" data-on="1">Remove</button>'
-        : '<span class="small">Feature this event large on Today' + (inTop ? '' : ' <small class="muted">(appears once it is among the next 3)</small>') + '</span><button class="btn btn-soft btn-sm" id="adHero">★ Feature</button>') + '</div>' : '';
+        ? '<span>★ Featured (shown first on sosmn.org and Today)</span><button class="btn btn-ghost btn-sm" id="adHero" data-on="1">Remove</button>'
+        : '<span class="small">Feature this event: shown first on sosmn.org and Today</span><button class="btn btn-soft btn-sm" id="adHero">★ Feature</button>') + '</div>' : '';
     var remind = adminOnly ? '<div class="tool-row two" style="margin:8px 0 0"><button class="btn btn-soft btn-sm" id="adEmail">✉️ Email RSVPs</button><button class="btn btn-ghost btn-sm" id="adWa">💬 WhatsApp (demo)</button></div>' : '';
     el.innerHTML = '<div class="section-title">Host tools <span class="small muted">' + (adminOnly ? 'admin' : 'host') + '</span></div>' + heroBox + door +
       '<div class="section-title" style="margin-top:16px">Attendees <button class="link" id="adRefresh" style="padding:0">Refresh</button></div>' +
@@ -1034,37 +904,6 @@
     if (!signedInMode()) return;
     if (MC.current === 'checkin') showCheckin(); else location.hash = 'checkin';
   }
-  function printPoster() {
-    var url = siteHref('/checkin/').replace(/^\//, location.origin + '/'), w = window.open('', '_blank');
-    if (!w) { MC.toast('Please allow pop-ups to print the poster.'); return; }
-    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Check in · Minneapolis Center</title><style>' +
-      'body{font-family:Georgia,serif;text-align:center;color:#3b2466;margin:0;padding:40px 24px}h1{font-size:44px;margin:10px 0 6px}' +
-      'p{font-family:system-ui,sans-serif;font-size:20px;margin:8px 0;color:#333}.qr{width:380px;height:380px;margin:24px auto}.qr svg{width:100%;height:100%}' +
-      '.small{font-size:14px;color:#777}@media print{button{display:none}}</style></head><body>' +
-      '<div style="font-size:48px">🙏</div><h1>Welcome! Please check in</h1><p>Scan with your phone camera</p>' +
-      '<div class="qr">' + qrSvg(url) + '</div>' +
-      '<p><b>1.</b> Scan the code &nbsp; <b>2.</b> Sign in with Google or Microsoft (first time only) &nbsp; <b>3.</b> You\u2019re checked in</p>' +
-      '<p class="small">Science of Spirituality · Minneapolis Center · Meditation Copilot (prototype)<br>' + MC.esc(url) + '</p>' +
-      '<button onclick="window.print()" style="margin-top:20px;font-size:18px;padding:10px 24px">Print</button></body></html>');
-    w.document.close();
-    MC.track('event_poster');
-  }
-
-  /* ---------- App admin (v0.16): events, people, invitations and challenges moved to the center admin site ---------- */
-  function showAppAdmin() {
-    var view = $('v-admin');
-    if (!MC.events.isStaff()) { view.innerHTML = '<div class="card"><p>Admins only.</p><a class="link" href="#home">‹ Home</a></div>'; return; }
-    view.innerHTML = '<div class="card"><h1 style="margin-top:0">App admin</h1>' +
-      '<p class="small">Events, RSVPs, check-ins, people, invitations and Copilot challenges are managed on the center admin site (the address you were given).</p></div>' +
-      '<div class="card"><div class="section-title">In the app</div><div class="tool-row two">' +
-      (MC.events.isAdmin() ? '<button class="btn btn-soft btn-sm" id="aaVideo">▶ Featured videos</button>' : '') +
-      '<a class="btn btn-soft btn-sm" href="#feedback">💬 Feedback</a>' +
-      '<button class="btn btn-ghost btn-sm" id="aaPoster">🖨 Check-in QR poster</button></div></div>';
-    if ($('aaVideo')) $('aaVideo').addEventListener('click', openVideoForm);
-    $('aaPoster').addEventListener('click', printPoster);
-  }
-  MC.views.admin = { show: showAppAdmin };
-
   /* ---------- Wiring ---------- */
   MC.views.checkin = { show: showCheckin };
   MC.on('sync', function () { if (signedInMode()) resumePending(); });

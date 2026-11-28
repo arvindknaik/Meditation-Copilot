@@ -230,3 +230,19 @@ img.type-ico.flyer-thumb { object-fit: cover; border-radius: 12px; box-shadow: 0
 @media (prefers-color-scheme: dark) { .free-banner { background: #12352a; color: #b6e6c8; } }
 .ev-kids { margin: 12px 0 6px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); font-size: .92rem; }
 .privacy-note { margin: 14px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--navy-soft); color: var(--text); line-height: 1.45; }
+
+/* v0.23: recent events, favourites, visitor note */
+.recent-grid { display: grid; gap: 14px; }
+.recent-grid .card { margin: 0; }
+html.mc-desktop .recent-grid { grid-template-columns: 1fr 1fr; }
+.ev-card.ev-past { opacity: .85; }
+.fav-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.fav-row .btn.on { border-color: var(--gold, #b7791f); color: var(--gold-ink, #8a5a00); }
+.fav-mark { color: var(--gold, #b7791f); }
+.cal-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+#noteCard textarea { width: 100%; }
+
+/* v0.24: calendar Upcoming / Recent lists grouped by day */
+.cal-dayh { grid-column: 1 / -1; font-size: .95rem; margin: 14px 0 8px; color: var(--muted, #5b6670); font-family: var(--sans, inherit); font-weight: 700; }
+.cal-dayh:first-child { margin-top: 0; }
+.cal-more { margin: 6px 0 24px; }

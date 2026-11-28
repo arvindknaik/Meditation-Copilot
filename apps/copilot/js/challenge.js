@@ -24,7 +24,7 @@
   }
   function runs() { return Array.isArray(MC.profile.challenges) ? MC.profile.challenges : []; }
   function activeRun() { var r = runs(); var last = r[r.length - 1]; return last && !last.endedOn ? last : null; }
-  MC.isSeeker = function () { return MC.profile.userType === 'seeker'; };
+  MC.isSeeker = function () { return MC.profile.userType !== 'initiated'; };   // v0.24: everyone is a seeker until they say they're initiated
   MC.isInitiated = function () { return MC.profile.userType === 'initiated'; };
 
   /* ---------- v0.18: 21-day meditation path (SOSMN-SRM.md section 10) ----------
@@ -258,8 +258,11 @@
     var list = ((MC.store.get(CC_KEY, null) || {}).list || []).filter(function (x) { return x.kind === 'daily_sitting' || x.kind === 'checkins'; });
     if (!list.length) list = defaults();
     var seeker = MC.isSeeker(), init = MC.isInitiated();
-    return list.filter(function (x) { return x.active !== false && (x.audience === 'all' || (x.audience === 'seeker' && seeker) || (x.audience === 'initiate' && init)); });
+    return initFirst(list.filter(function (x) { return x.active !== false && (x.audience === 'all' || (x.audience === 'seeker' && seeker) || (x.audience === 'initiate' && init)); }));
   }
+  // v0.24: initiates-only challenges are listed first (stable order otherwise)
+  function initFirst(l) { return l.filter(function (x) { return x.audience === 'initiate'; }).concat(l.filter(function (x) { return x.audience !== 'initiate'; })); }
+  MC.challengeInitFirst = initFirst;
   function loadCatalog() {
     if (!(MC.events && MC.events.enabled && MC.events.enabled())) return Promise.resolve(catalog());
     return MC.events.api('GET', '/api/challenges').then(function (j) { MC.store.set(CC_KEY, { list: j.challenges || [], at: Date.now() }); return catalog(); })
@@ -279,7 +282,7 @@
     var ch = !opts.base && x.kind === 'daily_sitting' ? choicesOf(x) : null, def = ch ? (ch.indexOf(x.minutes) >= 0 ? x.minutes : ch[Math.floor(ch.length / 2)]) : 0;
     var needSign = x.kind === 'checkins' && !signedIn();
     return '<div class="cp-opt" data-opt="' + MC.esc(x.id) + '"' + (opts.base ? ' data-base="' + opts.base + '"' : '') + '>' +
-      '<div class="cp-opt-head"><b>' + (x.kind === 'checkins' ? '🗓 ' : x.rampTo ? '🌿 ' : '🌱 ') + MC.esc(opts.title || x.title) + '</b>' + (opts.tag ? '<span class="badge">' + MC.esc(opts.tag) + '</span>' : '') + '</div>' +
+      '<div class="cp-opt-head"><b>' + (x.kind === 'checkins' ? '🗓 ' : x.rampTo ? '🌿 ' : '🌱 ') + MC.esc(opts.title || x.title) + '</b>' + (x.audience === 'initiate' ? '<span class="badge">Initiates</span>' : '') + (opts.tag ? '<span class="badge">' + MC.esc(opts.tag) + '</span>' : '') + '</div>' +
       '<p class="small" style="margin:4px 0 6px">' + MC.esc(opts.desc || x.description || '') + '</p>' +
       '<p class="small muted" style="margin:0 0 10px">' + MC.esc(metaOf(x, opts.base)) + '</p>' +
       (ch ? '<div class="chips cp-min" role="radiogroup" aria-label="Minutes a day">' + ch.map(function (m) { return '<button type="button" class="chip' + (m === def ? ' on' : '') + '" data-min="' + m + '">' + m + ' min</button>'; }).join('') + '</div>' : '') +
@@ -348,7 +351,9 @@
     }
     return out;
   }
-  function render() {
+  // Roadmap → challenges screen; js/roadmap.js adds the 10,000-hour journey (initiates) or "I've been initiated" (seekers) on top
+  function render() { renderInner(); if (MC.afterChallengeRender) MC.afterChallengeRender($('s-challenge')); }
+  function renderInner() {
     var el = $('s-challenge'), c = MC.challenge.current();
     if (c && !c.plan && !c.ended && !c.done) return renderClassic();   // a 42-day challenge already under way
     var html = '';
@@ -380,20 +385,20 @@
       opts = nextOptions(c);
     } else {
       if (c && c.failed) intro = '<div class="card"><p style="margin:0">Your last challenge ended after ' + c.misses + ' missed days. That’s alright: every sitting still counts. Start again whenever you’re ready. 🌱</p></div>';
-      else intro = '<div class="card hero"><div class="lotus" aria-hidden="true">🌱</div><h1>Build your daily practice</h1><p class="tagline">Small moments. Daily practice. Inner transformation.</p>' +
-        '<p class="small muted" style="margin:10px 0 0">New to meditation? <a href="#learn?a=learn-to-meditate">Learn how to meditate</a> first.</p></div>';
-      opts = catalog().filter(function (x) { return x.kind === 'daily_sitting' && !x.nextOf; }).map(function (x, i) { return { x: x, o: { primary: i === 0, tag: i === 0 ? 'Recommended' : '' } }; });
+      else intro = '<div class="card ch-intro"><div class="lotus" aria-hidden="true">🌱</div><div><b>Build your daily practice</b><p class="small muted" style="margin:2px 0 0">Pick a challenge below. New to meditation? <a href="#learn?a=learn-to-meditate">Learn how to meditate</a> first.</p></div></div>';
+      opts = [];   // v0.24: meditation challenges are in the one list below (js/goals.js), with the same sign-up sheet as all others
     }
     var list = opts.map(function (o) { return o.x; });
-    el.innerHTML = intro + (opts.length ? '<div class="card"><div class="section-title">' + (c && c.done ? 'Choose your next challenge' : 'Choose a challenge') + '</div>' + opts.map(function (o) { return optionHTML(o.x, o.o); }).join('') + HOW_HTML + '</div>' : '<div class="card">' + HOW_HTML + '</div>');
+    el.innerHTML = intro + (opts.length ? '<div class="card"><div class="section-title">Choose your next challenge</div>' + opts.map(function (o) { return optionHTML(o.x, o.o); }).join('') + HOW_HTML + '</div>' : '');
     bindOptions(el, list, function () { render(); });
   }
 
   /* ---------- "Choose your first challenge" (Copilot sign-up step) ---------- */
   var firstDlg = null;
   function firstOpen() { return firstDlg && firstDlg.open; }
+  // v0.24: no longer opened automatically (people start from Today's "Getting started"); kept for "Start with a challenge"
   MC.maybeAskFirstChallenge = function () {
-    if (MC.account.mode() === 'none' || !MC.profile.userType || firstOpen()) return;
+    if (!MC.account.signedIn() || firstOpen()) return;
     if (!$('welcome').hidden || ($('typeDlg') && $('typeDlg').open)) return;
     if (MC.store.get(FIRST_KEY, null) || runs().length || (MC.goals && MC.goals.all && MC.goals.all().length)) return;
     var mustChoose = MC.sessions.count() === 0;
@@ -412,7 +417,6 @@
       if (firstDlg.showModal) firstDlg.showModal(); else firstDlg.setAttribute('open', '');
     });
   };
-  MC.on('profile', function () { setTimeout(MC.maybeAskFirstChallenge, 400); });
 
   // Start one specific meditation challenge from a list (Roadmap → challenges card)
   MC.challenge.openOne = function (x) {
@@ -425,7 +429,7 @@
     $('fdLater').addEventListener('click', function () { firstDlg.close(); });
     if (firstDlg.showModal) firstDlg.showModal(); else firstDlg.setAttribute('open', '');
   };
-  MC.challenge.defaults = defaults; MC.challenge.catalog = catalog; MC.challenge.loadCatalog = loadCatalog; MC.challenge.optionHTML = optionHTML; MC.challenge.bindOptions = bindOptions;
+  MC.challenge.defaults = defaults; MC.challenge.catalog = catalog; MC.challenge.HOW_HTML = HOW_HTML; MC.challenge.loadCatalog = loadCatalog; MC.challenge.optionHTML = optionHTML; MC.challenge.bindOptions = bindOptions;
   MC.challengeUI = { render: render };
-  MC.on('data', function () { if (MC.current === 'roadmap' && MC.isSeeker()) render(); });
+  MC.on('data', function () { if (MC.current === 'roadmap' && $('s-challenge').classList.contains('active')) render(); });
 })();

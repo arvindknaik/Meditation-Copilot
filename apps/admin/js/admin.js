@@ -23,14 +23,15 @@
   function flyerThumb(e) { return e.flyerId ? S.CFG.apiBase + '/api/flyers/' + encodeURIComponent(e.flyerId) + '?size=thumb' : null; }
   function stTag(st) { return st ? '<span class="tag st st-' + esc(st) + '" title="' + esc(STATUS[st][1]) + '">' + esc(STATUS[st][0]) + '</span>' : ''; }
   var TABS = [['events', 'Events', 'host'], ['followups', 'Follow-ups', 'admin'], ['journey', 'Journey', 'admin'], ['people', 'People', 'admin'], ['invite', 'Invite', 'admin'], ['challenges', 'Challenges', 'admin'], ['library', 'Library', 'admin'],
-    ['overview', 'Overview', 'admin'], ['team', 'Team', 'admin'], ['log', 'Activity', 'admin']];
+    ['visitors', 'Visitor log', 'admin'], ['suggestions', 'Suggestions', 'admin'], ['settings', 'Settings', 'admin'], ['overview', 'Overview', 'admin'], ['team', 'Team', 'admin'], ['log', 'Activity', 'admin']];
   var ACTIONS = {
     sign_in: 'Signed in', checkin: 'Checked someone in', checkin_undo: 'Undid a check-in', event_create: 'Created an event', event_edit: 'Edited an event',
     event_cancel: 'Cancelled an event', event_restore: 'Restored an event', event_new_code: 'New check-in code', event_delete: 'Removed an event', hero_set: 'Featured an event', hero_clear: 'Unfeatured an event',
     rsvp_manual: 'Added a person to an event', person_view: 'Viewed a person', person_edit: 'Changed a person', settings: 'Changed settings', team_add: 'Added to team', team_remove: 'Removed from team',
     export_csv: 'Downloaded attendee CSV', contact_list: 'Opened a contact list', email_rsvps: 'Opened reminder email', copy_emails: 'Copied email addresses', whatsapp_demo: 'Opened WhatsApp reminder',
     invite_email: 'Opened invitation email', invite_copy: 'Copied invitation', journey_edit: 'Changed a journey', note_add: 'Added a note', note_delete: 'Removed a note',
-    followup_done: 'Did a follow-up', followup_skipped: 'Skipped a follow-up', challenge_create: 'Created a challenge', challenge_edit: 'Changed a challenge', challenge_delete: 'Removed a challenge'
+    followup_done: 'Did a follow-up', followup_skipped: 'Skipped a follow-up', challenge_create: 'Created a challenge', challenge_edit: 'Changed a challenge', challenge_delete: 'Removed a challenge',
+    note_review: 'Reviewed a visitor note', suggestion_review: 'Reviewed a suggestion', library_create: 'Added to the library', library_edit: 'Changed the library', library_delete: 'Removed from the library'
   };
   var me = null, role = null;
 
@@ -100,7 +101,7 @@
     window.scrollTo(0, 0);
     ({ events: drawEvents, event: function () { drawEvent(decodeURIComponent(p[1] || ''), p[2]); }, people: drawPeople, person: function () { drawPerson(decodeURIComponent(p[1] || '')); },
       followups: drawFollowups, journey: function () { drawJourney(p[1] || ''); },
-      invite: drawInvite, challenges: drawChallenges, library: drawLibrary, overview: drawOverview, team: drawTeam, log: drawLog }[p[0]] || drawEvents)();
+      invite: drawInvite, challenges: drawChallenges, library: drawLibrary, visitors: drawVisitors, suggestions: drawSuggestions, settings: drawSettings, overview: drawOverview, team: drawTeam, log: drawLog }[p[0]] || drawEvents)();
   }
   window.addEventListener('hashchange', route);
 
@@ -115,18 +116,19 @@
       var list = j.events || [];
       if (evRange === 'past') list = list.filter(function (e) { return e.startsAt < t; }).reverse();
       evCache = list;
-      var top = list.filter(function (e) { return evRange === 'upcoming' && e.status !== 'cancelled' && e.endsAt > t; }).slice(0, 3);
-      var heroId = ((top.filter(function (e) { return e.hero; })[0]) || top[0] || {}).id;
+      var top = evRange === 'upcoming' ? T.homeUpcoming(list, 4, t) : [];
+      var heroId = top.length ? top[0].id : null;
       app.innerHTML = '<div class="sec-head page-head"><h1>Events</h1>' + (isAdmin() ? '<button class="btn btn-primary" id="newEv" type="button">+ New event</button>' : '') + '</div>' +
         '<div class="seg" role="group" aria-label="Show"><button type="button" data-r="upcoming" class="' + (evRange === 'upcoming' ? 'on' : '') + '">Upcoming</button><button type="button" data-r="past" class="' + (evRange === 'past' ? 'on' : '') + '">Past 90 days</button></div>' +
-        (evRange === 'upcoming' && isAdmin() ? '<p class="small muted">The next three events appear on the sosmn.org home page. ★ chooses which one is shown large; otherwise the soonest is.</p>' : '') +
+        (isAdmin() ? '<p class="small muted">' + (evRange === 'upcoming' ? 'Four upcoming events appear on the sosmn.org home page and on Copilot’s Today screen: ★ featured events first, then the rest by date. The soonest featured event is shown large.'
+          : 'Featured past events stay at the top of “Recent events” on the home page until you remove the ★.') + '</p>' : '') +
         '<div class="adm-list">' + (list.length ? list.map(function (e) {
           var cx = e.status === 'cancelled', onHome = top.indexOf(e) >= 0;
           return '<a class="card adm-ev' + (cx ? ' cx' : '') + '" href="#event/' + encodeURIComponent(e.id) + '">' +
             T.thumb(e, flyerThumb(e), 48) +
             '<span class="ev-body"><b class="ev-title">' + esc(e.title) + '</b><span class="small">' + esc(KIND[e.kind] || '') + ' · ' + esc(whenText(e)) + ' · ' + esc(FORMAT[e.format]) + (e.access !== 'public' ? ' · ' + esc(ACCESS[e.access]) : '') + (e.children ? ' · 👧 children’s program' : '') + '</span>' +
             '<span class="ev-foot"><span class="small"><b>' + n(e.headcount) + '</b> going' + (e.guests ? ' (incl. ' + e.guests + ' guests)' : '') + ' · <b>' + n(e.checkedIn + (e.checkedInGuests || 0)) + '</b> checked in · ' + n(e.views) + ' views</span>' +
-            (cx ? '<span class="tag cx">Cancelled</span>' : '') + (onHome ? '<span class="tag' + (e.id === heroId ? ' gold' : '') + '">' + (e.id === heroId ? '★ Home page hero' : 'On home page') + '</span>' : '') +
+            (cx ? '<span class="tag cx">Cancelled</span>' : '') + (e.hero ? '<span class="tag gold">★ Featured</span>' : '') + (onHome ? '<span class="tag">' + (e.id === heroId ? 'Shown large on home page' : 'On home page') + '</span>' : '') +
             (e.repeats ? '<span class="tag">Repeats ' + esc(e.repeats) + '</span>' : '') + '</span></span></a>';
         }).join('') : '<div class="card empty"><p>No events.</p></div>') + '</div>';
       app.querySelectorAll('[data-r]').forEach(function (b) { b.onclick = function () { evRange = b.dataset.r; drawEvents(); }; });
@@ -158,7 +160,7 @@
         '<span><b>' + n(inRows.length + sum(inRows, 'checkedInGuests')) + '</b>checked in<small>' + people(inRows.length, sum(inRows, 'checkedInGuests')) + '</small></span><span><b>' + n(e.views) + '</b>page views</span></div></div>' +
         '<div class="adm-actions">' +
           (admin ? '<button class="btn btn-ghost btn-sm" id="aEdit" type="button">✎ Edit</button>' : '') +
-          (admin && !cx ? '<button class="btn btn-ghost btn-sm" id="aHero" type="button">' + (e.hero ? '★ Featured' : '☆ Feature on home') + '</button>' : '') +
+          (admin && !cx ? '<button class="btn btn-ghost btn-sm" id="aHero" type="button">' + (e.hero ? '★ Featured' : '☆ Feature') + '</button>' : '') +
           '<a class="btn btn-ghost btn-sm" href="' + esc(eventLink(e)) + '" target="_blank" rel="noopener">View on sosmn.org ↗</a>' +
           '<button class="btn btn-ghost btn-sm" id="aDoor" type="button">🔢 Door code &amp; QR</button>' +
           (admin ? '<button class="btn btn-ghost btn-sm" id="aCsv" type="button">⬇ CSV</button>' : '') +
@@ -172,7 +174,7 @@
     app.querySelectorAll('[data-sub]').forEach(function (b) { b.onclick = function () { sub = b.dataset.sub; history.replaceState(null, '', '#event/' + encodeURIComponent(e.id) + '/' + sub); paintEvent(); }; });
     if ($('aEdit')) $('aEdit').onclick = function () { eventForm(e); };
     if ($('aHero')) $('aHero').onclick = function () {
-      S.api(e.hero ? 'DELETE' : 'POST', '/api/admin/events/' + encodeURIComponent(e.id) + '/hero').then(function () { toast(e.hero ? 'Not featured.' : '★ Featured on the home page (when it’s one of the next three).'); drawEvent(e.id); }).catch(function (x) { toast(x.message); });
+      S.api(e.hero ? 'DELETE' : 'POST', '/api/admin/events/' + encodeURIComponent(e.id) + '/hero').then(function () { toast(e.hero ? 'No longer featured.' : '★ Featured: shown first on the home page and Today, and under Recent events after it’s over, until you remove it.', 5000); drawEvent(e.id); }).catch(function (x) { toast(x.message); });
     };
     $('aDoor').onclick = doorSheet;
     if ($('aCsv')) $('aCsv').onclick = downloadCsv;
@@ -689,6 +691,9 @@
           '<h3>Milestones <small class="muted">(ticked by an admin)</small></h3>' + Object.keys(MILESTONE).map(function (k) { return '<label class="chk block"><input type="checkbox" data-ms="' + k + '"' + (J.milestones.indexOf(k) >= 0 ? ' checked' : '') + '> ' + esc(MILESTONE[k]) + '</label>'; }).join('') +
           '<div class="grid2" style="margin-top:12px"><div><label class="field" for="pLv">Stage</label><select class="input" id="pLv">' + lvOpts + '</select></div>' +
           '<div><label class="field">Mentor</label><div id="pMentor">' + (J.mentorId ? '<a href="#person/' + encodeURIComponent(J.mentorId) + '">' + esc(J.mentorName || 'Mentor') + '</a> <button class="btn btn-ghost btn-sm" id="mClear" type="button">Change</button>' : '<button class="btn btn-soft btn-sm" id="mPick" type="button">Assign a mentor</button>') + '</div></div></div>' +
+          (J.level === 'initiate' ? '<p class="small" style="margin:10px 0 0">' + (J.initiateConfirmed ? '✓ Initiate status <b>confirmed</b> ' + esc(day(J.initiateConfirmedAt)) + ' · <a href="#" id="pIniUn">undo</a>' :
+            'Initiate status is <b>self-declared</b> in Copilot (trusted). <button class="btn btn-soft btn-sm" id="pIniOk" type="button">✓ Confirm</button>') +
+            ' · <a href="#" id="pIniRev" class="danger">Revoke</a></p>' : J.initiateRevoked ? '<p class="small notice warn" style="margin-top:10px">Initiate status was <b>revoked</b>. They can’t declare it again in Copilot; set the stage to Initiate if that was a mistake.</p>' : '') +
           '<div class="flags"><label class="chk block"><input type="checkbox" id="pSev"' + (J.sevadar ? ' checked' : '') + '> <b>Sevadar</b>: contributes to running the center</label>' +
           '<label class="chk block"><input type="checkbox" id="pPas"' + (J.status === 'passive' ? ' checked' : '') + (J.declined ? ' disabled' : '') + '> <b>Passive</b>: away for a known reason, staying gently in touch (left out of “Drifted” follow-ups)</label>' +
           '<label class="chk block"><input type="checkbox" id="pDec"' + (J.declined ? ' checked' : '') + '> <b>Declined</b>: no messages at all (they can also choose this in their details)</label></div></div>' +
@@ -703,9 +708,14 @@
         }).join('') + '</ul>' : '<p class="muted">Nothing yet.</p>') + '</div></div></div>';
       var patch = function (body, msg) { return S.api('PATCH', '/api/admin/users/' + encodeURIComponent(uid) + '/journey', body).then(function () { toast(msg); drawPerson(uid); }).catch(function (x) { toast(x.message); }); };
       $('pLv').onchange = function () {
-        var v = this.value, msg = v === 'satsangi' ? 'Flag ' + first(p.name) + ' as Satsangi? They will see Community events.' : v === 'initiate' ? 'Mark ' + first(p.name) + ' as Initiate? This is permanent.' : '';
+        var v = this.value, msg = v === 'satsangi' ? 'Flag ' + first(p.name) + ' as Satsangi? They will see Community events.' : v === 'initiate' ? 'Mark ' + first(p.name) + ' as Initiate? This confirms their initiation.' : J.level === 'initiate' ? 'This revokes ' + first(p.name) + '’s Initiate status (they can’t declare it again in Copilot). Continue?' : '';
         if (msg && !window.confirm(msg)) { this.value = J.level; return; }
         patch({ stage: v === auto ? null : v }, 'Stage updated.'); };
+      if ($('pIniOk')) $('pIniOk').onclick = function () { patch({ confirmInitiate: true }, 'Initiate status confirmed.'); };
+      if ($('pIniUn')) $('pIniUn').onclick = function (ev) { ev.preventDefault(); patch({ confirmInitiate: false }, 'Confirmation removed.'); };
+      if ($('pIniRev')) $('pIniRev').onclick = function (ev) { ev.preventDefault();
+        if (!window.confirm('Revoke ' + first(p.name) + '’s Initiate status? They become a Seeker again (Initiates-only events and the 10,000-hour journey are hidden), and they can’t declare it again in Copilot.')) return;
+        patch({ stage: 'seeker' }, 'Initiate status revoked.'); };
       $('pSev').onchange = function () { patch({ sevadar: this.checked }, this.checked ? 'Marked as Sevadar.' : 'Sevadar removed.'); };
       $('pPas').onchange = function () {
         if (!this.checked) { patch({ passive: false }, 'No longer Passive.'); return; }
@@ -769,7 +779,7 @@
         '<p class="small muted">Shown in Meditation Copilot. The first active challenge for a person’s path is recommended; use ↑ ↓ to set the order. “At sign-up” challenges are offered when someone starts using Copilot (they must choose at least one).</p>' +
         '<div class="card">' + (list.length ? list.map(function (c, i) {
           return '<div class="ad-row ch-row' + (c.active ? '' : ' off') + '"><span class="ag-main"><b>' + esc(c.title) + '</b>' + (c.active ? '' : ' <span class="tag">Paused</span>') +
-            ' <span class="tag">' + esc({ all: 'Everyone', seeker: 'New seekers', initiate: 'Initiates' }[c.audience]) + '</span>' + (c.signup ? ' <span class="tag lv lv-new">At sign-up</span>' : '') +
+            ' <span class="tag">' + esc({ all: 'Everyone', seeker: 'Not yet initiated', initiate: 'Initiates only' }[c.audience]) + '</span>' + (c.signup ? ' <span class="tag lv lv-new">At sign-up</span>' : '') +
             '<small>' + esc(chSummary(c)) + ' · ' + c.points + ' bonus points' + (c.nextOf ? ' · next step after ' + esc((list.filter(function (x) { return x.id === c.nextOf; })[0] || {}).title || 'another challenge') : '') + '</small></span>' +
             '<span class="ck-act"><button class="btn btn-ghost btn-sm" data-up="' + i + '" type="button" aria-label="Move up"' + (i ? '' : ' disabled') + '>↑</button><button class="btn btn-ghost btn-sm" data-down="' + i + '" type="button" aria-label="Move down"' + (i < list.length - 1 ? '' : ' disabled') + '>↓</button>' +
             '<button class="btn btn-ghost btn-sm" data-edit="' + i + '" type="button">Edit</button></span></div>';
@@ -791,7 +801,7 @@
       return c.rampTo ? 'Grow from their minutes to ' + c.rampTo + ' min over ' + c.days + ' days' : 'Sit ' + m + ' a day for ' + c.days + ' days';
     }
     if (c.kind === 'checkins') return 'Attend ' + c.target + ' center programs within ' + c.days + ' days';
-    var what = { quote: ['thought', 'thoughts'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['video', 'videos'], quiz: ['quiz', 'quizzes'] }[c.material] || ['item', 'items'];
+    var what = { quote: ['quote', 'quotes'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['video', 'videos'], quiz: ['quiz', 'quizzes'] }[c.material] || ['item', 'items'];
     var per = c.perPeriod ? c.perPeriod + ' ' + what[c.perPeriod === 1 ? 0 : 1] + ' a ' + (c.cadence || 'week') : '';
     var total = c.material === 'book' && !c.target ? 'a whole book' : c.target + ' ' + what[1];
     return 'Read/watch ' + total + (per ? ' (' + per + ')' : '') + ' within ' + c.days + ' days · ' + (c.itemPoints || 0) + ' points each';
@@ -803,7 +813,7 @@
       '<label class="field" for="cTitle">Title</label><input class="input" id="cTitle" required maxlength="100" value="' + esc(c ? c.title : '') + '">' +
       '<label class="field" for="cDesc">Description</label><textarea class="input" id="cDesc" rows="3" maxlength="600">' + esc(c ? c.description || '' : '') + '</textarea>' +
       '<div class="grid2"><div><label class="field" for="cKind">Type</label><select class="input" id="cKind"><option value="daily_sitting">Meditation (daily sitting)</option><option value="checkins">Attend center programs</option><option value="education">Education (read or watch)</option></select></div>' +
-      '<div><label class="field" for="cAud">For</label><select class="input" id="cAud"><option value="all">Everyone</option><option value="seeker">New seekers</option><option value="initiate">Initiates</option></select></div>' +
+      '<div><label class="field" for="cAud">For</label><select class="input" id="cAud"><option value="all">Everyone</option><option value="seeker">Not yet initiated</option><option value="initiate">Initiates only</option></select></div>' +
       '<div><label class="field" for="cDays">Length (days)</label><input class="input" id="cDays" type="number" min="1" max="365" value="' + (c ? c.days : 21) + '"></div>' +
       '<div><label class="field" for="cPts">Bonus points when completed</label><input class="input" id="cPts" type="number" min="0" max="10000" value="' + (c ? c.points : 100) + '"></div></div>' +
       '<div id="cSitBox"><div class="grid2"><div><label class="field" for="cMin">Minutes a day (default)</label><input class="input" id="cMin" type="number" min="1" max="180" value="' + (c ? c.minutes || 15 : 15) + '"></div>' +
@@ -811,7 +821,7 @@
         '<div><label class="field" for="cRamp">Grow to (minutes, optional)</label><input class="input" id="cRamp" type="number" min="0" max="180" placeholder="e.g. 30" value="' + (c && c.rampTo ? c.rampTo : '') + '"></div></div>' +
         '<p class="small muted">With “grow to”, the daily target rises a little each day from their current minutes to this number by the last day (like 21-Day Advance). Missed days allowed: 1 for every 10 days.</p></div>' +
       '<div id="cTgtBox"><label class="field" for="cTgt">Programs to attend</label><input class="input" id="cTgt" type="number" min="1" max="100" value="' + (c ? c.target || 6 : 6) + '"><p class="small muted">Catch-up is allowed: any check-ins before the end date count.</p></div>' +
-      '<div id="cEduBox"><div class="grid2"><div><label class="field" for="cMat">Read or watch</label><select class="input" id="cMat"><option value="quote">Thought for today (quotes)</option><option value="article">Articles</option><option value="book">A book (chapters)</option><option value="video">Videos</option><option value="quiz">Quizzes (passed)</option></select></div>' +
+      '<div id="cEduBox"><div class="grid2"><div><label class="field" for="cMat">Read or watch</label><select class="input" id="cMat"><option value="quote">Quote of the day</option><option value="article">Articles</option><option value="book">A book (chapters)</option><option value="video">Videos</option><option value="quiz">Quizzes (passed)</option></select></div>' +
         '<div><label class="field" for="cCad">Pace</label><select class="input" id="cCad"><option value="day">per day</option><option value="week">per week</option><option value="month">per month</option></select></div>' +
         '<div><label class="field" for="cPer">How many each time</label><input class="input" id="cPer" type="number" min="1" max="50" value="' + (c && c.perPeriod ? c.perPeriod : 1) + '"></div>' +
         '<div><label class="field" for="cTot">Total to finish</label><input class="input" id="cTot" type="number" min="0" max="1000" value="' + (c && c.kind === 'education' ? c.target : 12) + '"></div>' +
@@ -1019,6 +1029,116 @@
       app.innerHTML = '<div class="sec-head page-head"><h1>Activity</h1></div><div class="card">' + (r.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Details</th></tr></thead><tbody>' +
         r.map(function (x) { return '<tr><td>' + esc(when(x.at)) + '</td><td>' + esc(x.byEmail || '') + '</td><td>' + esc(ACTIONS[x.action] || x.action) + '</td><td class="small">' + esc([x.detail, x.target].filter(Boolean).join(' · ')) + '</td></tr>'; }).join('') +
         '</tbody></table></div>' : '<p class="muted">Nothing yet.</p>') + '</div>';
+    }).catch(fail);
+  }
+
+  /* =====================================================================
+   * Visitor log (v0.23): one private note per person per event, after checking in
+   * ===================================================================== */
+  var vlShow = 'new', vlQ = '';
+  function csvDownload(pathq, name) {
+    S.api('GET', pathq, undefined, { raw: true }).then(function (r) { if (!r.ok) throw new Error('Could not download (' + r.status + ')'); return r.blob(); }).then(function (b) {
+      var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name;
+      document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    }).catch(function (x) { toast(x.message); });
+  }
+  function drawVisitors() {
+    loading();
+    var qs = '?show=' + encodeURIComponent(vlShow) + (vlQ ? '&q=' + encodeURIComponent(vlQ) : '');
+    S.api('GET', '/api/admin/visitor-log' + qs).then(function (j) {
+      var list = j.notes || [];
+      app.innerHTML = '<div class="sec-head page-head"><h1>Visitor log</h1><button class="btn btn-ghost btn-sm" id="vlCsv" type="button">⬇ CSV</button></div>' +
+        '<p class="small muted">Notes people leave on an event after checking in (one each, until 7 days after the event). Only admins can read them. ' +
+        '<b>Public</b> is possible only when the person allowed the center to share their note (first name only); where public notes appear is still to be decided.</p>' +
+        '<div class="filters"><div class="seg" role="group" aria-label="Show">' + [['new', 'To review' + (j.unreviewed ? ' (' + j.unreviewed + ')' : '')], ['', 'All'], ['shareable', 'May share'], ['public', 'Public']].map(function (o) {
+          return '<button type="button" data-vs="' + o[0] + '" class="' + (vlShow === o[0] ? 'on' : '') + '">' + esc(o[1]) + '</button>'; }).join('') + '</div>' +
+        '<input type="search" class="input" id="vlQ" placeholder="Search name, event or text" value="' + esc(vlQ) + '" style="max-width:280px"></div>' +
+        (list.length ? list.map(function (x) {
+          return '<div class="card vl-note' + (x.reviewedAt ? ' reviewed' : '') + '"><div class="vl-head"><span><a href="#person/' + encodeURIComponent(x.userId) + '"><b>' + esc(x.name || '(no name)') + '</b></a> · ' +
+            '<a href="#event/' + encodeURIComponent(x.eventId) + '">' + esc(x.eventTitle) + '</a> <span class="muted small">' + esc(day(x.eventAt)) + '</span></span>' +
+            '<span class="small muted">' + esc(when(x.updatedAt)) + (x.source === 'reflection' ? ' · <span class="tag">old reflection</span>' : '') + '</span></div>' +
+            '<p class="vl-body">' + esc(x.body) + '</p><div class="vl-foot">' +
+            '<label class="chk"><input type="checkbox" data-rev="' + esc(x.id) + '"' + (x.reviewedAt ? ' checked' : '') + '> Reviewed' + (x.reviewedBy ? ' <small class="muted">by ' + esc(x.reviewedBy) + '</small>' : '') + '</label>' +
+            (x.shareOk ? '<label class="chk"><input type="checkbox" data-pub="' + esc(x.id) + '"' + (x.isPublic ? ' checked' : '') + '> Public <small class="muted">(they allowed sharing)</small></label>' : '<span class="small muted">Private: not to be shared</span>') +
+            '</div></div>';
+        }).join('') + (j.total > list.length ? '<p class="small muted">Showing ' + list.length + ' of ' + j.total + '. Use search or CSV for the rest.</p>' : '') :
+          '<div class="card empty"><p>' + (vlShow === 'new' ? 'Nothing to review. 🙏' : 'No notes.') + '</p></div>');
+      app.querySelectorAll('[data-vs]').forEach(function (b) { b.onclick = function () { vlShow = b.dataset.vs; drawVisitors(); }; });
+      var qT = null; $('vlQ').oninput = function () { var v = this.value; clearTimeout(qT); qT = setTimeout(function () { vlQ = v.trim(); drawVisitors(); }, 400); };
+      $('vlCsv').onclick = function () { csvDownload('/api/admin/visitor-log?format=csv' + (vlQ ? '&q=' + encodeURIComponent(vlQ) : '') + (vlShow ? '&show=' + vlShow : ''), 'visitor-log.csv'); };
+      var set = function (id, b) { return S.api('PATCH', '/api/admin/visitor-log/' + encodeURIComponent(id), b).catch(function (x) { toast(x.message); drawVisitors(); }); };
+      app.querySelectorAll('[data-rev]').forEach(function (c) { c.onchange = function () { set(c.dataset.rev, { reviewed: c.checked }).then(function () { c.closest('.vl-note').classList.toggle('reviewed', c.checked); }); }; });
+      app.querySelectorAll('[data-pub]').forEach(function (c) { c.onchange = function () { set(c.dataset.pub, { public: c.checked }).then(function () { toast(c.checked ? 'Marked public.' : 'Private again.'); }); }; });
+    }).catch(fail);
+  }
+
+  /* ---------- Suggestions (from Copilot; older ratings are kept here too) ---------- */
+  var sgShow = 'new';
+  function drawSuggestions() {
+    loading();
+    S.api('GET', '/api/admin/feedback').then(function (j) {
+      var all = j.feedback || [], open = all.filter(function (r) { return !r.reviewedAt; }).length;
+      var list = sgShow === 'new' ? all.filter(function (r) { return !r.reviewedAt; }) : all;
+      app.innerHTML = '<div class="sec-head page-head"><h1>Suggestions</h1><button class="btn btn-ghost btn-sm" id="sgCsv" type="button">⬇ CSV</button></div>' +
+        '<p class="small muted">Sent from Copilot (Account → Send a suggestion). Notes about events are in the <a href="#visitors">Visitor log</a>.' + (j.ratings ? ' Earlier app ratings: <b>' + j.averageRating + ' ★</b> from ' + j.ratings + '.' : '') + '</p>' +
+        '<div class="seg" role="group" aria-label="Show"><button type="button" data-sg="new" class="' + (sgShow === 'new' ? 'on' : '') + '">To review' + (open ? ' (' + open + ')' : '') + '</button><button type="button" data-sg="all" class="' + (sgShow === 'all' ? 'on' : '') + '">All</button></div>' +
+        (list.length ? list.map(function (r) {
+          return '<div class="card vl-note' + (r.reviewedAt ? ' reviewed' : '') + '"><div class="vl-head"><span>' + (r.kind === 'rating' ? '<b>' + '★'.repeat(r.rating || 0) + '</b> ' : '💡 ') + '<b>' + esc(r.name || 'Guest') + '</b>' +
+            (r.email ? ' · <a href="mailto:' + esc(r.email) + '">' + esc(r.email) + '</a>' : r.contact ? ' · ' + esc(r.contact) : '') + '</span><span class="small muted">' + esc(when(r.createdAt)) + ' · v' + esc(r.version || '?') + ' · ' + esc(r.platform || '') + '</span></div>' +
+            (r.body ? '<p class="vl-body">' + esc(r.body) + '</p>' : '') +
+            '<div class="vl-foot"><label class="chk"><input type="checkbox" data-sr="' + esc(r.id) + '"' + (r.reviewedAt ? ' checked' : '') + '> Reviewed</label></div></div>';
+        }).join('') : '<div class="card empty"><p>' + (sgShow === 'new' ? 'Nothing to review.' : 'No suggestions yet.') + '</p></div>');
+      app.querySelectorAll('[data-sg]').forEach(function (b) { b.onclick = function () { sgShow = b.dataset.sg; drawSuggestions(); }; });
+      $('sgCsv').onclick = function () { csvDownload('/api/admin/feedback?format=csv', 'suggestions.csv'); };
+      app.querySelectorAll('[data-sr]').forEach(function (c) { c.onchange = function () {
+        S.api('PATCH', '/api/admin/feedback/' + encodeURIComponent(c.dataset.sr), { reviewed: c.checked }).then(function () { c.closest('.vl-note').classList.toggle('reviewed', c.checked); }).catch(function (x) { toast(x.message); });
+      }; });
+    }).catch(fail);
+  }
+
+  /* ---------- Settings: Copilot's Today screen and the center check-in poster (moved from the old in-app admin) ---------- */
+  function drawSettings() {
+    loading();
+    var center = S.CFG.center || 'mpls';
+    S.api('GET', '/api/centers/' + center + '/settings?t=' + Date.now()).then(function (j) {
+      var st = j.settings || {}, vids = (st.featuredVideos || []).slice();
+      var ytId = function (u) { var m = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/.exec(u || ''); return m ? m[1] : null; };
+      app.innerHTML = '<div class="sec-head page-head"><h1>Settings</h1></div><div class="grid2 top">' +
+        '<div class="card"><h2>Featured on Copilot’s Today</h2><p class="small muted">A short list of talks or sos.org pages (up to 14). Copilot shows a different one each day.</p>' +
+          '<div id="fvList">' + (vids.length ? vids.map(function (v, i) { var id = v.videoId || ytId(v.url);
+            return '<div class="ad-row">' + (id ? '<img src="https://i.ytimg.com/vi/' + esc(id) + '/default.jpg" alt="" width="64" height="48" style="border-radius:6px;object-fit:cover">' : '<span class="tag">sos.org</span>') +
+              '<span class="ag-main"><b>' + esc(v.title) + '</b><small>' + esc(v.caption || v.url) + '</small></span>' +
+              '<button class="btn btn-ghost btn-sm" data-fup="' + i + '" type="button"' + (i ? '' : ' disabled') + ' aria-label="Move up">↑</button><button class="btn btn-ghost btn-sm" data-frm="' + i + '" type="button">Remove</button></div>'; }).join('') : '<p class="muted small">Nothing featured yet.</p>') + '</div>' +
+          '<form id="fvForm" style="margin-top:12px"><label class="field" for="fvUrl">YouTube link or a page on sos.org</label><input class="input" id="fvUrl" type="url" placeholder="https://" required>' +
+          '<div class="grid2"><div><label class="field" for="fvTitle">Title</label><input class="input" id="fvTitle" maxlength="120"></div><div><label class="field" for="fvCap">Caption (optional)</label><input class="input" id="fvCap" maxlength="200"></div></div>' +
+          '<p class="error" id="fvErr"></p><button class="btn btn-primary" type="submit">Add</button></form></div>' +
+        '<div class="card"><h2>Center check-in poster</h2><p class="small">A QR code for the center’s door: people scan it, sign in once, and are checked in to whichever event is on. Print it on letter paper.</p>' +
+          '<div class="qr-box" style="max-width:220px">' + qrSvg(SITE + '/checkin/') + '</div><p class="small muted">' + esc(SITE + '/checkin/') + '</p>' +
+          '<button class="btn btn-soft" id="posterBtn" type="button">🖨 Open the poster to print</button>' +
+          '<p class="small muted" style="margin-top:10px">Each event also has its own code and QR: Events → an event → Door code &amp; QR.</p></div></div>';
+      var save = function (list, msg) {
+        return S.api('PUT', '/api/admin/centers/' + center + '/settings', { featuredVideos: list }).then(function () { toast(msg); drawSettings(); }).catch(function (x) { if ($('fvErr')) $('fvErr').textContent = x.message; else toast(x.message); });
+      };
+      app.querySelectorAll('[data-frm]').forEach(function (b) { b.onclick = function () { var l = vids.slice(); l.splice(Number(b.dataset.frm), 1); save(l, 'Removed.'); }; });
+      app.querySelectorAll('[data-fup]').forEach(function (b) { b.onclick = function () { var i = Number(b.dataset.fup), l = vids.slice(), x = l[i]; l[i] = l[i - 1]; l[i - 1] = x; save(l, 'Moved up.'); }; });
+      $('fvForm').onsubmit = function (ev) {
+        ev.preventDefault();
+        if (vids.length >= 14) { $('fvErr').textContent = 'Up to 14 items. Remove one first.'; return; }
+        save(vids.concat([{ url: $('fvUrl').value.trim(), title: $('fvTitle').value.trim() || 'Featured today', caption: $('fvCap').value.trim() }]), 'Added.');
+      };
+      $('posterBtn').onclick = function () {
+        var url = SITE + '/checkin/', w = window.open('', '_blank');
+        if (!w) { toast('Please allow pop-ups to print the poster.'); return; }
+        w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Check in · Minneapolis Center</title><style>' +
+          'body{font-family:Georgia,serif;text-align:center;color:#3b2466;margin:0;padding:40px 24px}h1{font-size:44px;margin:10px 0 6px}' +
+          'p{font-family:system-ui,sans-serif;font-size:20px;margin:8px 0;color:#333}.qr{width:380px;height:380px;margin:24px auto}.qr svg{width:100%;height:100%}' +
+          '.small{font-size:14px;color:#777}@media print{button{display:none}}</style></head><body>' +
+          '<div style="font-size:48px">🙏</div><h1>Welcome! Please check in</h1><p>Scan with your phone camera</p><div class="qr">' + qrSvg(url) + '</div>' +
+          '<p><b>1.</b> Scan the code &nbsp; <b>2.</b> Sign in with Google or Microsoft (first time only) &nbsp; <b>3.</b> You’re checked in</p>' +
+          '<p class="small">Science of Spirituality · Minneapolis Meditation Center<br>' + esc(url) + '</p>' +
+          '<button onclick="window.print()" style="margin-top:20px;font-size:18px;padding:10px 24px">Print</button></body></html>');
+        w.document.close();
+      };
     }).catch(fail);
   }
 

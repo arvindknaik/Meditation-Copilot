@@ -138,45 +138,136 @@
       (e.description ? '<span class="ev-desc">' + esc(e.description.slice(0, 220)) + (e.description.length > 220 ? '…' : '') + '</span>' : '') +
       '<span class="ev-foot">' + (myTag(e) || '<span class="btn btn-primary btn-sm">Details &amp; RSVP</span>') + '<span class="muted small">' + esc(headcount(e)) + '</span>' + badge(e) + '</span></span></a>';
   }
-  function smallCard(e) {
-    return '<a class="card ev-card" href="/event/?id=' + encodeURIComponent(e.id) + '">' +
+  function smallCard(e, past) {
+    return '<a class="card ev-card' + (past ? ' ev-past' : '') + '" href="/event/?id=' + encodeURIComponent(e.id) + '">' +
       T.thumb(e, flyer(e, true), 52) +
-      '<span class="ev-body"><span class="kicker">' + kicker(e) + ' ' + FREE + '</span><b class="ev-title">' + esc(e.title) + '</b>' +
+      '<span class="ev-body"><span class="kicker">' + (e.hero ? '★ Featured · ' : '') + kicker(e) + (past ? '' : ' ' + FREE) + (e.myFav ? ' <span class="fav-mark" title="In your favourites">★</span>' : '') + '</span><b class="ev-title">' + esc(e.title) + '</b>' +
       '<span class="ev-when">' + esc(whenText(e)) + '</span><span class="ev-foot">' + myTag(e) + '<span class="muted small">' + esc(headcount(e)) + '</span>' + badge(e) + '</span></span></a>';
   }
 
-  /* ---------- home: the next three events (hero + two) ---------- */
+  /* ---------- home: 4 upcoming events (★ featured first, then by date; the soonest featured is large) and 2 recent ones ---------- */
   function loadHome() {
     upcoming().then(function (ev) {
-      var up = ev.filter(function (e) { return e.status !== 'cancelled' && e.endsAt > Date.now(); }).slice(0, 3);
-      var hero = up.filter(function (e) { return e.hero; })[0] || up[0];
-      var rest = up.filter(function (e) { return e !== hero; });
-      $('upcoming').innerHTML = up.length ? heroCard(hero) + '<div class="up-rest">' + rest.map(smallCard).join('') + '</div>'
+      var up = T.homeUpcoming(ev, 4), hero = up[0], rest = up.slice(1);
+      $('upcoming').innerHTML = up.length ? heroCard(hero) + '<div class="up-rest">' + rest.map(function (e) { return smallCard(e); }).join('') + '</div>'
         : '<div class="card empty"><p>No upcoming events are scheduled right now.</p><p class="small muted">Check back soon, or see <a href="https://sos.org/location/Minneapolis-StPaul/" target="_blank" rel="noopener">our page on sos.org</a>.</p></div>';
     }).catch(function (x) { $('upcoming').innerHTML = '<div class="card empty"><p>' + esc(x.message) + '</p></div>'; });
+    var t = Date.now();
+    if ($('recent')) loadEvents(t - 120 * 86400000, t).then(function (ev) {
+      var past = T.homeRecent(ev, 2, t);
+      $('recentSec').hidden = !past.length;
+      $('recent').innerHTML = past.map(function (e) { return smallCard(e, true); }).join('');
+    }).catch(function () { $('recentSec').hidden = true; });
   }
 
   /* ---------- calendar: month grid + list ---------- */
-  var calMonth = null, calView = 'month', calEvents = [];
+  var calMonth = null, calView = 'up', calEvents = [];
+  // ★ Favourites: events and whole series the person saved (signed in)
+  function loadFavorites() {
+    document.querySelectorAll('.cal-bar, .page-head .seg').forEach(function (x) { x.hidden = true; });
+    $('calMonth').hidden = true;
+    var el = $('calList'), head = '<div class="sec-head"><h2>★ Your favourites</h2><a class="link" href="/calendar/">‹ All events</a></div>';
+    if (!S.valid()) {
+      el.innerHTML = head + '<div class="card empty"><p>Sign in to see the events and series you saved as favourites.</p><button class="btn btn-primary" id="favSignL" type="button">Sign in</button></div>';
+      $('favSignL').onclick = function () { signIn('Sign in to see your favourites.').then(loadFavorites).catch(function () {}); };
+      return;
+    }
+    el.innerHTML = head + '<div class="card skeleton"></div>';
+    S.api('GET', '/api/me/favorites').then(function (j) {
+      var t = Date.now(), list = j.events || [], up = list.filter(function (e) { return e.endsAt > t; }), past = list.filter(function (e) { return e.endsAt <= t; }).reverse().slice(0, 10);
+      el.innerHTML = head + ((j.series || []).length ? '<p class="small muted">Series: ' + j.series.map(function (x) { return '<b>' + esc(x.title) + '</b>' + (x.freq ? ' (' + esc(x.freq) + ')' : ''); }).join(', ') + '. Every date of a favourite series is listed.</p>' : '') +
+        (up.length ? up.map(function (e) { return smallCard(e); }).join('') : '<div class="card empty"><p>No upcoming favourites. Open an event and tap <b>☆ Favourite</b> to save it, or its whole series.</p></div>') +
+        (past.length ? '<h3 class="small muted" style="margin-top:18px">Earlier</h3>' + past.map(function (e) { return smallCard(e, true); }).join('') : '');
+    }).catch(function (x) { el.innerHTML = head + '<div class="card empty"><p>' + esc(x.message) + '</p></div>'; });
+  }
+  /* Calendar (v0.24): Upcoming = yesterday through the next 30 days, "Show the next 30 days" adds more;
+   * Recent = 2 to 32 days ago (newest first), "Show earlier" goes back, up to 12 months; Month = the grid.
+   * The address keeps the tab and how far you've loaded (?view=recent&from=2026-09-01 · ?to=2027-02-15), so Back and shared links work. */
+  var DAY = 86400000, MAXBACK = 365;
+  function dayStart(ms) { return centerDayEnd(ms) - DAY; }
+  function isoDay(ms) { return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(ms)); }
+  function fromIso(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? dayStart(Date.UTC(+m[1], +m[2] - 1, +m[3], 18)) : null; }
+  function dayHead(ms, today) {
+    var d = Math.round((dayStart(ms) - today) / DAY);
+    return d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d === -1 ? 'Yesterday' : fmt(ms, { weekday: 'long', month: 'short', day: 'numeric' });
+  }
+  function chunks(from, to) {   // fetch in 31-day pieces (the server returns up to 200 events per request)
+    var parts = [];
+    for (var a = from; a < to; a += 31 * DAY) parts.push(S.api('GET', '/api/events?from=' + a + '&to=' + Math.min(to, a + 31 * DAY) + '&edges=1'));
+    return Promise.all(parts).then(function (rs) {
+      var seen = {}, ev = [];
+      rs.forEach(function (j) { (j.events || []).forEach(function (e) { if (!seen[e.id]) { seen[e.id] = 1; ev.push(e); } }); });
+      return { events: ev, next: rs.length ? rs[rs.length - 1].next : null, prev: rs.length ? rs[0].prev : null };
+    });
+  }
+  function setUrl(params) {
+    var u = new URL(location.href);
+    ['view', 'to', 'from'].forEach(function (k) { u.searchParams.delete(k); });
+    Object.keys(params).forEach(function (k) { if (params[k]) u.searchParams.set(k, params[k]); });
+    history.replaceState(null, '', u.pathname + (u.search || ''));
+  }
   function loadCalendar() {
     var q = new URLSearchParams(location.search);
     var mine = q.get('mine') === '1';
-    if (!calMonth) { var n = new Date(); calMonth = new Date(n.getFullYear(), n.getMonth(), 1); }
-    try { calView = sessionStorage.getItem('sosmn.calView') || (document.documentElement.classList.contains('mc-desktop') ? 'month' : 'list'); } catch (e) {}
+    if (q.get('fav') === '1') return loadFavorites();
+    calView = ['up', 'recent', 'month'].indexOf(q.get('view')) >= 0 ? q.get('view') : calView === 'list' ? 'up' : calView;
     document.querySelectorAll('[data-cv]').forEach(function (b) {
       b.classList.toggle('on', b.dataset.cv === calView);
-      b.onclick = function () { calView = b.dataset.cv; try { sessionStorage.setItem('sosmn.calView', calView); } catch (e) {} loadCalendar(); };
+      b.onclick = function () { calView = b.dataset.cv; setUrl({ view: calView === 'up' ? '' : calView }); loadCalendar(); };
     });
-    var from = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1).getTime() - 7 * 86400000;
-    var to = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1).getTime() + 7 * 86400000;
-    $('calTitle').textContent = calMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' }) + (mine ? ' · my events' : '');
-    $('calPrev').onclick = function () { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); loadCalendar(); };
-    $('calNext').onclick = function () { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); loadCalendar(); };
-    $('calToday').onclick = function () { calMonth = null; loadCalendar(); };
-    loadEvents(from, to).then(function (ev) {
-      calEvents = mine ? ev.filter(function (e) { return e.myRsvp && e.myRsvp !== 'no' || e.myCheckin; }) : ev;
-      paintMonth(); paintList();
-    }).catch(function (x) { $('calList').innerHTML = '<div class="card empty"><p>' + esc(x.message) + '</p></div>'; });
+    document.querySelector('.cal-bar').hidden = calView !== 'month';
+    $('calMore').innerHTML = '';
+    var filt = function (ev) { return mine ? ev.filter(function (e) { return e.myRsvp && e.myRsvp !== 'no' || e.myCheckin; }) : ev; };
+    var fail = function (x) { $('calList').innerHTML = '<div class="card empty"><p>' + esc(x.message) + '</p></div>'; };
+    if (calView === 'month') {
+      $('calList').classList.remove('cal-days');
+      if (!calMonth) { var n = new Date(); calMonth = new Date(n.getFullYear(), n.getMonth(), 1); }
+      var from = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1).getTime() - 7 * DAY;
+      var to = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1).getTime() + 7 * DAY;
+      $('calTitle').textContent = calMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' }) + (mine ? ' · my events' : '');
+      $('calPrev').onclick = function () { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); loadCalendar(); };
+      $('calNext').onclick = function () { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); loadCalendar(); };
+      $('calToday').onclick = function () { calMonth = null; loadCalendar(); };
+      loadEvents(from, to).then(function (ev) { calEvents = filt(ev); paintMonth(); paintList(); }).catch(fail);
+      return;
+    }
+    $('calMonth').hidden = true;
+    var today = dayStart(Date.now()), el = $('calList');
+    el.classList.add('cal-days');
+    el.innerHTML = '<div class="card skeleton"></div>';
+    if (calView === 'up') {
+      var upFrom = today - DAY, upTo = Math.max(fromIso(q.get('to')) || 0, today + 31 * DAY);   // through day 30 (end of that day)
+      chunks(upFrom, upTo).then(function (r) {
+        var list = filt(r.events).filter(function (e) { return e.startsAt >= upFrom || e.endsAt > Date.now(); }).sort(function (a, b) { return a.startsAt - b.startsAt; });
+        el.innerHTML = list.length ? dayGroups(list, today) : '<div class="card empty"><p>No events in the next 30 days.</p></div>';
+        var lastDay = upTo - DAY;
+        if (r.next) {
+          var gap = r.next - upTo > 30 * DAY;
+          $('calMore').innerHTML = '<button class="btn btn-ghost btn-block" id="calMoreBtn" type="button">' + (gap ? 'Next event: ' + esc(fmt(r.next, { month: 'short', day: 'numeric' })) + ' ›' : 'Show the next 30 days') + '</button>';
+          $('calMoreBtn').onclick = function () { var nt = gap ? dayStart(r.next) + 31 * DAY : upTo + 30 * DAY; setUrl({ to: isoDay(nt - DAY) }); loadCalendar(); };
+        } else $('calMore').innerHTML = '<p class="small muted center">Nothing scheduled after ' + esc(fmt(lastDay, { month: 'short', day: 'numeric' })) + '.</p>';
+      }).catch(fail);
+    } else {
+      var reTo = today - DAY, limit = today - MAXBACK * DAY, reFrom = Math.max(limit, Math.min(fromIso(q.get('from')) || Infinity, today - 32 * DAY));
+      chunks(reFrom, reTo).then(function (r) {
+        var list = filt(r.events).filter(function (e) { return e.startsAt < reTo && e.endsAt <= Date.now(); }).sort(function (a, b) { return b.startsAt - a.startsAt; });
+        el.innerHTML = list.length ? dayGroups(list, today, true) : '<div class="card empty"><p>No events in the past month.</p></div>';
+        if (r.prev && r.prev >= limit) {
+          var gap = reFrom - r.prev > 30 * DAY;
+          $('calMore').innerHTML = '<button class="btn btn-ghost btn-block" id="calMoreBtn" type="button">' + (gap ? 'Earlier event: ' + esc(fmt(r.prev, { month: 'short', day: 'numeric' })) + ' ›' : 'Show earlier') + '</button>';
+          $('calMoreBtn').onclick = function () { var nf = Math.max(limit, gap ? dayStart(r.prev) - 30 * DAY : reFrom - 30 * DAY); setUrl({ view: 'recent', from: isoDay(nf) }); loadCalendar(); };
+        } else $('calMore').innerHTML = '<p class="small muted center">' + (r.prev ? 'That’s the past 12 months.' : 'No earlier events.') + '</p>';
+      }).catch(fail);
+    }
+  }
+  function dayGroups(list, today, past) {
+    var html = '', cur = null;
+    list.forEach(function (e) {
+      var k = isoDay(e.startsAt);
+      if (k !== cur) { cur = k; html += '<h3 class="cal-dayh">' + esc(dayHead(e.startsAt, today)) + '</h3>'; }
+      html += smallCard(e, past || e.endsAt <= Date.now());
+    });
+    return html;
   }
   function paintMonth() {
     var el = $('calMonth'); el.hidden = calView !== 'month';
@@ -202,7 +293,7 @@
     var mStart = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1).getTime(), mEnd = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1).getTime();
     var list = calEvents.filter(function (e) { return e.startsAt >= mStart && e.startsAt < mEnd; });
     if (calView === 'month' && document.documentElement.classList.contains('mc-desktop')) { el.innerHTML = ''; return; }
-    el.innerHTML = list.length ? list.map(smallCard).join('') : '<div class="card empty"><p>No events this month.</p></div>';
+    el.innerHTML = list.length ? list.map(function (e) { return smallCard(e, e.endsAt <= Date.now()); }).join('') : '<div class="card empty"><p>No events this month.</p></div>';
   }
 
   /* ---------- event page ---------- */
@@ -248,7 +339,8 @@
       (e.format !== 'online' ? '<p class="ev-kids">' + (e.children ? '👧 <b>Children’s program available.</b> Children are welcome in their own program during this event.'
         : '👪 No separate children’s program at this event. Parents, please keep children with you.') + '</p>' : '') +
       (e.format !== 'online' ? '<p class="small muted">Please read our <a href="/guidelines/">visitor guidelines</a>: the center is monitored by video for safety and security, and photography needs permission.</p>' : '') +
-      '<p class="muted small">' + esc(headcount(e)) + (e.checkedIn ? ' · ' + (e.checkedIn + (e.checkedInGuests || 0)) + ' checked in' : '') + '</p></div></article>';
+      '<p class="muted small">' + esc(headcount(e)) + (e.checkedIn ? ' · ' + (e.checkedIn + (e.checkedInGuests || 0)) + ' checked in' : '') + '</p>' +
+      '<div class="fav-row">' + favButtons(e) + '</div></div></article>';
 
     // RSVP
     if (!cx && !past) {
@@ -281,6 +373,8 @@
       }
       html += '</section>';
     }
+    // Visitor log: a private note for the center, after checking in (until 7 days after the event)
+    if (e.myCheckin && Date.now() <= (e.noteUntil || e.endsAt + 7 * 86400000)) html += '<section class="card" id="noteCard" aria-labelledby="noteH"><h2 id="noteH">Leave a note for the center</h2><p class="small muted">Loading…</p></section>';
     // Add to calendar + share
     if (!cx && !past) html += '<section class="card"><h2>Add to your calendar</h2><div class="cal-btns">' +
       '<a class="btn btn-ghost btn-sm" href="' + esc(googleCal(e)) + '" target="_blank" rel="noopener">Google Calendar</a>' +
@@ -289,11 +383,51 @@
       '<button class="btn btn-ghost btn-sm" id="shareBtn" type="button">↗ Share</button></div></section>';
     $('event').innerHTML = html;
     wireEvent();
+    if ($('noteCard')) loadNote();
+  }
+  function favButtons(e) {
+    if (!S.valid()) return '<button class="btn btn-ghost btn-sm" id="favSign" type="button">☆ Favourite</button>';
+    return '<button class="btn btn-ghost btn-sm' + (e.favEvent ? ' on' : '') + '" id="favEv" type="button" aria-pressed="' + !!e.favEvent + '">' + (e.favEvent ? '★ Favourite' : '☆ Favourite') + '</button>' +
+      (e.seriesId ? '<button class="btn btn-ghost btn-sm' + (e.favSeries ? ' on' : '') + '" id="favSr" type="button" aria-pressed="' + !!e.favSeries + '">' + (e.favSeries ? '★ Whole series saved' : '☆ Save the whole series') + '</button>' : '') +
+      '<a class="link small" href="/calendar/?fav=1">Your favourites ›</a>';
+  }
+  function toggleFav(kind, on) {
+    var ref = kind === 'series' ? ev.seriesId : ev.id;
+    S.api(on ? 'DELETE' : 'PUT', '/api/me/favorites/' + kind + '/' + encodeURIComponent(ref)).then(function () {
+      if (kind === 'series') ev.favSeries = !on; else ev.favEvent = !on;
+      toast(on ? 'Removed from your favourites.' : kind === 'series' ? '★ Every date of this series is in your favourites.' : '★ Saved to your favourites.');
+      cache = null; paintEvent();
+    }).catch(function (x) { toast(x.message, 5000); });
+  }
+  function loadNote() {
+    S.api('GET', '/api/events/' + encodeURIComponent(ev.id) + '/note').then(function (j) {
+      var box = $('noteCard'); if (!box) return;
+      if (!j.canWrite) { box.hidden = true; return; }
+      var n = j.note;
+      box.innerHTML = '<h2 id="noteH">Leave a note for the center</h2><p class="small muted">How was it for you? Only the center team reads this. One note per event; you can change it until ' +
+        esc(fmt(j.until, { weekday: 'short', month: 'short', day: 'numeric' })) + '.</p>' +
+        '<textarea class="input" id="noteBody" rows="3" maxlength="500" placeholder="A few words for the center team">' + esc(n ? n.body : '') + '</textarea>' +
+        '<label class="check small"><input type="checkbox" id="noteShare"' + (n && n.shareOk ? ' checked' : '') + '> The center may share this note publicly (first name only)</label>' +
+        '<div class="ck-row" style="margin-top:8px"><button class="btn btn-primary" id="noteSave" type="button">' + (n ? 'Update note' : 'Send note') + '</button>' +
+        (n ? '<button class="btn btn-ghost btn-sm" id="noteDel" type="button">Remove</button>' : '') + '</div><p class="error" id="noteErr" role="alert"></p>' +
+        (n ? '<p class="small muted">Sent ' + esc(fmt(n.updatedAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) + '. Thank you 🙏</p>' : '');
+      $('noteSave').onclick = function () {
+        S.api('PUT', '/api/events/' + encodeURIComponent(ev.id) + '/note', { body: $('noteBody').value, shareOk: $('noteShare').checked })
+          .then(function () { toast('Thank you. Your note was sent to the center team. 🙏', 4000); loadNote(); }, function (x) { $('noteErr').textContent = x.message; });
+      };
+      if ($('noteDel')) $('noteDel').onclick = function () {
+        if (!window.confirm('Remove your note?')) return;
+        S.api('DELETE', '/api/events/' + encodeURIComponent(ev.id) + '/note').then(function () { toast('Note removed.'); loadNote(); }, function (x) { $('noteErr').textContent = x.message; });
+      };
+    }).catch(function () { if ($('noteCard')) $('noteCard').hidden = true; });
   }
   function wireEvent() {
     var e = ev;
     if ($('rsvpSign')) $('rsvpSign').onclick = function () { signIn().then(loadEvent).catch(function () {}); };
     if ($('ckSign')) $('ckSign').onclick = function () { signIn().then(loadEvent).catch(function () {}); };
+    if ($('favSign')) $('favSign').onclick = function () { signIn('Sign in to save favourites.').then(loadEvent).catch(function () {}); };
+    if ($('favEv')) $('favEv').onclick = function () { toggleFav('event', !!ev.favEvent); };
+    if ($('favSr')) $('favSr').onclick = function () { toggleFav('series', !!ev.favSeries); };
     document.querySelectorAll('[data-rsvp]').forEach(function (b) { b.onclick = function () { saveRsvp(b.dataset.rsvp); }; });
     document.querySelectorAll('[data-g]').forEach(function (b) {
       b.onclick = function () {

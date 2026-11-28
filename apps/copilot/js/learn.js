@@ -118,7 +118,7 @@
     });
     var ns = saved.all().length;
     html += '<div class="k-links"><a class="btn btn-soft btn-sm" href="#learn?list=saved">★ Saved' + (ns ? ' (' + ns + ')' : '') + '</a>' +
-      '<a class="btn btn-ghost btn-sm" href="#learn?a=effective-time">❔ Help with the app</a></div>';
+      '<a class="btn btn-ghost btn-sm" href="#learn?a=effective-time">❔ Help with the app</a><button class="btn btn-ghost btn-sm" type="button" onclick="MC.tour()">🧭 Take the tour</button></div>';
     if (MC.library) html += MC.library.readingSummary();
     $('learnBrowse').innerHTML = html;
   }

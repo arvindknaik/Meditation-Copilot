@@ -84,6 +84,7 @@
       <p class="greet-sub" id="greetSub"></p>
 
       <div class="card backup-banner" id="backupBanner" hidden></div>
+      <div id="gettingStarted"></div>
 
       <blockquote class="quote flat" id="thought" style="margin-bottom:16px"></blockquote>
 
@@ -209,9 +210,6 @@
     <section class="view" id="v-checkin" aria-label="Check in"></section>
 
     <!-- ================= PEOPLE (admin: categories, block) ================= -->
-    <section class="view" id="v-people" aria-label="People"></section>
-    <section class="view" id="v-feedback" aria-label="Feedback"></section>
-    <section class="view" id="v-admin" aria-label="Admin"></section>
 
     <!-- ================= INSIGHTS ================= -->
     <section class="view" id="v-insights" aria-label="Insights">
@@ -256,36 +254,25 @@
       <section class="screen" id="s-welcome">
         <div class="card hero">
           <div class="lotus" aria-hidden="true">🪷</div>
-          <h1>Your Roadmap</h1>
+          <h1>The 10,000-hour journey</h1>
           <p class="tagline">Small moments. Daily practice. Inner transformation.</p>
           <div class="goal-badge"><b>10,000</b><span>effective meditation hours</span></div>
-          <p class="lead">Answer five gentle questions and we'll map your personal path to this sacred milestone.</p>
+          <p class="lead">A lifelong journey for initiates. Answer four gentle questions and we’ll map your path to this milestone, with the daily time that gets you there.</p>
           <button class="btn btn-primary btn-block" data-next>Begin my journey ✨</button>
+          <p class="small" style="margin:12px 0 0"><a href="#roadmap" id="jBack">‹ Back to my challenges</a></p>
           <p class="small muted" style="margin:16px 0 0">Prototype only. Not an official or approved Science of Spirituality app.</p>
         </div>
       </section>
 
       <div class="progress" id="progress" hidden>
         <div class="bar"><div class="fill" id="progressFill"></div></div>
-        <div class="count" id="progressCount">1 of 5</div>
+        <div class="count" id="progressCount">1 of 4</div>
       </div>
-
-      <section class="screen" id="s-q1">
-        <div class="card">
-          <div class="q-num">Question 1</div>
-          <h2 class="q-title">What is your Date of Birth?</h2>
-          <p class="q-help">This helps us understand the time ahead of you.</p>
-          <label class="sr-only" for="dob">Date of birth</label>
-          <input type="date" id="dob" autocomplete="bday">
-          <div class="error" id="e1" role="alert"></div>
-          <div class="actions"><button class="btn btn-ghost" data-back>Back</button><button class="btn btn-primary" data-next>Continue</button></div>
-        </div>
-      </section>
 
       <section class="screen" id="s-q2">
         <div class="card">
-          <div class="q-num">Question 2</div>
-          <h2 class="q-title">When did your meditation journey begin?</h2>
+          <div class="q-num">Question 1</div>
+          <h2 class="q-title">When were you initiated?</h2>
           <p class="q-help">An approximate date is perfectly fine. Every sincere sitting counts.</p>
           <label class="sr-only" for="start">Journey start date</label>
           <input type="date" id="start">
@@ -296,7 +283,7 @@
 
       <section class="screen" id="s-q3">
         <div class="card">
-          <div class="q-num">Question 3</div>
+          <div class="q-num">Question 2</div>
           <h2 class="q-title">What is your current average meditation time?</h2>
           <p class="q-help">Minutes per day, on average.</p>
           <div class="input-suffix">
@@ -318,9 +305,9 @@
 
       <section class="screen" id="s-q4">
         <div class="card">
-          <div class="q-num">Question 4</div>
+          <div class="q-num">Question 3 <span class="muted">· optional</span></div>
           <h2 class="q-title">What is the quality of your meditation?</h2>
-          <p class="q-help">Be honest and kind with yourself. Quality affects effective meditation.</p>
+          <p class="q-help">Be honest and kind with yourself. Quality affects effective meditation. If you’re not sure, leave it at 75%.</p>
           <div class="quality-value"><b id="qVal">75%</b><span id="qLabel">Good</span></div>
           <label class="sr-only" for="quality">Meditation quality percent</label>
           <input type="range" id="quality" min="0" max="100" step="1" value="75">
@@ -337,17 +324,17 @@
 
       <section class="screen" id="s-q5">
         <div class="card">
-          <div class="q-num">Question 5</div>
-          <h2 class="q-title">By what age would you like to complete your 10,000-hour spiritual goal?</h2>
-          <p class="q-help" id="q5help">Choose an age up to 90.</p>
+          <div class="q-num">Question 4</div>
+          <h2 class="q-title">By when would you like to reach your 10,000-hour goal on the inner journey?</h2>
+          <p class="q-help" id="q5help">Choose a year.</p>
           <div class="input-suffix">
-            <label class="sr-only" for="goalAge">Goal age</label>
-            <input type="number" id="goalAge" inputmode="numeric" min="1" max="90" step="1" value="90">
-            <span class="suffix">years old</span>
+            <label class="sr-only" for="goalYear">Target year</label>
+            <input type="number" id="goalYear" inputmode="numeric" min="2000" max="2100" step="1">
+            <span class="suffix">year</span>
           </div>
-          <div class="chips" id="ageChips"></div>
+          <div class="chips" id="yearChips"></div>
           <div class="error" id="e5" role="alert"></div>
-          <div class="actions"><button class="btn btn-ghost" data-back>Back</button><button class="btn btn-gold" data-next>Reveal my roadmap 🪷</button></div>
+          <div class="actions"><button class="btn btn-ghost" data-back>Back</button><button class="btn btn-gold" data-next>Reveal my journey 🪷</button></div>
         </div>
       </section>
 
@@ -355,7 +342,7 @@
         <div class="card">
           <div class="center" style="margin-bottom:12px">
             <div aria-hidden="true" style="font-size:2rem">🪷</div>
-            <h2 style="font-family:var(--serif);font-size:1.7rem;margin:6px 0 2px;color:var(--purple)">Your Spiritual Roadmap</h2>
+            <h2 style="font-family:var(--serif);font-size:1.7rem;margin:6px 0 2px;color:var(--purple)">Your 10,000-hour journey</h2>
             <p class="muted small" id="asOf" style="margin:0"></p>
           </div>
           <div class="track-card">
@@ -447,11 +434,8 @@
     <a class="tab" href="#learn" data-tab="learn">
       <span class="ic"><svg viewBox="0 0 24 24"><path d="M3 5.5c3-1 6-1 9 1 3-2 6-2 9-1V19c-3-1-6-1-9 1-3-2-6-2-9-1z"/><path d="M12 6.5V20"/></svg></span>Learn
     </a>
-    <a class="tab tab-extra" data-site="/news/" href="https://sosmn.org/news/" data-ext="news">
-      <span class="ic"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7 9h10"/><path d="M7 12.5h10"/><path d="M7 16h6"/></svg></span>Center News
-    </a>
-    <a class="tab tab-extra" data-site="/about/" href="https://sosmn.org/about/" data-ext="about">
-      <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 7.6v.4"/></svg></span>About the Center
+    <a class="tab tab-extra" data-site="/" href="https://sosmn.org/" data-ext="site">
+      <span class="ic"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></span>Back to sosmn.org
     </a>
   </div>
 </nav>
@@ -504,35 +488,14 @@
     <div class="lotus" aria-hidden="true">🪷</div>
     <h1 id="wTitle">Meditation Copilot</h1>
     <p class="tagline">Small moments. Daily practice. Inner transformation.</p>
-    <p class="muted" style="margin:0 0 22px">Sign in to keep your sittings and reflections safe in your own drive, or try it as a guest.</p>
+    <p class="muted" id="welcomeLead" style="margin:0 0 22px">Sign in to start.</p>
     <div class="stack" id="welcomeProviders" style="margin-top:0"></div>
-    <div class="or"><span>or</span></div>
-    <button class="btn btn-ghost btn-block" id="guestBtn" style="min-height:52px">Continue as guest</button>
     <p class="small muted" style="margin:18px 0 0">Prototype only. Not an official or approved Science of Spirituality app.<br>
       <a href="privacy.html" target="_blank" rel="noopener">Privacy notice</a></p>
-    <p class="small welcome-links" style="margin:14px 0 0"><a data-site="/news/" href="https://sosmn.org/news/">📰 Center news &amp; archive</a> · <a data-site="/about/" href="https://sosmn.org/about/">About the center</a></p>
+    <p class="small welcome-links" style="margin:14px 0 0"><a data-site="/" href="https://sosmn.org/">← Back to sosmn.org</a></p>
     <p class="view-switch" role="group" aria-label="Choose layout" style="margin:14px 0 0"></p>
   </div>
 </div>
-
-<!-- Guest warning -->
-<dialog class="sheet" id="guestDlg" aria-labelledby="gTitle">
-  <form method="dialog" class="sheet-body" id="guestForm">
-    <h2 class="sheet-title" id="gTitle" tabindex="-1" autofocus style="outline:none">⚠️ Before you continue as a guest</h2>
-    <p>As a guest, your sittings, reflections and roadmap are stored <b>only on this device</b>. They <b>may be lost at any time</b>, for example if:</p>
-    <ul class="small">
-      <li>browser data or history is cleared,</li>
-      <li>the app is removed or you change phones,</li>
-      <li>on iPhone, Safari removes website data after about 7 days without use (adding the app to your Home Screen helps).</li>
-    </ul>
-    <p class="small">Export a CSV backup regularly from Insights, or sign in later to keep your data in your own drive. Your guest data can be moved into your account when you sign in.</p>
-    <label class="ack"><input type="checkbox" id="guestAck"> I understand my data may be lost</label>
-    <div class="actions">
-      <button type="button" class="btn btn-ghost" id="guestCancel">Back</button>
-      <button type="submit" class="btn btn-primary" id="guestGo" disabled>Continue as guest</button>
-    </div>
-  </form>
-</dialog>
 
 <!-- Admin: create / edit an SOS event -->
 <dialog class="sheet" id="evDlg" aria-labelledby="efHead">
@@ -595,7 +558,8 @@
 <dialog class="sheet" id="goalDlg" aria-labelledby="gHead">
   <form class="sheet-body" id="gForm">
     <h2 class="sheet-title" id="gHead" tabindex="-1" autofocus style="outline:none">Start a challenge</h2>
-    <div class="gtype" id="gTypes" role="radiogroup">
+    <p class="small" id="gLead" style="margin:-4px 0 12px"></p>
+    <div class="gtype" id="gTypes" role="radiogroup" hidden>
       <button type="button" data-k="hours" class="on">⏳ Hours<small>Log a number of hours between two dates (7–365 days). 5 points per hour.</small></button>
       <button type="button" data-k="amrit">🌅 Amrit Vela<small>Meditate at least 15 minutes between 4 and 7 am, every day for 7–365 days. 5 points per day.</small></button>
       <button type="button" data-k="weekly">🗓 Weekly attendance<small>Check in to an SOS event every week, for 2–52 weeks. 15 points per week.</small></button>
@@ -643,24 +607,6 @@
     <div class="error" id="bdErr" role="alert"></div>
     <div class="actions"><button type="button" class="btn btn-ghost" id="bdClose">Close</button></div>
   </div>
-</dialog>
-
-<!-- Admin: featured video on the Today screen -->
-<dialog class="sheet" id="vidDlg" aria-labelledby="vidHead">
-  <form class="sheet-body" id="vidForm">
-    <h2 class="sheet-title" id="vidHead" tabindex="-1" autofocus style="outline:none">Featured today</h2>
-    <p class="small" style="margin:-4px 0 10px">Everyone's Today screen shows one of these, a different one each day. Use official Science of Spirituality videos or sos.org pages only. Up to 14.</p>
-    <div id="vidList"></div>
-    <div class="section-title" style="margin-top:12px">Add</div>
-    <label class="field" for="vidUrl">YouTube link or sos.org page</label>
-    <input type="url" id="vidUrl" class="text-input" placeholder="https://www.youtube.com/watch?v=…" maxlength="300">
-    <label class="field" for="vidTitle">Title</label>
-    <input type="text" id="vidTitle" class="text-input" maxlength="120" placeholder="e.g. Meditation as Medication for the Soul">
-    <label class="field" for="vidCaption">One-line caption <span class="muted">(optional)</span></label>
-    <input type="text" id="vidCaption" class="text-input" maxlength="200">
-    <div class="error" id="vidErr" role="alert"></div>
-    <div class="actions"><button type="button" class="btn btn-ghost" id="vidCancel">Close</button><button type="submit" class="btn btn-primary">Add</button></div>
-  </form>
 </dialog>
 
 <!-- Contact details for SOS events (asked once, at the first RSVP or check-in) -->
@@ -733,15 +679,16 @@
         <button class="btn btn-primary" id="tyYes" type="button">Yes, I am initiated</button>
         <button class="btn btn-soft" id="tyNo" type="button">No, I'm a new seeker</button>
       </div>
-      <p class="small muted" style="margin:14px 0 0">New seekers start with a first challenge: the 21-Day Foundation (10, 15 or 20 minutes a day) or attending 6 sessions in 3 months. Initiates get the full 10,000-hour Roadmap. You can change this anytime in Account &amp; settings.</p>
+      <p class="small muted" style="margin:14px 0 0">Everyone starts with a first challenge, such as the 21-Day Foundation (10, 15 or 20 minutes a day). Initiates can also begin the 10,000-hour journey. If you’re initiated later, tell Copilot on the Roadmap.</p>
     </div>
     <form id="tyForm">
       <div id="tyStep2">
+        <p class="small notice" id="tyOnce" hidden style="margin:0 0 10px">Once you’re an initiate in Copilot you can’t switch back to seeker. The center team may confirm it.</p>
         <label class="field" for="tyDate">When were you initiated?</label>
         <input type="date" id="tyDate" required>
         <label class="field" for="tyBy">By whom?</label>
         <select id="tyBy" required><option value="" disabled selected>Choose…</option><option value="Sant Rajinder Singh Ji Maharaj">Sant Rajinder Singh Ji Maharaj</option><option value="Sant Darshan Singh Ji Maharaj">Sant Darshan Singh Ji Maharaj</option><option value="Sant Kirpal Singh Ji Maharaj">Sant Kirpal Singh Ji Maharaj</option><option value="Baba Sawan Singh Ji Maharaj">Baba Sawan Singh Ji Maharaj</option><option value="Other">Other</option></select>
-        <p class="small muted" style="margin:10px 2px 0">Your initiation date is also used as the start of your meditation journey on the Roadmap. This stays private: it is never included in statistics or diagnostics.</p>
+        <p class="small muted" style="margin:10px 2px 0">Your initiation date is the start of your 10,000-hour journey. It stays private in your own drive: only the word “initiate” is shared with the center, never the date or the Master.</p>
         <div class="error" id="tyErr" role="alert"></div>
         <div class="actions">
           <button type="button" class="btn btn-ghost" id="tyBack">Back</button>
@@ -797,6 +744,7 @@
 <script src="js/sync.js?v=26"></script>
 <script src="js/account.js?v=26"></script>
 <script src="js/profile.js?v=26"></script>
+<script src="js/start.js?v=26"></script>
 <script src="js/app.js?v=26"></script>
 <script src="js/layout.js?v=26" defer></script>
 </body>

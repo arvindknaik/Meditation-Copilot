@@ -276,7 +276,8 @@ for (const f of ['index.html']) { const p = path.join(OUT_ADMIN, f); fs.writeFil
 write(OUT_ADMIN, 'js/admin.js', applyEnv(fs.readFileSync(path.join(OUT_ADMIN, 'js/admin.js'), 'utf8')));
 write(OUT_ADMIN, 'whats-new.html', `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>What’s new · Admin</title><link rel="stylesheet" href="/css/site.css?v=${cacheKey}"><link rel="stylesheet" href="/css/admin.css?v=${cacheKey}"></head>
 <body><main class="adm-main" style="max-width:760px;margin:0 auto;padding:24px"><p><a href="/">‹ Admin</a></p><h1>What’s new</h1><p class="small muted">All changes, including admin-only ones. You are using ${E(versionLabel)}.</p><div class="card whats-new">${whatsNew('admin')}</div></main></body></html>`);
-write(OUT_ADMIN, '_headers', '/*\n  X-Robots-Tag: noindex, nofollow\n  X-Frame-Options: DENY\n  Referrer-Policy: same-origin\n');
+// The admin page itself is always re-checked, so a new release shows without a manual refresh (its scripts carry ?v=… and can be cached)
+write(OUT_ADMIN, '_headers', '/*\n  X-Robots-Tag: noindex, nofollow\n  X-Frame-Options: DENY\n  Referrer-Policy: same-origin\n/\n  Cache-Control: no-cache\n/index.html\n  Cache-Control: no-cache\n/whats-new.html\n  Cache-Control: no-cache\n');
 write(OUT_ADMIN, 'robots.txt', 'User-agent: *\nDisallow: /\n');
 write(OUT_ADMIN, 'build-info.json', JSON.stringify(info, null, 1));
 

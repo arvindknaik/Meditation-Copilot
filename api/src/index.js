@@ -190,7 +190,8 @@ function canAttend(e, u, admin) { return levelsFor(u, admin).includes(e.access |
 async function meOf(s, u, env) {
   const role = await roleOf(env, s.email);
   return { id: s.uid, email: s.email, name: (u && u.name) || s.name, role: role || null, isAdmin: ADMIN_ROLES.includes(role), isStaff: STAFF_ROLES.includes(role),
-    category: (u && u.category) || 'seeker', blocked: !!(u && u.blocked_at) };
+    category: (u && u.category) || 'seeker', blocked: !!(u && u.blocked_at),
+    initiateConfirmed: !!(u && u.initiate_confirmed_at), initiateRevoked: !!(u && u.initiate_revoked_at) };
 }
 const esc = (v) => String(v == null ? '' : v);
 // Plain-text message: collapse whitespace, strip control characters, cap length
@@ -276,7 +277,7 @@ function publicEvent(ev, opts = {}) {
     venue: ev.venue, address: ev.address, startsAt: ev.starts_at, endsAt: ev.ends_at, timezone: ev.timezone,
     access: ev.access || 'public', status: ev.status, going: ev.going || 0, checkedIn: ev.checked_in || 0,
     seriesId: ev.series_id || null, repeats: ev.series_freq || null, flyerId: ev.flyer_id || null,
-    likes: ev.likes || 0, messages: ev.message_count || 0, hero: !!ev.is_hero,
+    likes: ev.likes || 0, messages: 0, hero: !!ev.is_hero, featured: !!ev.is_hero,
     kind: ev.kind || 'workshop', children: !!ev.children
   };
   if (opts.signedIn) out.onlineUrl = ev.online_url || null;
@@ -295,8 +296,12 @@ const EVENT_COLS = `e.*, (SELECT COUNT(*) FROM rsvps r WHERE r.event_id = e.id A
   (SELECT COUNT(*) FROM checkins c WHERE c.event_id = e.id) AS checked_in,
   (SELECT COALESCE(SUM(c.guests), 0) FROM checkins c WHERE c.event_id = e.id) AS checked_in_guests,
   (SELECT freq FROM series sr WHERE sr.id = e.series_id) AS series_freq,
-  (SELECT COUNT(*) FROM likes l WHERE l.event_id = e.id) AS likes,
-  (SELECT COUNT(*) FROM messages mg WHERE mg.event_id = e.id AND mg.deleted_at IS NULL) AS message_count`;
+  (SELECT COUNT(*) FROM likes l WHERE l.event_id = e.id) AS likes`;
+async function favsOf(db, uid) {
+  const out = { event: new Set(), series: new Set() };
+  try { (await db.prepare('SELECT kind, ref_id FROM favorites WHERE user_id = ?1').bind(uid).all()).results.forEach((f) => out[f.kind] && out[f.kind].add(f.ref_id)); } catch { /* before migration 0013 */ }
+  return out;
+}
 const MAX_OCCURRENCES = 120;   // about two years of weekly events
 
 /* ---- contact details ---- */
@@ -385,6 +390,7 @@ const MILESTONES = ['challenge_done', 'questions_clear', 'met_master'];
 const ORIENTATION = { workshops: 5, challenges: 2 };        // a Seeker's orientation: 5 workshops and 2 challenges
 const SATSANGI_HINT = 6;                                     // satsangs in 90 days that suggest flagging someone as Satsangi
 const DAY_MS = 86400000;
+const NOTE_DAYS = 7;                                         // visitor log: notes can be left until 7 days after the event
 // Stage (only moves up): Potential = we only have their details · New = signed up for an event, not come yet ·
 // Seeker = has come · Satsangi = flagged by an admin (sees Community events) · Initiate = permanent
 function calcStage(r) {
@@ -408,6 +414,7 @@ async function journeyRows(db, t, userId) {
   const res = await db.prepare(`SELECT u.id AS userId, u.name, u.email, u.phone, u.category, u.created_at AS createdAt, u.last_seen_at AS lastSeenAt,
       u.blocked_at AS blockedAt, u.journey_level AS override, u.mentor_id AS mentorId, (SELECT m.name FROM users m WHERE m.id = u.mentor_id) AS mentorName,
       u.provider_name AS providerName, u.name_edited AS nameEdited, u.zip, u.declined_at AS declinedAt, u.passive_at AS passiveAt, u.passive_reason AS passiveReason, u.sevadar,
+      u.initiate_confirmed_at AS initiateConfirmedAt, u.initiate_revoked_at AS initiateRevokedAt,
       (SELECT COUNT(*) FROM challenge_shares cs WHERE cs.user_id = u.id) AS shares,
       COUNT(c.event_id) AS visits, MIN(c.checked_in_at) AS firstVisitAt, MAX(c.checked_in_at) AS lastVisitAt,
       COALESCE(SUM(c.guests), 0) AS guestsBrought,
@@ -639,21 +646,89 @@ async function handle(request, env) {
     const rows = await db.prepare(`SELECT c.event_id AS eventId, c.method, c.checked_in_at AS checkedInAt, e.format, e.title, e.starts_at AS startsAt
       FROM checkins c JOIN events e ON e.id = c.event_id WHERE c.user_id = ?1 ORDER BY c.checked_in_at`).bind(s.uid).all();
     const row = await db.prepare('SELECT * FROM users WHERE id = ?1').bind(s.uid).first();
-    const msgs = (await db.prepare('SELECT DISTINCT event_id AS eventId FROM messages WHERE user_id = ?1 AND deleted_at IS NULL').bind(s.uid).all()).results;
-    return J({ user: await meOf(s, row, env), contact: row ? contactOf(row) : null, checkins: rows.results, messageEvents: msgs.map((x) => x.eventId) });
+    const notes = (await db.prepare('SELECT event_id AS eventId FROM event_notes WHERE user_id = ?1').bind(s.uid).all()).results;
+    return J({ user: await meOf(s, row, env), contact: row ? contactOf(row) : null, checkins: rows.results, noteEvents: notes.map((x) => x.eventId), messageEvents: [] });
   }
 
   // Self-declared Seeker / Initiate from the phone's profile (only the word; initiation details never come here).
   // Seeker Friend is set by an admin and is kept when the phone says 'seeker'.
+  // v0.23: becoming an Initiate is one way (the phone can't switch back); an admin can revoke it, and after that only an admin can set it again.
   if (path === '/api/me/category' && request.method === 'PUT') {
     const s = await requireUser(request, env);
     const c = (await body(request)).category;
     if (!['seeker', 'initiate'].includes(c)) throw bad('Category must be seeker or initiate');
     const u = await loadUser(db, s.uid);
     if (!u) throw new HttpError(401, 'Please sign in again');
-    const next = (c === 'seeker' && u.category === 'friend') ? 'friend' : c;
+    if (c === 'initiate' && u.category !== 'initiate' && u.initiate_revoked_at) throw new HttpError(403, 'Please speak with the center team about your initiation details.');
+    const next = u.category === 'initiate' ? 'initiate' : (c === 'seeker' && u.category === 'friend') ? 'friend' : c;
     if (next !== u.category) await db.prepare('UPDATE users SET category = ?2, category_at = ?3 WHERE id = ?1').bind(s.uid, next, now()).run();
-    return J({ category: next });
+    return J({ category: next, initiateRevoked: !!u.initiate_revoked_at && next !== 'initiate' });
+  }
+
+  /* ---- favourites: events and whole series (personal) ---- */
+  if (path === '/api/me/favorites' && request.method === 'GET') {
+    const { s, u, admin } = await requireMember(request, env, db);
+    const favs = (await db.prepare('SELECT kind, ref_id AS refId, created_at AS createdAt FROM favorites WHERE user_id = ?1').bind(s.uid).all()).results;
+    const evIds = favs.filter((f) => f.kind === 'event').map((f) => f.refId), srIds = favs.filter((f) => f.kind === 'series').map((f) => f.refId);
+    const vis = sqlIn(levelsFor(u, admin)), t = now();
+    const list = [];
+    if (evIds.length) {
+      const rows = (await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.id IN (SELECT value FROM json_each(?1)) AND e.access IN ${vis} ORDER BY e.starts_at`).bind(JSON.stringify(evIds)).all()).results;
+      rows.forEach((e) => list.push(e));
+    }
+    const series = [];
+    for (const sid of srIds) {
+      const sr = await db.prepare('SELECT id, freq FROM series WHERE id = ?1').bind(sid).first();
+      if (!sr) continue;
+      const rows = (await db.prepare(`SELECT ${EVENT_COLS} FROM events e WHERE e.series_id = ?1 AND e.ends_at >= ?2 AND e.access IN ${vis} ORDER BY e.starts_at LIMIT 6`).bind(sid, t).all()).results;
+      const first = rows[0] || await db.prepare('SELECT title FROM events WHERE series_id = ?1 ORDER BY starts_at DESC LIMIT 1').bind(sid).first();
+      series.push({ id: sid, freq: sr.freq, title: first ? first.title : 'Repeating event', next: rows[0] ? rows[0].starts_at : null });
+      rows.forEach((e) => { if (!list.some((x) => x.id === e.id)) list.push(e); });
+    }
+    const myCk = {};
+    (await db.prepare('SELECT event_id, checked_in_at FROM checkins WHERE user_id = ?1').bind(s.uid).all()).results.forEach((r) => { myCk[r.event_id] = r.checked_in_at; });
+    list.sort((a, b) => a.starts_at - b.starts_at);
+    return J({ favorites: favs, series, events: list.map((e) => ({ ...publicEvent(e, { signedIn: true, admin, myCheckin: myCk[e.id] || null }), fav: evIds.includes(e.id) ? 'event' : 'series' })) });
+  }
+  if ((m = /^\/api\/me\/favorites\/(event|series)\/([\w-]+)$/.exec(path)) && (request.method === 'PUT' || request.method === 'DELETE')) {
+    const { s, u, admin } = await requireMember(request, env, db);
+    if (request.method === 'PUT') {
+      const e = m[1] === 'event' ? await db.prepare('SELECT id, access FROM events WHERE id = ?1').bind(m[2]).first()
+        : await db.prepare('SELECT e.id, e.access FROM events e WHERE e.series_id = ?1 ORDER BY e.starts_at DESC LIMIT 1').bind(m[2]).first();
+      if (!e || !canAttend(e, u, admin)) throw new HttpError(404, m[1] === 'event' ? 'Event not found' : 'Series not found');
+      const n = (await db.prepare('SELECT COUNT(*) AS n FROM favorites WHERE user_id = ?1').bind(s.uid).first()).n;
+      if (n >= 200) throw bad('You have 200 favourites. Remove some first.');
+      await db.prepare('INSERT OR IGNORE INTO favorites (user_id, kind, ref_id, created_at) VALUES (?1, ?2, ?3, ?4)').bind(s.uid, m[1], m[2], now()).run();
+    } else await db.prepare('DELETE FROM favorites WHERE user_id = ?1 AND kind = ?2 AND ref_id = ?3').bind(s.uid, m[1], m[2]).run();
+    return J({ ok: true, fav: request.method === 'PUT' });
+  }
+
+  /* ---- visitor log: one private note per event, after checking in (until 7 days after the event) ---- */
+  if ((m = /^\/api\/events\/([\w-]+)\/note$/.exec(path)) && request.method === 'GET') {
+    const { s } = await requireMember(request, env, db);
+    const e = await db.prepare('SELECT id, ends_at FROM events WHERE id = ?1').bind(m[1]).first();
+    if (!e) throw new HttpError(404, 'Event not found');
+    const ck = await db.prepare('SELECT checked_in_at FROM checkins WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).first();
+    const n = await db.prepare('SELECT body, share_ok, updated_at FROM event_notes WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).first();
+    const until = e.ends_at + NOTE_DAYS * DAY_MS;
+    return J({ note: n ? { body: n.body, shareOk: !!n.share_ok, updatedAt: n.updated_at } : null, checkedIn: !!ck, until, canWrite: !!ck && now() <= until });
+  }
+  if ((m = /^\/api\/events\/([\w-]+)\/note$/.exec(path)) && (request.method === 'PUT' || request.method === 'DELETE')) {
+    const { s } = await requireMember(request, env, db);
+    const e = await db.prepare('SELECT id, ends_at FROM events WHERE id = ?1').bind(m[1]).first();
+    if (!e) throw new HttpError(404, 'Event not found');
+    if (!(await db.prepare('SELECT 1 FROM checkins WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).first())) throw new HttpError(403, 'You can leave a note after checking in to this event.');
+    if (now() > e.ends_at + NOTE_DAYS * DAY_MS) throw bad('Notes can be left until ' + NOTE_DAYS + ' days after the event.');
+    if (request.method === 'DELETE') { await db.prepare('DELETE FROM event_notes WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).run(); return J({ ok: true, note: null }); }
+    const b = await body(request);
+    const text = esc(b.body).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    if (!text) throw bad('Write your note first.');
+    if (text.length > 500) throw bad('Notes can be up to 500 characters.');
+    const t = now(), shareOk = b.shareOk ? 1 : 0;
+    await db.prepare(`INSERT INTO event_notes (id, event_id, user_id, body, share_ok, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+      ON CONFLICT(event_id, user_id) DO UPDATE SET body = ?4, share_ok = ?5, is_public = CASE WHEN ?5 = 1 THEN is_public ELSE 0 END, reviewed_at = NULL, reviewed_by = NULL, updated_at = ?6`)
+      .bind(crypto.randomUUID(), e.id, s.uid, text, shareOk, t).run();
+    return J({ ok: true, note: { body: text, shareOk: !!shareOk, updatedAt: t } });
   }
 
   // Copilot: the person chose to let the center know they finished a challenge (title and date only)
@@ -762,7 +837,7 @@ async function handle(request, env) {
   }
   if (path === '/api/admin/feedback' && request.method === 'GET') {
     await requireAdmin(request, env);
-    const rows = (await db.prepare(`SELECT f.id, f.kind, f.rating, f.body, f.contact, f.version, f.platform, f.created_at AS createdAt, u.name, u.email
+    const rows = (await db.prepare(`SELECT f.id, f.kind, f.rating, f.body, f.contact, f.version, f.platform, f.created_at AS createdAt, f.reviewed_at AS reviewedAt, u.name, u.email
       FROM feedback f LEFT JOIN users u ON u.id = f.user_id ORDER BY f.created_at DESC LIMIT 500`).all()).results;
     const avg = await db.prepare(`SELECT AVG(rating) AS avg, COUNT(*) AS n FROM feedback WHERE kind = 'rating'`).first();
     if (url.searchParams.get('format') === 'csv') {
@@ -771,6 +846,49 @@ async function handle(request, env) {
       return new Response(lines.map((l) => l.map(csvCell).join(',')).join('\r\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="feedback.csv"', ...cors(request, env) } });
     }
     return J({ feedback: rows, averageRating: avg.avg ? Math.round(avg.avg * 10) / 10 : null, ratings: avg.n });
+  }
+  if ((m = /^\/api\/admin\/feedback\/([\w-]+)$/.exec(path)) && request.method === 'PATCH') {
+    const s = await requireAdmin(request, env);
+    const b = await body(request);
+    if (!(await db.prepare('SELECT 1 FROM feedback WHERE id = ?1').bind(m[1]).first())) throw new HttpError(404, 'Suggestion not found');
+    await db.prepare('UPDATE feedback SET reviewed_at = ?2 WHERE id = ?1').bind(m[1], b.reviewed ? now() : null).run();
+    await logAdmin(env, s, 'suggestion_review', m[1], b.reviewed ? 'reviewed' : 'not reviewed');
+    return J({ ok: true });
+  }
+
+  /* ---- visitor log (admins): notes people left after checking in ---- */
+  if (path === '/api/admin/visitor-log' && request.method === 'GET') {
+    await requireAdmin(request, env);
+    const q = (url.searchParams.get('q') || '').trim().toLowerCase(), show = url.searchParams.get('show') || '';
+    let rows = (await db.prepare(`SELECT n.id, n.body, n.share_ok AS shareOk, n.is_public AS isPublic, n.source, n.reviewed_at AS reviewedAt, n.reviewed_by AS reviewedBy,
+        n.created_at AS createdAt, n.updated_at AS updatedAt, u.id AS userId, u.name, u.email, e.id AS eventId, e.title AS eventTitle, e.starts_at AS eventAt
+      FROM event_notes n JOIN users u ON u.id = n.user_id JOIN events e ON e.id = n.event_id ORDER BY n.updated_at DESC LIMIT 1000`).all()).results;
+    const unreviewed = rows.filter((r) => !r.reviewedAt).length;
+    if (show === 'new') rows = rows.filter((r) => !r.reviewedAt);
+    if (show === 'public') rows = rows.filter((r) => r.isPublic);
+    if (show === 'shareable') rows = rows.filter((r) => r.shareOk);
+    if (q) rows = rows.filter((r) => [r.name, r.email, r.eventTitle, r.body].some((v) => String(v || '').toLowerCase().includes(q)));
+    rows = rows.map((r) => ({ ...r, shareOk: !!r.shareOk, isPublic: !!r.isPublic }));
+    if (url.searchParams.get('format') === 'csv') {
+      const lines = [['date', 'event', 'event date', 'name', 'email', 'note', 'may share', 'public', 'reviewed', 'source']].concat(rows.map((r) =>
+        [new Date(r.updatedAt).toISOString(), r.eventTitle, new Date(r.eventAt).toISOString().slice(0, 10), r.name || '', r.email || '', r.body, r.shareOk ? 'yes' : '', r.isPublic ? 'yes' : '', r.reviewedAt ? 'yes' : '', r.source]));
+      return new Response(lines.map((l) => l.map(csvCell).join(',')).join('\r\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="visitor-log.csv"', ...cors(request, env) } });
+    }
+    return J({ notes: rows.slice(0, 500), total: rows.length, unreviewed });
+  }
+  if ((m = /^\/api\/admin\/visitor-log\/([\w-]+)$/.exec(path)) && request.method === 'PATCH') {
+    const s = await requireAdmin(request, env);
+    const b = await body(request), t = now();
+    const n = await db.prepare('SELECT id, share_ok FROM event_notes WHERE id = ?1').bind(m[1]).first();
+    if (!n) throw new HttpError(404, 'Note not found');
+    const st = [], what = [];
+    if (b.reviewed !== undefined) { st.push(db.prepare('UPDATE event_notes SET reviewed_at = ?2, reviewed_by = ?3 WHERE id = ?1').bind(n.id, b.reviewed ? t : null, b.reviewed ? s.email : null)); what.push(b.reviewed ? 'reviewed' : 'not reviewed'); }
+    if (b.public !== undefined) {
+      if (b.public && !n.share_ok) throw bad('This person didn’t allow the center to share their note.');
+      st.push(db.prepare('UPDATE event_notes SET is_public = ?2 WHERE id = ?1').bind(n.id, b.public ? 1 : 0)); what.push(b.public ? 'public' : 'not public');
+    }
+    if (st.length) { await db.batch(st); await logAdmin(env, s, 'note_review', n.id, what.join(', ')); }
+    return J({ ok: true });
   }
 
   /* ---- center settings (featured content on Today) ---- */
@@ -879,7 +997,18 @@ async function handle(request, env) {
       (await db.prepare('SELECT event_id, status, guests FROM rsvps WHERE user_id = ?1').bind(s.uid).all()).results.forEach((r) => { mine[r.event_id] = r.status; myG[r.event_id] = r.guests || 0; });
       (await db.prepare('SELECT event_id, checked_in_at FROM checkins WHERE user_id = ?1').bind(s.uid).all()).results.forEach((r) => { myCk[r.event_id] = r.checked_in_at; });
     }
-    return J({ events: rows.results.map((e) => publicEvent(e, { signedIn: !!s, admin, myRsvp: s ? mine[e.id] || null : undefined, myCheckin: s ? myCk[e.id] || null : undefined, myGuests: s ? myG[e.id] || 0 : undefined })) });
+    const fav = s ? await favsOf(db, s.uid) : null;
+    const out = { events: rows.results.map((e) => {
+      const o = publicEvent(e, { signedIn: !!s, admin, myRsvp: s ? mine[e.id] || null : undefined, myCheckin: s ? myCk[e.id] || null : undefined, myGuests: s ? myG[e.id] || 0 : undefined });
+      if (fav) o.myFav = fav.event.has(e.id) ? 'event' : e.series_id && fav.series.has(e.series_id) ? 'series' : null;
+      return o;
+    }) };
+    // v0.24 calendar lists: the nearest event after the window and before it, so "Show more" can jump over empty weeks
+    if (url.searchParams.get('edges') === '1') {
+      out.next = (await db.prepare(`SELECT MIN(e.starts_at) AS t FROM events e WHERE e.starts_at > ?1 AND e.status != 'cancelled' AND e.access IN ${vis}`).bind(to).first()).t || null;
+      out.prev = (await db.prepare(`SELECT MAX(e.starts_at) AS t FROM events e WHERE e.ends_at < ?1 AND e.status != 'cancelled' AND e.access IN ${vis}`).bind(from).first()).t || null;
+    }
+    return J(out);
   }
 
   if ((m = /^\/api\/events\/([\w-]+)$/.exec(path)) && request.method === 'GET') {
@@ -897,32 +1026,28 @@ async function handle(request, env) {
       myLike = !!(await db.prepare('SELECT 1 FROM likes WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).first());
     }
     const out = publicEvent(e, { signedIn: !!s, admin, myRsvp, myCheckin, myGuests });
-    if (s) out.myLike = myLike;
+    if (s) {
+      out.myLike = myLike;
+      const fav = await favsOf(db, s.uid);
+      out.myFav = fav.event.has(e.id) ? 'event' : e.series_id && fav.series.has(e.series_id) ? 'series' : null;
+      out.favEvent = fav.event.has(e.id); out.favSeries = !!(e.series_id && fav.series.has(e.series_id));
+      out.noteUntil = e.ends_at + NOTE_DAYS * DAY_MS;
+    }
     return J({ event: out });
   }
 
   /* ---- likes and messages (signed-in members who can see the event) ---- */
+  // v0.23: public reflections are retired (they moved into the visitor log). Older apps still ask: likes only, posting is refused.
   if ((m = /^\/api\/events\/([\w-]+)\/messages$/.exec(path)) && request.method === 'GET') {
     const { s, u, admin } = await requireMember(request, env, db);
     const e = await db.prepare('SELECT id, access FROM events WHERE id = ?1').bind(m[1]).first();
     if (!e || !canAttend(e, u, admin)) throw new HttpError(404, 'Event not found');
-    const rows = (await db.prepare(`SELECT mg.id, mg.user_id AS userId, u.name, mg.body, mg.created_at AS createdAt FROM messages mg JOIN users u ON u.id = mg.user_id
-      WHERE mg.event_id = ?1 AND mg.deleted_at IS NULL AND u.blocked_at IS NULL ORDER BY mg.created_at DESC LIMIT 200`).bind(e.id).all()).results;
     const likes = (await db.prepare('SELECT COUNT(*) AS n FROM likes WHERE event_id = ?1').bind(e.id).first()).n;
     const myLike = !!(await db.prepare('SELECT 1 FROM likes WHERE event_id = ?1 AND user_id = ?2').bind(e.id, s.uid).first());
-    return J({ messages: rows.map((r) => ({ ...r, mine: r.userId === s.uid })), likes, myLike });
+    return J({ messages: [], likes, myLike });
   }
   if ((m = /^\/api\/events\/([\w-]+)\/messages$/.exec(path)) && request.method === 'POST') {
-    const { s, u, admin } = await requireMember(request, env, db);
-    const e = await db.prepare('SELECT id, access FROM events WHERE id = ?1').bind(m[1]).first();
-    if (!e || !canAttend(e, u, admin)) throw new HttpError(404, 'Event not found');
-    const text = cleanMessage((await body(request)).body);
-    const recent = (await db.prepare('SELECT COUNT(*) AS n FROM messages WHERE user_id = ?1 AND created_at > ?2').bind(s.uid, now() - 10 * MIN).first()).n;
-    if (recent >= 5) throw bad('Please wait a few minutes before posting more.');
-    const id = crypto.randomUUID(), t = now();
-    const first = !(await db.prepare('SELECT 1 FROM messages WHERE event_id = ?1 AND user_id = ?2 AND deleted_at IS NULL').bind(e.id, s.uid).first());
-    await db.prepare('INSERT INTO messages (id, event_id, user_id, body, created_at) VALUES (?1, ?2, ?3, ?4, ?5)').bind(id, e.id, s.uid, text, t).run();
-    return J({ message: { id, userId: s.uid, name: u.name, body: text, createdAt: t, mine: true }, firstOnEvent: first }, 201);
+    throw new HttpError(410, 'Reflections have moved: after checking in you can leave a note for the center on the event page.');
   }
   if ((m = /^\/api\/events\/([\w-]+)\/messages\/([\w-]+)$/.exec(path)) && request.method === 'DELETE') {
     const { s, admin } = await requireMember(request, env, db);
@@ -1324,17 +1449,12 @@ async function handle(request, env) {
 
   /* ---------------- admin area (v0.15) ---------------- */
 
-  // Hero event on Today: one at a time
+  // Featured events (v0.23: several at a time). They stay featured after they're over (shown under Recent events) until an admin removes them.
   if ((m = /^\/api\/admin\/events\/([\w-]+)\/hero$/.exec(path)) && (request.method === 'POST' || request.method === 'DELETE')) {
     const s = await requireAdmin(request, env);
     const ev = await db.prepare('SELECT id, center_id, title FROM events WHERE id = ?1').bind(m[1]).first();
     if (!ev) throw new HttpError(404, 'Event not found');
-    if (request.method === 'POST') {
-      await db.batch([
-        db.prepare('UPDATE events SET is_hero = 0 WHERE center_id = ?1 AND is_hero = 1').bind(ev.center_id),
-        db.prepare('UPDATE events SET is_hero = 1 WHERE id = ?1').bind(ev.id)
-      ]);
-    } else await db.prepare('UPDATE events SET is_hero = 0 WHERE id = ?1').bind(ev.id).run();
+    await db.prepare('UPDATE events SET is_hero = ?2 WHERE id = ?1').bind(ev.id, request.method === 'POST' ? 1 : 0).run();
     await logAdmin(env, s, request.method === 'POST' ? 'hero_set' : 'hero_clear', ev.id, ev.title);
     return J({ ok: true, hero: request.method === 'POST' });
   }
@@ -1357,7 +1477,7 @@ async function handle(request, env) {
         (SELECT COUNT(*) FROM rsvps WHERE updated_at >= ?1 AND status = 'going') AS rsvps30,
         (SELECT COUNT(*) FROM checkins WHERE checked_in_at >= ?1) AS checkins30,
         (SELECT COUNT(*) FROM events WHERE starts_at >= ?2 AND status = 'scheduled') AS upcoming,
-        (SELECT COUNT(*) FROM messages WHERE created_at >= ?1 AND deleted_at IS NULL) AS messages30,
+        (SELECT COUNT(*) FROM event_notes WHERE created_at >= ?1) AS messages30,
         (SELECT COUNT(*) FROM buddies WHERE status = 'accepted') AS buddyPairs,
         (SELECT ROUND(AVG(rating), 1) FROM feedback WHERE kind = 'rating') AS rating,
         (SELECT COUNT(*) FROM feedback WHERE created_at >= ?1) AS feedback30`).bind(t - 30 * D, t).first();
@@ -1376,7 +1496,7 @@ async function handle(request, env) {
     const history = (await db.prepare(`SELECT e.id, e.title, e.starts_at AS startsAt, e.format, e.status, r.status AS rsvp, r.updated_at AS rsvpAt, c.checked_in_at AS checkedInAt, c.method
       FROM events e LEFT JOIN rsvps r ON r.event_id = e.id AND r.user_id = ?1 LEFT JOIN checkins c ON c.event_id = e.id AND c.user_id = ?1
       WHERE r.user_id IS NOT NULL OR c.user_id IS NOT NULL ORDER BY e.starts_at DESC LIMIT 200`).bind(uid).all()).results;
-    const extra = await db.prepare(`SELECT (SELECT COUNT(*) FROM messages WHERE user_id = ?1 AND deleted_at IS NULL) AS messages,
+    const extra = await db.prepare(`SELECT (SELECT COUNT(*) FROM event_notes WHERE user_id = ?1) AS messages,
         (SELECT COUNT(*) FROM feedback WHERE user_id = ?1) AS feedback,
         (SELECT COUNT(*) FROM buddies WHERE status = 'accepted' AND (inviter_id = ?1 OR invitee_id = ?1)) AS buddies`).bind(uid).first();
     await logAdmin(env, s, 'person_view', uid, u.name);
@@ -1392,7 +1512,8 @@ async function handle(request, env) {
     intros: r.intros, workshops: r.workshops, workshops90: r.workshops90, satsangs: r.satsangs, satsangs90: r.satsangs90, darshans: r.darshans, retreats: r.retreats,
     challenges: r.challenges, orientationDone: r.orientationDone, orientation: ORIENTATION,
     rsvps: r.rsvps, viewed: r.viewed, milestones: r.milestones, mentorId: r.mentorId || null, mentorName: r.mentorName || null,
-    createdAt: r.createdAt, lastSeenAt: r.lastSeenAt, blocked: !!r.blockedAt });
+    createdAt: r.createdAt, lastSeenAt: r.lastSeenAt, blocked: !!r.blockedAt,
+    initiateConfirmed: !!r.initiateConfirmedAt, initiateConfirmedAt: r.initiateConfirmedAt || null, initiateRevoked: !!r.initiateRevokedAt });
 
   // Journey overview: how many people at each level, who is drifting; optional filtered list
   if (path === '/api/admin/journey' && request.method === 'GET') {
@@ -1448,9 +1569,18 @@ async function handle(request, env) {
       // Satsangi and Initiate are the person's category (they decide which events they see); the others are a hand-set stage
       if (stage !== null && !STAGES.includes(stage)) throw bad('Stage must be one of: ' + STAGES.join(', '));
       const cat = stage === 'satsangi' ? 'friend' : stage === 'initiate' ? 'initiate' : 'seeker';
+      const cur = await loadUser(db, uid);
       stmts.push(db.prepare('UPDATE users SET category = ?2, category_at = ?3 WHERE id = ?1 AND category != ?2').bind(uid, cat, t));
+      // An admin setting Initiate confirms it; moving an Initiate to another stage revokes it (they can't declare it again on their phone)
+      if (cat === 'initiate') stmts.push(db.prepare('UPDATE users SET initiate_confirmed_at = COALESCE(initiate_confirmed_at, ?2), initiate_revoked_at = NULL WHERE id = ?1').bind(uid, t));
+      else if (cur.category === 'initiate') { stmts.push(db.prepare('UPDATE users SET initiate_confirmed_at = NULL, initiate_revoked_at = ?2 WHERE id = ?1').bind(uid, t)); what.push('initiate revoked'); }
       stmts.push(db.prepare('UPDATE users SET journey_level = ?2, journey_set_by = ?3, journey_set_at = ?4 WHERE id = ?1').bind(uid, SET_STAGES.includes(stage) ? stage : null, s.email, t));
       what.push('stage ' + (stage || 'auto'));
+    }
+    if (b.confirmInitiate !== undefined) {
+      const cur = await loadUser(db, uid);
+      if (b.confirmInitiate && cur.category !== 'initiate') throw bad('Only an Initiate can be confirmed');
+      stmts.push(db.prepare('UPDATE users SET initiate_confirmed_at = ?2 WHERE id = ?1').bind(uid, b.confirmInitiate ? t : null)); what.push(b.confirmInitiate ? 'initiate confirmed' : 'initiate not confirmed');
     }
     if (b.passive !== undefined) {
       const reason = b.passive ? str(b.passiveReason || '', 200) : null;

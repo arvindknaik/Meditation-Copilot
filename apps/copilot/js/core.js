@@ -40,8 +40,17 @@
   };
 
   /* ---------- Profile (roadmap answers) ---------- */
-  var DEFAULT_PROFILE = { dob: '', start: '', minutes: '', quality: 75, goalAge: 90 };
+  // v0.23: the 10,000-hour journey asks for a target year (no date of birth). goalYear replaces dob + goalAge;
+  // journey = { startedOn } once an initiate begins the (optional, lifelong) 10,000-hour journey.
+  var DEFAULT_PROFILE = { dob: '', start: '', minutes: '', quality: 75, goalAge: 90, goalYear: '' };
   MC.profile = Object.assign({}, DEFAULT_PROFILE, MC.store.get(KEYS.profile, {}));
+  MC.upgradeProfile = function (p) {
+    p = p || MC.profile;
+    if (!p.goalYear && p.dob && p.goalAge) { var d = MC.parseDate(p.dob); if (d) p.goalYear = d.getFullYear() + Number(p.goalAge); }
+    // Initiates who had already planned their 10,000 hours before v0.23 are on the journey
+    if (p.userType === 'initiated' && !p.journey && p.start && p.minutes !== '' && p.goalYear) p.journey = { startedOn: MC.toISO(MC.today()), carried: true };
+    return p;
+  };
   var meta = Object.assign({ profileUpdatedAt: 0, settingsUpdatedAt: 0 }, MC.store.get(KEYS.meta, {}));
   function saveMeta() { MC.store.set(KEYS.meta, meta); }
   // Name for greetings: what they typed in Account, else the name from their Google/Microsoft sign-in (kept by events.js)
@@ -56,12 +65,13 @@
     MC.profile = Object.assign({}, DEFAULT_PROFILE); MC.store.del(KEYS.profile);
     meta.profileUpdatedAt = Date.now(); saveMeta(); MC.emit('changed');
   };
+  MC.goalDate = function (p) { p = p || MC.profile; return p.goalYear ? new Date(Number(p.goalYear), 11, 31) : null; };
   MC.hasProfile = function () {
     var p = MC.profile;
-    if (!(p.dob && p.start && p.minutes !== '' && p.goalAge)) return false;
-    var dob = MC.parseDate(p.dob);
-    return !!dob && MC.addYears(dob, Number(p.goalAge)) > MC.today();
+    if (!(p.start && p.minutes !== '' && p.goalYear)) return false;
+    return MC.goalDate(p) > MC.today();
   };
+  MC.MAX_YEARS = 70;                                     // the furthest target: 70 years from today
 
   /* ---------- Settings ---------- */
   var DEFAULT_SETTINGS = { dailyTarget: null, preset: 30, startBell: true, endBell: true, lastQuality: null };
@@ -229,8 +239,8 @@
      otherwise the profile average. */
   MC.compute = function (extraMinPerDay) {
     var p = MC.profile, t = MC.today();
-    var dob = MC.parseDate(p.dob), start = MC.parseDate(p.start);
-    var profMin = Number(p.minutes), profQ = Number(p.quality), goalAge = Number(p.goalAge);
+    var start = MC.parseDate(p.start);
+    var profMin = Number(p.minutes), profQ = Number(p.quality), goalYear = Number(p.goalYear);
     var profEff = profMin * profQ / 100;
 
     var list = sessions.slice().sort(function (a, b) { return a.start - b.start; });
@@ -265,8 +275,7 @@
     var extra = Number(extraMinPerDay) || 0;
     var effDaily = paceEff + extra * paceQ / 100;
 
-    var currentAge = MC.ymDiff(dob, t);
-    var goalDate = MC.addYears(dob, goalAge);
+    var goalDate = MC.goalDate(p) || MC.addYears(t, 1);
     var remainingDays = Math.max(1, MC.daysBetween(t, goalDate));
     var required = remaining * 60 / remainingDays;
     var done = remaining <= 0;
@@ -278,21 +287,20 @@
     } else if (effDaily > 0) {
       projDate = MC.addDays(t, Math.ceil(remaining * 60 / effDaily));
     }
-    var projAge = projDate ? MC.ymDiff(dob, projDate) : null;
-    var projBeyond = !projAge || projAge.y >= MC.MAX_AGE + 1;
+    var projBeyond = !projDate || projDate > MC.addYears(t, MC.MAX_YEARS);
     var aheadBy = (ahead && projDate && projDate <= goalDate) ? MC.ymDiff(projDate, goalDate) : null;
     var extraEff = ahead ? 0 : Math.ceil(required - effDaily);
     var extraActual = (!ahead && paceQ > 0) ? Math.ceil((required - effDaily) / (paceQ / 100)) : null;
 
     return {
-      t: t, dob: dob, start: start, goalAge: goalAge,
+      t: t, start: start, goalYear: goalYear,
       profMin: profMin, profQ: profQ, profEff: profEff,
       paceSource: paceSource, windowDays: windowDays, paceMin: paceMin, paceQ: paceQ,
       effDaily: effDaily, logged: logged, firstLogDay: firstLogDay,
       estHours: estHours, loggedHours: loggedHours, loggedActualHours: loggedActualHours, sessionCount: list.length,
       completed: completed, completedRaw: completedRaw, remaining: remaining,
-      currentAge: currentAge, goalDate: goalDate, remainingDays: remainingDays, required: required,
-      done: done, ahead: ahead, projDate: projDate, projAge: projAge, projBeyond: projBeyond,
+      goalDate: goalDate, remainingDays: remainingDays, required: required,
+      done: done, ahead: ahead, projDate: projDate, projBeyond: projBeyond,
       aheadBy: aheadBy, extraEff: extraEff, extraActual: extraActual
     };
   };
@@ -526,7 +534,7 @@
     sessions = merged;
     deleted = Object.keys(tomb).map(function (id) { return { id: id, at: tomb[id] }; });
     if ((remote.profileUpdatedAt || 0) > meta.profileUpdatedAt && remote.profile) {
-      MC.profile = Object.assign({}, DEFAULT_PROFILE, remote.profile);
+      MC.profile = MC.upgradeProfile(Object.assign({}, DEFAULT_PROFILE, remote.profile));
       MC.store.set(KEYS.profile, MC.profile); meta.profileUpdatedAt = remote.profileUpdatedAt; changed = true;
     }
     if ((remote.settingsUpdatedAt || 0) > meta.settingsUpdatedAt && remote.settings) {
@@ -628,7 +636,7 @@
   /* ---------- Router (hash-based: #home, #timer, #insights, #roadmap) ---------- */
   MC.views = {};
   MC.current = null;
-  var VIEWS = ['home', 'timer', 'calendar', 'insights', 'roadmap', 'learn', 'event', 'checkin', 'people', 'feedback', 'admin'];
+  var VIEWS = ['home', 'timer', 'calendar', 'insights', 'roadmap', 'learn', 'event', 'checkin'];
   MC.route = function () {
     var name = (location.hash || '#home').slice(1).split('?')[0];
     if (VIEWS.indexOf(name) < 0) name = 'home';

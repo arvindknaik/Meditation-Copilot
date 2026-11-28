@@ -366,3 +366,30 @@ One **Learn** section in Copilot for all knowledge content, managed in admin →
 - **Privacy:** reading, watching, quiz results and Saved stay with the person's own data. The center gets **anonymous counts only** (opened · finished · quiz passed per item, per day; no person, device or address). A fuller "what is tracked and what is off-limits" policy is to come.
 - **Not in scope:** a public sosmn.org/learn. Visitor information (about the center, SOS, visiting, family) stays on the sosmn.org About page.
 - Migration `0012_knowledge.sql`.
+
+## 12. Visitors, favourites and the 10,000-hour journey (decided 2026-11-27, v0.23)
+
+- **Calendar** (sosmn.org) always opens as a list; Month is for that visit only.
+- **Featured events:** several at a time (admin ★). They stay featured, also after the event, until an admin removes the ★ (typically about a month later).
+  - Home page and Copilot's Today: **Upcoming (4)**: featured first by date, then the rest by date; the soonest featured is the large card. **Recent (2)**: featured past events first (latest first), then the latest. Cancelled events are left out.
+- **Favourites:** signed-in people ☆ an event or a whole series (every date). Lists: sosmn.org Calendar → ★ Favourites, and Copilot's Calendar. Personal; admins can't see them.
+- **Visitor log:** after checking in, one note per event, until 7 days after the event (editable in that week). Only admins read them.
+  - Optional tick: "The center may share this note publicly (first name only)". An admin can mark a note **Public** only with that consent. Where public notes appear: to be decided.
+  - Public reflections on events are retired; existing ones moved into the visitor log (not shareable).
+  - Admin → Visitor log: To review / All / May share / Public, search, Reviewed, CSV. An edited note needs reviewing again.
+- **Suggestions** replace Copilot feedback: "Send a suggestion" in Account; no rating pop-up. Admin → Suggestions with Reviewed and CSV (old ratings kept).
+- **Copilot requires sign-in** (Google or Microsoft). Guest data on a phone is added to the account at the first sign-in. The sosmn.org site stays open to browse.
+- **Seeker / Initiate:** chosen at the first sign-in. Seeker → Initiate once (date + Master), from the Roadmap; no switching back. The app trusts it; only the word "initiate" goes to the server.
+  - Admin → People: **Confirm** (recorded), or **Revoke** (back to Seeker; the phone can't declare it again until an admin sets Initiate).
+- **10,000-hour journey** (initiates, optional, lifelong): Roadmap → Begin; 4 questions (initiation date, average minutes, quality optional, target year). Shows recommended daily minutes, milestones, projected completion. No date of birth; earlier roadmaps convert their goal age to a year. The question reads "By when would you like to reach your 10,000-hour goal on the inner journey?" (no claim about the Radiant Form).
+- **Admin site:** Settings (Copilot "Featured today" talks, center check-in poster); the old in-app admin pages are gone. The admin page always loads its newest version.
+- Migration `0013_visitors.sql`.
+
+### 12a. Added before release (2026-11-27)
+
+- **Calendar lists:** tabs Upcoming · Recent · Month. Upcoming = yesterday through the next 30 days, grouped by day, "Show the next 30 days" (jumps to the next date with events). Recent = 2 to 32 days ago, newest first, "Show earlier", up to 12 months back. The address keeps the tab and range (`?view=recent&from=…`, `?to=…`). Home "Recent events" → See more.
+- **Copilot start:** no questions at sign-in (everyone is a seeker) and no forced first challenge. Today shows **Getting started** for new users (fewer than 5 sittings): quote of the day · who's on Copilot (anonymous counts + buddies) · start the timer · set daily sitting time · 5-card tour · upcoming events · start a challenge. Each ✓ when done; can be hidden and brought back from Account.
+- **Daily sitting time:** a simple commitment (no challenge); the link opens the Add form; Today shows the next sitting with "▶ Start timer". Reminders: in the app while open, plus "Add to phone calendar". Push notifications (app closed) are a later release.
+- **Roadmap:** "I've been initiated" (once) on top; initiates-only challenges first with an "Initiates" tag, the 10,000-hour journey at the very top. Admin "For": Everyone / Not yet initiated / Initiates only.
+- **Wording:** "Thought for today" → "Quote of the day" everywhere (challenge "Daily Quote · 30 days"; migration `0014_quote_of_the_day.sql`). Copilot footer: one link "← Back to sosmn.org".
+- **One challenge list and sign-up:** Roadmap lists Your challenges · Initiates only · Meditation · Attend the center · Read & learn · Create your own (Hours, Amrit Vela, Weekly attendance: kept, you set the target) · Past. Every Start opens the same sheet (description, length and points, the one choice needed: minutes, book or target; Start). Starting a meditation challenge while one runs says it ends the current one.

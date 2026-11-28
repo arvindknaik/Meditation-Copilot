@@ -33,5 +33,20 @@
     var s = size || 44;
     return flyerThumbUrl ? '<img class="type-ico flyer-thumb" src="' + flyerThumbUrl + '" alt="" loading="lazy" width="' + s + '" height="' + s + '" style="width:' + s + 'px;height:' + s + 'px">' : icon(e.kind, s);
   }
-  window.SOS_TYPES = { order: ORDER, label: function (k) { return type(k).label; }, color: function (k) { return type(k).color; }, icon: icon, thumb: thumb, AUDIENCE: AUDIENCE };
+  // Home page and Copilot's Today (v0.23): upcoming = ★ featured events first (by date), then the rest by date;
+  // recent = featured past events first (most recent first), then the latest. Cancelled events are left out.
+  // (Copilot has its own copy of these two rules in js/events.js.)
+  function byStart(a, b) { return a.startsAt - b.startsAt; }
+  function homeUpcoming(list, n, t) {
+    t = t || Date.now();
+    var up = (list || []).filter(function (e) { return e.status !== 'cancelled' && e.endsAt > t; }).sort(byStart);
+    return up.filter(function (e) { return e.hero; }).concat(up.filter(function (e) { return !e.hero; })).slice(0, n || 4);
+  }
+  function homeRecent(list, n, t) {
+    t = t || Date.now();
+    var past = (list || []).filter(function (e) { return e.status !== 'cancelled' && e.endsAt <= t; }).sort(byStart).reverse();
+    return past.filter(function (e) { return e.hero; }).concat(past.filter(function (e) { return !e.hero; })).slice(0, n || 2);
+  }
+  window.SOS_TYPES = { order: ORDER, label: function (k) { return type(k).label; }, color: function (k) { return type(k).color; }, icon: icon, thumb: thumb, AUDIENCE: AUDIENCE,
+    homeUpcoming: homeUpcoming, homeRecent: homeRecent };
 })();

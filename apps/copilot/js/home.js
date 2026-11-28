@@ -30,6 +30,7 @@
 
   function render() {
     if (MC.account) MC.account.renderBanner();
+    if (MC.renderGettingStarted) MC.renderGettingStarted();
     var t = MC.today(), tomorrow = MC.addDays(t, 1);
     var today = MC.sumRange(t, tomorrow), week = MC.sumRange(MC.weekStart(t), tomorrow);
     var st = MC.streaks(), target = MC.dailyTarget();
@@ -62,11 +63,9 @@
     if (MC.renderHomeEvents) MC.renderHomeEvents();
     if (MC.renderHeroArticle) MC.renderHeroArticle();
 
-    // Seekers: 42-day challenge · Initiates: 10,000-hour journey
+    // Seekers: their challenge · Initiates: the 10,000-hour journey once they've begun it (v0.23: optional), else their challenge
     var jc = $('journeyCard');
-    if (MC.isSeeker()) {
-      jc.innerHTML = MC.challengeHomeCard();
-    } else if (MC.hasProfile()) {
+    if (MC.isInitiated() && MC.profile.journey && MC.hasProfile()) {
       var r = MC.compute(), pct = r.completed / MC.GOAL_HOURS * 100;
       var next = MC.MILESTONES.filter(function (m) { return m > r.completed; })[0];
       jc.innerHTML = '<div class="section-title">10,000-hour journey <a class="link" href="#roadmap" style="padding:0">Roadmap</a></div>' +
@@ -74,13 +73,11 @@
         '<div class="small" style="display:flex;justify-content:space-between;margin-top:8px"><b>' + MC.fmtHours(r.completed) + ' hrs</b><span class="muted">' +
         (pct < 10 ? pct.toFixed(1) : Math.round(pct)) + '% of 10,000</span></div>' +
         '<p class="small" style="margin:10px 0 0">' + (r.done ? '🎉 Goal achieved.' : r.ahead
-          ? '✅ Ahead of schedule' + (r.projBeyond ? '' : ', on track for age ' + r.projAge.y + '.')
-          : '🌟 ' + MC.fmtMin(r.extraEff) + ' more effective min/day reaches your goal by ' + r.goalAge + '.') +
+          ? '✅ On track for your goal of ' + r.goalYear + '.'
+          : '🌟 About ' + MC.fmtDaily(MC.recommendedDaily(r)) + ' a day reaches your goal by ' + r.goalYear + '.') +
         (next ? ' <span class="muted">Next milestone: ' + next.toLocaleString() + ' hrs.</span>' : '') + '</p>';
     } else {
-      jc.innerHTML = '<div class="section-title">Your 10,000-hour roadmap</div>' +
-        '<p class="small muted" style="margin:-4px 0 12px">Answer five gentle questions to see when you’ll reach 10,000 effective hours, and what it takes.</p>' +
-        '<a class="btn btn-gold btn-block" href="#roadmap">Plan my roadmap 🪷</a>';
+      jc.innerHTML = MC.challengeHomeCard() + (MC.isInitiated() && !MC.profile.journey ? '<p class="small" style="margin:10px 0 0">🪷 <a href="#roadmap">The 10,000-hour journey</a> is open to you as an initiate (optional).</p>' : '');
     }
 
     // Last sitting
@@ -92,9 +89,9 @@
         '<span class="small" style="color:var(--gold-ink);font-weight:600;white-space:nowrap">' + Math.round(last.quality) + '% ' + MC.qualityLabel(last.quality) + '</span>';
     }
 
-    // Thought for today (MC.thoughtFor), with "✓ I read it" for the Daily Thought challenge (js/library.js)
+    // Quote of the day (MC.thoughtFor), with "✓ I read it" for the Daily Quote challenge (js/library.js)
     var q = MC.thoughtFor(t), who = q.author || 'Unknown';
-    $('thought').innerHTML = '<span class="small muted" style="font-style:normal;font-family:var(--sans);display:block;margin-bottom:6px">Thought for today</span>' +
+    $('thought').innerHTML = '<span class="small muted" style="font-style:normal;font-family:var(--sans);display:block;margin-bottom:6px">Quote of the day</span>' +
       '\u201C' + MC.esc(q.text) + '\u201D<cite>\u2014 ' + MC.esc(who) + (q.source ? ', <i>' + MC.esc(q.source) + '</i>' : '') + '</cite>' +
       (MC.library ? '<div class="thought-foot">' + MC.library.quoteButton(MC.toISO(t)) + '</div>' : '');
   }

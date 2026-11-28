@@ -45,6 +45,12 @@ export function seedSQL(now = Date.now()) {
   ['c1', 'c2'].forEach((r, i) => sql.push(`INSERT OR IGNORE INTO challenge_shares (user_id, ref, title, finished_on, at) VALUES (${q(id('mark@example.com'))}, ${q(r)}, '21-Day Foundation', NULL, ${now - (20 - i) * DAY});`));
   sql.push(`UPDATE users SET zip = '55421' WHERE id = ${q(id('priya@example.com'))};`);
   rs(F[0], 'priya@example.com'); rs(F[0], 'mark@example.com', 'maybe');
+  // v0.23: featured events (one coming up, one recent), visitor notes and a suggestion, all made up
+  sql.push(`UPDATE events SET is_hero = 1 WHERE id IN (${q(F[1].eid)}, ${q(S[6].eid)});`);
+  const note = (e, who, body, share) => sql.push(`INSERT OR IGNORE INTO event_notes (id, event_id, user_id, body, share_ok, created_at, updated_at) VALUES (${q('note-' + e.eid + '-' + who.split('@')[0])}, ${q(e.eid)}, ${q(id(who))}, ${q(body)}, ${share ? 1 : 0}, ${e.st + 3 * 3600000}, ${e.st + 3 * 3600000});`);
+  note(I[2], 'priya@example.com', 'Lovely first visit. The guided meditation was very calming. (made-up test note)', true);
+  note(S[6], 'kim@example.com', 'Thank you for the warm welcome. (made-up test note)', false);
+  sql.push(`INSERT OR IGNORE INTO feedback (id, user_id, kind, body, version, platform, created_at) VALUES ('seed-sug-1', ${q(id('mark@example.com'))}, 'suggestion', 'A reminder before satsang would help. (made-up)', '0.23.0', 'Android', ${now - 2 * DAY});`);
   // Library (v0.20): made-up approved items so Learn and the reading challenges have something to show
   const lib = (id, kind, title, url, extra = '') => sql.push(`INSERT OR IGNORE INTO library (id, kind, title, author, url, summary, chapters, status, priority, created_at, updated_at) VALUES (${q(id)}, ${q(kind)}, ${q(title)}, 'Test Author', ${q(url)}, ${q('Made-up item for testing. ' + extra)}, ${kind === 'book' ? 6 : 0}, 'approved', 10, ${now}, ${now});`);
   lib('t-book', 'book', 'A Test Book on Meditation', 'https://example.com/buy/test-book', 'Six short chapters.');

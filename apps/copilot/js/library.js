@@ -1,7 +1,7 @@
 /* Meditation Copilot — Library and Education challenges (v0.20, Challenge Program step 2; see SOSMN-SRM.md section 10)
  *
  *  What people read and watch:
- *    quote    the Thought for today            "✓ I read it" on Today; earlier days can be read later (catch-up)
+ *    quote    the Quote of the day             "✓ I read it" on Today; earlier days can be read later (catch-up)
  *    article  Learn articles and center links  "Mark as read" at the end of an article; outside links on return
  *    chapter  chapters of a book               choose a book → "I'm reading this" → tick chapters → "Finished" (+100)
  *    video    recommended talks and satsangs   opens the video → "✓ Watched" on return
@@ -16,7 +16,7 @@
   var LIB_KEY = 'meditation-copilot:library', PENDING_KEY = 'meditation-copilot:open-link', libAt = 0;
   var PTS = { quote: 2, article: 10, chapter: 15, video: 10, book_done: 100 };
   var ICON = { quote: '💭', article: '📰', book: '📖', chapter: '📖', video: '▶️' };
-  var UNIT = { quote: ['thought', 'thoughts'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['talk', 'talks'], quiz: ['quiz', 'quizzes'] };
+  var UNIT = { quote: ['quote', 'quotes'], article: ['article', 'articles'], book: ['chapter', 'chapters'], video: ['talk', 'talks'], quiz: ['quiz', 'quizzes'] };
 
   /* ---------- the center's Library ---------- */
   function items(kind) { var l = (MC.store.get(LIB_KEY, null) || {}).items || []; return kind ? l.filter(function (x) { return x.kind === kind; }) : l; }
@@ -42,7 +42,7 @@
     var pts = pointsFor(kind);
     var r = reads.add(Object.assign({ id: key(kind, ref), kind: kind, ref: String(ref), at: Date.now(), day: MC.toISO(MC.today()), pts: pts }, extra || {}));
     MC.track('read', { kind: kind });
-    if (kind !== 'book_done') MC.toast(ICON[kind] + ' ' + ({ quote: 'Thought read', article: 'Article read', chapter: 'Chapter read', video: 'Video watched' }[kind]) + ' · +' + pts + ' points');
+    if (kind !== 'book_done') MC.toast(ICON[kind] + ' ' + ({ quote: 'Quote of the day read', article: 'Article read', chapter: 'Chapter read', video: 'Video watched' }[kind]) + ' · +' + pts + ' points');
     MC.emit('data');
     return r;
   }
@@ -75,7 +75,7 @@
   function countFor(c) {
     var from = MC.parseDate(c.startOn).getTime(), to = MC.addDays(MC.parseDate(c.endOn), 1).getTime();
     if (c.material === 'quote') {
-      // The thoughts of the challenge's own days; reading an earlier day's thought later still counts (catch-up)
+      // The quotes of the challenge's own days; reading an earlier day's quote later still counts (catch-up)
       return all('quote').filter(function (r) { return r.ref >= c.startOn && r.ref <= c.endOn && r.at < to; }).length;
     }
     if (c.material === 'quiz') return MC.quiz ? MC.quiz.passesBetween(from, to) : 0;
@@ -91,7 +91,7 @@
   }
   function unit(c, n) { var u = UNIT[c.material] || ['item', 'items']; return n === 1 ? u[0] : u[1]; }
 
-  /* ---------- Thought for today ---------- */
+  /* ---------- Quote of the day ---------- */
   function quoteButton(dayKey) {
     var done = has('quote', dayKey);
     return '<button type="button" class="read-btn' + (done ? ' done' : '') + '" data-quote="' + MC.esc(dayKey) + '"' + (done ? ' aria-pressed="true"' : '') + '>' + (done ? '✓ Read' : '✓ I read it') + '</button>';
@@ -106,7 +106,7 @@
     if ($('cuList') && b.closest('#cuList')) renderCatchUp();
   });
 
-  // Catch up on earlier days' thoughts (for the Daily Thought challenge)
+  // Catch up on earlier days' quotes (for the Daily Quote challenge)
   var cuDlg = null, cuRun = null;
   function missedQuoteDays(c) {
     var out = [], last = MC.today() < MC.parseDate(c.endOn) ? MC.today() : MC.parseDate(c.endOn);
@@ -124,7 +124,7 @@
   function openCatchUp(c) {
     cuRun = c;
     if (!cuDlg) { cuDlg = document.createElement('dialog'); cuDlg.className = 'sheet'; cuDlg.id = 'cuDlg'; document.body.appendChild(cuDlg); }
-    cuDlg.innerHTML = '<div class="sheet-body"><h2 class="sheet-title">Catch up</h2><p class="small" style="margin:-4px 0 12px">Thoughts from the days you missed. Read each one slowly, then tick it.</p>' +
+    cuDlg.innerHTML = '<div class="sheet-body"><h2 class="sheet-title">Catch up</h2><p class="small" style="margin:-4px 0 12px">Quotes from the days you missed. Read each one slowly, then tick it.</p>' +
       '<div id="cuList"></div><div class="actions"><button type="button" class="btn btn-primary" id="cuDone">Done</button></div></div>';
     renderCatchUp();
     $('cuDone').addEventListener('click', function () { cuDlg.close(); MC.emit('data'); });
@@ -159,7 +159,7 @@
       quiz: MC.quiz ? MC.quiz.passedCount() : 0 };
     if (!n.quote && !n.article && !n.chapter && !n.video && !n.quiz) return '';
     return '<div class="card reading-card"><div class="section-title" style="margin-bottom:6px">Your reading</div><div class="rd-grid rd-5">' +
-      [['💭', n.quote, 'thoughts'], ['📰', n.article, 'articles'], ['📖', n.chapter, 'chapters'], ['▶️', n.video, 'talks'], ['🧩', n.quiz, 'quizzes']].map(function (x) {
+      [['💭', n.quote, 'quotes'], ['📰', n.article, 'articles'], ['📖', n.chapter, 'chapters'], ['▶️', n.video, 'talks'], ['🧩', n.quiz, 'quizzes']].map(function (x) {
         return '<span><b>' + x[0] + ' ' + x[1] + '</b><small>' + x[2] + '</small></span>'; }).join('') + '</div>' +
       (n.book ? '<p class="small" style="margin:8px 0 0">🎉 Books finished: ' + n.book + '</p>' : '') +
       '<p class="small muted" style="margin:8px 0 0">Kept with your own data, like your sittings. The center doesn’t see it.</p></div>';
@@ -241,7 +241,7 @@
     var c = o.c;
     if (o.status !== 'active' || o.upcoming) return '';
     var behind = Math.max(0, expectedBy(c, o.total) - o.done);
-    if (c.material === 'quote') return behind && missedQuoteDays(c).length > (has('quote', MC.toISO(MC.today())) ? 0 : 1) ? '<button class="btn btn-soft btn-sm" data-eact="catchup" data-gid="' + MC.esc(c.id) + '">Catch up</button>' : '<a class="btn btn-soft btn-sm" href="#home">Today’s thought</a>';
+    if (c.material === 'quote') return behind && missedQuoteDays(c).length > (has('quote', MC.toISO(MC.today())) ? 0 : 1) ? '<button class="btn btn-soft btn-sm" data-eact="catchup" data-gid="' + MC.esc(c.id) + '">Catch up</button>' : '<a class="btn btn-soft btn-sm" href="#home">Today’s quote</a>';
     if (c.material === 'book') return '<a class="btn btn-soft btn-sm" href="#learn?b=' + encodeURIComponent(c.bookId || '') + '">Open the book</a>';
     if (c.material === 'video') return '<a class="btn btn-soft btn-sm" href="#learn?list=video">Talks</a>';
     if (c.material === 'quiz') return '<a class="btn btn-soft btn-sm" href="#learn?list=quiz">Take a quiz</a>';
@@ -255,7 +255,7 @@
 
   /* ---------- rewards ---------- */
   if (MC.rewards && MC.rewards.addRule) {
-    var R = [['quote', '💭', 'Thought for Today Read', 'Each Thought for today you read'], ['article', '📰', 'Article Read', 'Each article you read'],
+    var R = [['quote', '💭', 'Quote of the Day Read', 'Each Quote of the day you read'], ['article', '📰', 'Article Read', 'Each article you read'],
       ['chapter', '📖', 'Chapter Read', 'Each chapter of a book by the Masters'], ['video', '▶️', 'Talk Watched', 'Each recommended talk or satsang you watch'],
       ['book_done', '🎉', 'Book Finished', 'Finish a book by the Masters']];
     R.forEach(function (x) {

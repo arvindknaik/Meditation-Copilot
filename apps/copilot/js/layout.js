@@ -68,7 +68,7 @@
       var links = document.createElement('p');
       links.className = 'site-links';
       var site = MC.siteUrl || function (x) { return 'https://sosmn.org' + x; };
-      links.innerHTML = '<a href="' + site('/news/') + '">📰 Center news &amp; archive</a> · <a href="' + site('/about/') + '">About the center</a> · <a href="https://www.sos.org/" target="_blank" rel="noopener">sos.org</a>';
+      links.innerHTML = '<a href="' + site('/') + '">← Back to sosmn.org</a>';
       footer.appendChild(links);
     }
     // 2) Sidebar switch (desktop layout only, shown by CSS)

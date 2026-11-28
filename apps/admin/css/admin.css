@@ -143,3 +143,16 @@ html.mc-desktop .sheet { width: min(680px, calc(100% - 48px)); }
 .q-rev > li { margin-bottom: 14px; }
 .q-rev ul { margin: 4px 0; padding-left: 18px; }
 .q-rev li.ok { color: #2f7d4f; font-weight: 700; }
+
+/* v0.23: visitor log and suggestions */
+.vl-note { padding: 14px 16px; margin-bottom: 10px; }
+.vl-note.reviewed { opacity: .72; }
+.vl-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+.vl-body { white-space: pre-wrap; margin: 8px 0; }
+.vl-foot { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 14px; }
+.qr-box svg { width: 100%; height: auto; }
+a.danger { color: var(--danger, #b42318); }
+/* v0.23: more tabs — on a computer the admin menu gets its own row under the logo, and wraps if needed */
+html.mc-desktop header.site.adm-top .site-inner { grid-template-columns: 1fr auto; grid-template-areas: "org acct" "nav nav"; }
+html.mc-desktop header.site.adm-top .main-nav { justify-content: flex-start; flex-wrap: wrap; overflow: visible; }
