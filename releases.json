@@ -1,6 +1,143 @@
 {
   "releases": [
     {
+      "version": "0.23.0",
+      "date": "2026-11-28",
+      "summary": "An easier start on Today, a calendar with Upcoming and Recent lists, favourites, notes for the center, and the 10,000-hour journey for initiates.",
+      "highlights": [
+        "Copilot: start from Today with \"Getting started\": the quote of the day, a quick tour, your daily sitting time and more.",
+        "Calendar: Upcoming and Recent lists, ☆ favourites, and a private note for the center after you attend.",
+        "Initiates: the 10,000-hour journey is now an optional, lifelong challenge with a target year."
+      ],
+      "items": [
+        {
+          "type": "new",
+          "text": "Copilot opens on Today with \"Getting started\": read the quote of the day, see who's on Copilot, start the timer, set your daily sitting time, take the tour, see upcoming events, start a challenge. Each gets a ✓; hide it any time (Account → Getting started brings it back).",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "A 5-card tour of Today, Timer, Calendar, Roadmap and Learn (also in Account and Learn → Help).",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Your daily sitting time opens straight from Today, and Today shows your next sitting with \"▶ Start timer\".",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Calendar on sosmn.org: Upcoming (yesterday through the next 30 days, by day, with \"Show the next 30 days\"), Recent (2 to 32 days ago, with \"Show earlier\", up to a year back) and Month. The buttons jump to the next date with events.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Home page: 4 upcoming events (★ featured first, then by date) and 2 recent events. Copilot's Today shows the same.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "☆ Favourite an event, or save a whole series (every date of a repeating event). See them under Calendar → ★ Favourites and in Copilot's Calendar.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "After checking in, leave a note for the center on the event page (one per event, until 7 days after it). Only the center team reads it; tick the box if the center may share it (first name only).",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "10,000-hour journey for initiates: begin it from the Roadmap, choose a target year, and Copilot recommends the daily time that gets you there. Your initiation date and Master carry over; no date of birth needed.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "No questions at sign-in: everyone starts as a seeker. Initiated? Tell Copilot once on the Roadmap (\"I've been initiated\"); initiates' challenges, such as the 10,000-hour journey, then show first. This is one way: there's no switching back to seeker.",
+          "audience": "all"
+        },
+        {
+          "type": "new",
+          "text": "Several events can be ★ Featured. They stay featured, under Recent events once over, until you remove the ★.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Visitor log: notes people leave after checking in, with \"Reviewed\", \"Public\" (only when they allowed sharing), search and CSV.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Suggestions from Copilot, with \"Reviewed\" and CSV (earlier ratings are kept).",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Settings: Copilot's \"Featured today\" talks, and the center check-in poster to print.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "Challenges: \"For\" is now Everyone / Not yet initiated / Initiates only. Initiates-only challenges show first, with an \"Initiates\" tag.",
+          "audience": "admin"
+        },
+        {
+          "type": "new",
+          "text": "People: confirm a self-declared Initiate, or revoke it (they become a Seeker and can't declare it again in Copilot).",
+          "audience": "admin"
+        },
+        {
+          "type": "improved",
+          "text": "The calendar always opens on Upcoming; the address keeps the tab and how far you've loaded, so Back and shared links work. Home: \"Recent events\" has \"See more ›\".",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "\"Thought for today\" is now \"Quote of the day\" everywhere (the Daily Quote challenge too).",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "Copilot's footer has one link back to sosmn.org.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "No first challenge is forced on new users; choose one on the Roadmap when you're ready.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "Roadmap: one list of challenges in a clear order (Your challenges · Initiates only · Meditation · Attend the center · Read \\& learn · Create your own), and every challenge starts the same way: one sheet with what it asks, its length and points, the one choice it needs, and Start.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "Copilot now asks everyone to sign in with Google or Microsoft. Sittings already on a phone in guest mode are added to the account at the first sign-in.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "Account \\& settings is simpler: Contact details, Send a suggestion. The old in-app admin pages are gone (everything is on the admin site).",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "Public reflections on events are replaced by private notes for the center; earlier reflections moved into the visitor log.",
+          "audience": "all"
+        },
+        {
+          "type": "improved",
+          "text": "The admin site always loads its newest version after a release (no manual refresh), and the menu has its own row on a computer.",
+          "audience": "admin"
+        },
+        {
+          "type": "fixed",
+          "text": "The app no longer pops up a request to rate it.",
+          "audience": "all"
+        }
+      ]
+    },
+    {
       "version": "0.22.0",
       "date": "2026-11-27",
       "summary": "One Learn section for articles, talks, books and quizzes, with search and your own Saved list.",
