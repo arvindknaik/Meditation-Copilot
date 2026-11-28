@@ -4,6 +4,7 @@ Newest first. Each build passed all tests before it was numbered.
 
 | Build | Date | Commit | Tests | Changes |
 |---|---|---|---|---|
+| v0.23-b1 | 2026-11-28 | baf959e | 52/52 | V0.23 |
 | v0.22-b1 | 2026-11-27 | 11fa625 | 44/44 | v0.22 |
 | v0.21-b1 | 2026-11-26 | d890018 | 42/42 | The News page is fixed and copied into your folder. It was a mistake I introduced in v0.20. |
 | v0.20-b1 | 2026-11-26 | 5f5ad7c | 42/42 | Seva, Community and Other became Celebration, or Festival if the title mentions a fest, Diwali, Yoga Day or Holi. |
